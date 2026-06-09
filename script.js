@@ -53,9 +53,20 @@ async function iniciar() {
         .withFaceLandmarks()
         .withFaceDescriptor();
 
-      if (!deteccao) continue;
+      if (!deteccao) {
 
-      descritores.push(
+         console.log(
+           "Rosto não encontrado em:",
+            membro.nome
+       );
+
+       continue;
+
+     }
+      console.log(
+       "Membro carregado:",
+        membro.nome
+      );
 
         new faceapi.LabeledFaceDescriptors(
 
