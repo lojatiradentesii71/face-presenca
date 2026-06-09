@@ -54,9 +54,12 @@ async function iniciar() {
 
       const deteccao =
         await faceapi
-        .detectSingleFace(
-          img,
-          new faceapi.TinyFaceDetectorOptions()
+         .detectSingleFace(
+           img,
+            new faceapi.TinyFaceDetectorOptions({
+             inputSize: 608,
+             scoreThreshold: 0.1
+           })
         )
         .withFaceLandmarks()
         .withFaceDescriptor();
