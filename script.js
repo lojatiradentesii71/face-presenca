@@ -121,14 +121,30 @@ console.log("Detecção concluída:", membro.nome);
 
 async function iniciarCamera(){
 
-  const stream =
-    await navigator.mediaDevices.getUserMedia({
+  try {
 
-      video:true
+    const stream =
+      await navigator.mediaDevices.getUserMedia({
 
-    });
+        video: true,
+        audio: false
 
-  video.srcObject = stream;
+      });
+
+    console.log("Câmera iniciada");
+
+    video.srcObject = stream;
+
+    await video.play();
+
+  } catch(err){
+
+    console.error(
+      "Erro câmera:",
+      err
+    );
+
+  }
 
 }
 
