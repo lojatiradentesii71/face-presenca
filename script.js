@@ -63,20 +63,22 @@ async function iniciar() {
        continue;
 
      }
-      console.log(
-       "Membro carregado:",
-        membro.nome
-      );
+     console.log(
+  "Membro carregado:",
+  membro.nome
+);
 
-        new faceapi.LabeledFaceDescriptors(
+descritores.push(
 
-          membro.nome,
+  new faceapi.LabeledFaceDescriptors(
 
-          [deteccao.descriptor]
+    membro.nome,
 
-        )
+    [deteccao.descriptor]
 
-      );
+  )
+
+);
 
     } catch(err){
 
@@ -86,18 +88,18 @@ async function iniciar() {
 
   }
 
-console.log(
-  "Quantidade de descritores:",
-  descritores.length
-);
+      console.log(
+        "Quantidade de descritores:",
+         descritores.length
+     );
 
-console.log(descritores);
+      console.log(descritores);
 
-  faceMatcher =
-  new faceapi.FaceMatcher(
-    descritores,
-    0.6
-  );
+      faceMatcher =
+       new faceapi.FaceMatcher(
+       descritores,
+       0.6
+     );
 
   resultado.innerHTML =
   'Abrindo câmera...';
