@@ -1,3 +1,5 @@
+console.log("faceapi =", faceapi);
+
 const APPS_SCRIPT_URL =
 'https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec';
 
