@@ -63,6 +63,19 @@ async function iniciar() {
       )
       .withFaceLandmarks()
       .withFaceDescriptor();
+      
+      if(!deteccao){
+
+         console.log("Nenhum rosto no vídeo");
+
+          resultado.innerHTML =
+         'Nenhum rosto detectado';
+
+     return;
+
+    }
+
+      console.log("Rosto detectado no vídeo");
 
       if (!deteccao) {
 
