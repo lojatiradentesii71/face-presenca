@@ -43,6 +43,14 @@ async function iniciar() {
         await faceapi.fetchImage(
           membro.imagem
         );
+      
+          console.log(
+           "Imagem carregada:",
+            img.width,
+            img.height
+        );
+
+          document.body.appendChild(img);
 
       const deteccao =
         await faceapi
