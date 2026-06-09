@@ -63,22 +63,17 @@ async function iniciar() {
        continue;
 
      }
-     console.log(
-  "Membro carregado:",
-  membro.nome
-);
+         console.log(
+           "Membro carregado:",
+            membro.nome
+       );
 
-descritores.push(
-
-  new faceapi.LabeledFaceDescriptors(
-
-    membro.nome,
-
-    [deteccao.descriptor]
-
-  )
-
-);
+         descritores.push(
+           new faceapi.LabeledFaceDescriptors(
+             membro.nome,
+             [deteccao.descriptor]
+          )
+       );
 
     } catch(err){
 
