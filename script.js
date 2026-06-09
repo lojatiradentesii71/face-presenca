@@ -86,11 +86,18 @@ async function iniciar() {
 
   }
 
+console.log(
+  "Quantidade de descritores:",
+  descritores.length
+);
+
+console.log(descritores);
+
   faceMatcher =
-    new faceapi.FaceMatcher(
-      descritores,
-      0.6
-    );
+  new faceapi.FaceMatcher(
+    descritores,
+    0.6
+  );
 
   resultado.innerHTML =
   'Abrindo câmera...';
