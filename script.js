@@ -50,19 +50,23 @@ async function iniciar() {
             img.height
         );
 
-          document.body.appendChild(img);
+         // document.body.appendChild(img);
 
-      const deteccao =
-       await faceapi
-        .detectSingleFace(
-          img,
-           new faceapi.TinyFaceDetectorOptions({
-            inputSize: 608,
-            scoreThreshold: 0.1
-           })
-      )
-      .withFaceLandmarks()
-      .withFaceDescriptor();
+     console.log("Iniciando detecção:", membro.nome);
+
+const deteccao =
+ await faceapi
+  .detectSingleFace(
+    img,
+    new faceapi.TinyFaceDetectorOptions({
+      inputSize: 608,
+      scoreThreshold: 0.1
+    })
+  )
+  .withFaceLandmarks()
+  .withFaceDescriptor();
+
+console.log("Detecção concluída:", membro.nome);
       
 
       if (!deteccao) {
