@@ -1,0 +1,16 @@
+body{
+  text-align:center;
+  font-family:Arial;
+}
+
+video{
+  width:600px;
+  max-width:90%;
+  border:1px solid #ccc;
+}
+
+#resultado{
+  margin-top:20px;
+  font-size:24px;
+  font-weight:bold;
+}
