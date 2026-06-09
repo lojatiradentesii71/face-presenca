@@ -142,7 +142,7 @@ async function iniciarCamera(){
 
 video.addEventListener(
 
-'play',
+'loadeddata',
 
 () => {
 
