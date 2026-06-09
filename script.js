@@ -53,16 +53,16 @@ async function iniciar() {
           document.body.appendChild(img);
 
       const deteccao =
-        await faceapi
-         .detectSingleFace(
-           img,
-            new faceapi.TinyFaceDetectorOptions({
-             inputSize: 608,
-             scoreThreshold: 0.1
+       await faceapi
+        .detectSingleFace(
+          video,
+           new faceapi.TinyFaceDetectorOptions({
+            inputSize: 608,
+            scoreThreshold: 0.1
            })
-        )
-        .withFaceLandmarks()
-        .withFaceDescriptor();
+      )
+      .withFaceLandmarks()
+      .withFaceDescriptor();
 
       if (!deteccao) {
 
