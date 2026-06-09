@@ -55,7 +55,7 @@ async function iniciar() {
       const deteccao =
        await faceapi
         .detectSingleFace(
-          video,
+          img,
            new faceapi.TinyFaceDetectorOptions({
             inputSize: 608,
             scoreThreshold: 0.1
@@ -64,18 +64,6 @@ async function iniciar() {
       .withFaceLandmarks()
       .withFaceDescriptor();
       
-      if(!deteccao){
-
-         console.log("Nenhum rosto no vídeo");
-
-          resultado.innerHTML =
-         'Nenhum rosto detectado';
-
-     return;
-
-    }
-
-      console.log("Rosto detectado no vídeo");
 
       if (!deteccao) {
 
