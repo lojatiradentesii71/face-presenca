@@ -147,21 +147,19 @@ video.addEventListener(
       const deteccao =
         await faceapi
         .detectSingleFace(
-
-          video,
-
-          new faceapi.TinyFaceDetectorOptions()
+           video,
+            new faceapi.TinyFaceDetectorOptions({
+              inputSize: 416,
+              scoreThreshold: 0.2
+            })
 
         )
         .withFaceLandmarks()
         .withFaceDescriptor();
 
-      if(!deteccao){
-
-        resultado.innerHTML =
-        'Nenhum rosto detectado';
-
-        return;
+     if(!deteccao){
+       return;
+     }
 
       }
 
@@ -172,8 +170,20 @@ video.addEventListener(
 
         );
 
-      resultado.innerHTML =
-      melhor.toString();
+     if (melhor.distance < 0.60) {
+         resultado.innerHTML =
+           "Reconhecido: " +
+            melhor.label +
+            " (" +
+            melhor.distance.toFixed(2) +
+            ")";
+
+  } else {
+
+     resultado.innerHTML =
+    "Pessoa não cadastrada";
+
+}
 
     },
 
