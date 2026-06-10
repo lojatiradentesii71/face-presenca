@@ -188,7 +188,7 @@ video.addEventListener(
         console.log(melhor);
         console.log(melhor.label);
 
-        if (melhor.distance < 0.60) {
+        if (melhor.distance < 0.40) {
 
   const partes =
     melhor.label.split("|");
