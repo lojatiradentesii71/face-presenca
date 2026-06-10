@@ -150,63 +150,61 @@ async function iniciarCamera(){
 
 video.addEventListener(
 
-'loadeddata',
+  'loadeddata',
 
-() => {
+  () => {
 
-  setInterval(
+    setInterval(
 
-    async () => {
+      async () => {
 
-      if(!faceMatcher) return;
+        if (!faceMatcher) return;
 
-      const deteccao =
-        await faceapi
-        .detectSingleFace(
-           video,
-            new faceapi.TinyFaceDetectorOptions({
-              inputSize: 416,
-              scoreThreshold: 0.2
-            })
+        const deteccao =
+          await faceapi
+            .detectSingleFace(
+              video,
+              new faceapi.TinyFaceDetectorOptions({
+                inputSize: 416,
+                scoreThreshold: 0.2
+              })
+            )
+            .withFaceLandmarks()
+            .withFaceDescriptor();
 
-        )
-        .withFaceLandmarks()
-        .withFaceDescriptor();
+        if (!deteccao) {
+          return;
+        }
 
-     if(!deteccao){
-       return;
-     }
+        const melhor =
+          faceMatcher.findBestMatch(
+            deteccao.descriptor
+          );
 
-      }
+        if (melhor.distance < 0.60) {
 
-      const melhor =
-        faceMatcher.findBestMatch(
-
-          deteccao.descriptor
-
-        );
-
-     if (melhor.distance < 0.60) {
-         resultado.innerHTML =
-           "Reconhecido: " +
+          resultado.innerHTML =
+            "Reconhecido: " +
             melhor.label +
             " (" +
             melhor.distance.toFixed(2) +
             ")";
 
-  } else {
+        } else {
 
-     resultado.innerHTML =
-    "Pessoa não cadastrada";
+          resultado.innerHTML =
+            "Pessoa não cadastrada";
 
-}
+        }
 
-    },
+      },
 
-    1000
+      1000
 
-  );
+    );
 
-});
+  }
+
+);
 
 iniciar();
