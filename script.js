@@ -13,6 +13,8 @@ let faceMatcher = null;
 
 let ultimoEnviado = "";
 
+let bloqueado = false;
+
 async function iniciar() {
 
   resultado.innerHTML =
@@ -164,6 +166,8 @@ video.addEventListener(
 
         if (!faceMatcher) return;
 
+        if (bloqueado) return;
+
         const deteccao =
           await faceapi
             .detectSingleFace(
@@ -208,14 +212,22 @@ video.addEventListener(
 
   if (ultimoEnviado !== id) {
 
-    ultimoEnviado = id;
+  bloqueado = true;
 
-    registrarPresenca(
-      id,
-      nome
-    );
+  ultimoEnviado = id;
 
-  }
+  registrarPresenca(
+    id,
+    nome
+  );
+
+  setTimeout(() => {
+
+    bloqueado = false;
+
+  }, 3000);
+
+}
 
 } else {
 
@@ -253,6 +265,8 @@ async function registrarPresenca(id, nome) {
       nome
     );
 
+    tocarBip();
+
     
   } catch(err){
 
@@ -283,6 +297,17 @@ function mostrarConfirmacao(nome){
     );
 
   },3000);
+
+}
+
+function tocarBip(){
+
+  const audio =
+    new Audio(
+      "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
+    );
+
+  audio.play();
 
 }
 
