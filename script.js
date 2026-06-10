@@ -246,14 +246,14 @@ async function registrarPresenca(id, nome) {
     nome:nome
   })
 });
-
+     mostrarConfirmacao(nome);
+    
     console.log(
       "Presença registrada:",
       nome
     );
 
-    mostrarConfirmacao(nome);
-
+    
   } catch(err){
 
     console.error(err);
