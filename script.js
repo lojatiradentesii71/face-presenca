@@ -150,10 +150,12 @@ async function iniciarCamera(){
 
 video.addEventListener(
 
-  'loadeddata',
+  'play',
 
   () => {
 
+    console.log("Evento PLAY disparou");
+    
     setInterval(
 
       async () => {
