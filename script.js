@@ -238,22 +238,14 @@ async function registrarPresenca(id, nome) {
 
   try {
 
-    await fetch(APPS_SCRIPT_URL, {
-
-      method: "POST",
-
-      headers: {
-        "Content-Type": "application/json"
-      },
-
-      body: JSON.stringify({
-
-        id: id,
-        nome: nome
-
-      })
-
-    });
+   await fetch(APPS_SCRIPT_URL, {
+  method: "POST",
+  mode: "no-cors",
+  body: JSON.stringify({
+    id:id,
+    nome:nome
+  })
+});
 
     console.log(
       "Presença registrada:",
