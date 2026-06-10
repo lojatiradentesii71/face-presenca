@@ -84,12 +84,12 @@ console.log("Detecção concluída:", membro.nome);
             membro.nome
        );
 
-         descritores.push(
-           new faceapi.LabeledFaceDescriptors(
-             membro.nome,
-             [deteccao.descriptor]
-          )
-       );
+        descritores.push(
+          new faceapi.LabeledFaceDescriptors(
+              membro.id + "|" + membro.nome,
+              [deteccao.descriptor]
+           )
+      );
 
     } catch(err){
 
