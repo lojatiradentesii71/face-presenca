@@ -11,6 +11,8 @@ document.getElementById('resultado');
 
 let faceMatcher = null;
 
+let ultimoEnviado = "";
+
 async function iniciar() {
 
   resultado.innerHTML =
@@ -188,14 +190,34 @@ video.addEventListener(
 
         if (melhor.distance < 0.60) {
 
-          resultado.innerHTML =
-            "Reconhecido: " +
-            melhor.label +
-            " (" +
-            melhor.distance.toFixed(2) +
-            ")";
+  const partes =
+    melhor.label.split("|");
 
-        } else {
+  const id =
+    partes[0];
+
+  const nome =
+    partes[1];
+
+  resultado.innerHTML =
+    "Reconhecido: " +
+    nome +
+    " (" +
+    melhor.distance.toFixed(2) +
+    ")";
+
+  if (ultimoEnviado !== id) {
+
+    ultimoEnviado = id;
+
+    registrarPresenca(
+      id,
+      nome
+    );
+
+  }
+
+} else {
 
           resultado.innerHTML =
             "Pessoa não cadastrada";
@@ -211,5 +233,39 @@ video.addEventListener(
   }
 
 );
+
+async function registrarPresenca(id, nome) {
+
+  try {
+
+    await fetch(APPS_SCRIPT_URL, {
+
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json"
+      },
+
+      body: JSON.stringify({
+
+        id: id,
+        nome: nome
+
+      })
+
+    });
+
+    console.log(
+      "Presença registrada:",
+      nome
+    );
+
+  } catch(err){
+
+    console.error(err);
+
+  }
+
+}
 
 iniciar();
