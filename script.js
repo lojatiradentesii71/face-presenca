@@ -81,7 +81,7 @@ console.log("Detecção concluída:", membro.nome);
      }
          console.log(
            "Membro carregado:",
-            membro.nome
+            membro.id + "|" + membro.nome
        );
 
         descritores.push(
