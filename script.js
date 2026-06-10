@@ -181,6 +181,9 @@ video.addEventListener(
             deteccao.descriptor
           );
 
+        console.log(melhor);
+        console.log(melhor.label);
+
         if (melhor.distance < 0.60) {
 
           resultado.innerHTML =
