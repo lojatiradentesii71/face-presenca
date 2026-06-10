@@ -1,16 +1,26 @@
 body{
+  font-family: Arial, sans-serif;
   text-align:center;
-  font-family:Arial;
+  margin:0;
+  padding:20px;
 }
 
-video{
-  width:600px;
-  max-width:90%;
-  border:1px solid #ccc;
+h1{
+  font-size:48px;
+  margin-bottom:20px;
+}
+
+#video{
+  width:95vw;
+  max-width:900px;
+  height:auto;
+  border:3px solid #333;
+  border-radius:15px;
 }
 
 #resultado{
   margin-top:20px;
-  font-size:24px;
+  font-size:42px;
   font-weight:bold;
+  color:#000;
 }
