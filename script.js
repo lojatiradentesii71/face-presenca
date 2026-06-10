@@ -252,11 +252,37 @@ async function registrarPresenca(id, nome) {
       nome
     );
 
+    mostrarConfirmacao(nome);
+
   } catch(err){
 
     console.error(err);
 
   }
+
+}
+function mostrarConfirmacao(nome){
+
+  const tela =
+    document.getElementById(
+      "confirmacao"
+    );
+
+  tela.innerHTML =
+    "✓ PRESENÇA REGISTRADA<br><br>" +
+    nome;
+
+  tela.classList.add(
+    "mostrar"
+  );
+
+  setTimeout(() => {
+
+    tela.classList.remove(
+      "mostrar"
+    );
+
+  },3000);
 
 }
 
