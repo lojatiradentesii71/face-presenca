@@ -54,11 +54,6 @@ h2{
 
   border:3px solid #2962ff;
 
-  box-shadow:
-    0 0 15px #2962ff,
-    0 0 30px #2962ff,
-    0 0 60px rgba(41,98,255,.5);
-
 }
 #resultado{
 
@@ -361,15 +356,18 @@ h2{
 
   position:relative;
 
-  width:95vw;
+  width:92vw;
+
+  max-width:92vw;
 
   display:inline-block;
 
   overflow:hidden;
 
-  border-radius:25px;
+  box-sizing:border-box;
 
 }
+
 .faceDetectada{
 
   border-color:#00ff88 !important;
