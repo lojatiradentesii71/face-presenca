@@ -274,18 +274,20 @@ await registrarPresenca(
   try {
 
     const status =
-      await fetch(
-        APPS_SCRIPT_URL +
-        "?acao=status"
-      )
-      .then(r => r.text());
+  (
+    await fetch(
+      APPS_SCRIPT_URL +
+      "?acao=status"
+    )
+    .then(r => r.text())
+  ).trim();
 
     console.log(
   "STATUS RECEBIDO:",
   "[" + status + "]"
 );
 
-    status = status.trim();
+    
 
 if (status === "OK") {
 
