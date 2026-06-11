@@ -253,7 +253,7 @@ async function processarPresenca(
   );
 
   await new Promise(
-    r => setTimeout(r,1000)
+    r => setTimeout(r,3000)
   );
 
   try {
@@ -266,51 +266,50 @@ async function processarPresenca(
       .then(r => r.text());
 
     console.log(
-      "STATUS:",
-      status
-    );
+  "STATUS RECEBIDO:",
+  "[" + status + "]"
+);
 
-    if (
-      status.includes(
-        "Presença criada"
-      ) ||
-      status === "OK"
-    ){
+    status = status.trim();
 
-      mostrarStatus(
-        "✅ PRESENÇA REGISTRADA",
-        nome,
-        "#0a8f08"
-      );
+if (status === "OK") {
 
-      tocarBip();
+  mostrarStatus(
+    "✅ PRESENÇA REGISTRADA",
+    nome,
+    "#0a8f08"
+  );
 
-    }
+  tocarBip();
 
-    else if (
-      status.includes(
-        "Presença já registrada"
-      ) ||
-      status === "DUPLICADO"
-    ){
+}
+else if (status === "DUPLICADO") {
 
-      mostrarStatus(
-        "⚠ PRESENÇA DUPLICADA",
-        nome,
-        "#d4a000"
-      );
+  mostrarStatus(
+    "⚠ PRESENÇA DUPLICADA",
+    nome,
+    "#d4a000"
+  );
 
-    }
+}
+else if (status === "SEM_SESSAO") {
 
-    else {
+  mostrarStatus(
+    "❌ SEM SESSÃO",
+    "",
+    "#c00000"
+  );
 
-      mostrarStatus(
-        "❌ SEM SESSÃO",
-        "",
-        "#c00000"
-      );
+}
+else {
 
-    }
+  mostrarStatus(
+    "❓ STATUS DESCONHECIDO",
+    status,
+    "#444444"
+  );
+
+}
 
   } catch(err){
 
