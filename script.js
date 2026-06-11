@@ -212,12 +212,24 @@ video.addEventListener(
   const nome =
     partes[1];
 
-  resultado.innerHTML =
-    "Reconhecido: " +
-    nome +
-    " (" +
-    melhor.distance.toFixed(2) +
-    ")";
+ resultado.innerHTML =
+`
+<div class="cardReconhecido">
+
+  <div class="tituloReconhecido">
+    ✓ IRMÂO IDENTIFICADO
+  </div>
+
+  <div class="nomeReconhecido">
+    ${nome}
+  </div>
+
+  <div class="scoreReconhecido">
+    Confiança: ${(1 - melhor.distance).toFixed(2)}
+  </div>
+
+</div>
+`;
 
  if (ultimoEnviado !== id) {
 
