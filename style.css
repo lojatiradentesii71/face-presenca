@@ -357,3 +357,14 @@ h2{
   display:inline-block;
 
 }
+
+.faceDetectada{
+
+  border-color:#00ff88 !important;
+
+  box-shadow:
+    0 0 15px #00ff88,
+    0 0 30px #00ff88,
+    0 0 60px rgba(0,255,136,.6);
+
+}
