@@ -189,24 +189,9 @@ video.addEventListener(
     .withFaceLandmarks()
     .withFaceDescriptor();
 
-const videoEl =
-  document.getElementById(
-    "video"
-  );
-
 if (!deteccao) {
-
-  videoEl.classList.remove(
-    "faceDetectada"
-  );
-
   return;
-
 }
-
-videoEl.classList.add(
-  "faceDetectada"
-);
 
 const melhor =
   faceMatcher.findBestMatch(
