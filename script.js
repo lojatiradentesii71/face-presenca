@@ -177,31 +177,46 @@ video.addEventListener(
 
         if (bloqueado) return;
 
-        const deteccao =
-          await faceapi
-            .detectSingleFace(
-              video,
-              new faceapi.TinyFaceDetectorOptions({
-                inputSize: 416,
-                scoreThreshold: 0.2
-              })
-            )
-            .withFaceLandmarks()
-            .withFaceDescriptor();
+  const deteccao =
+  await faceapi
+    .detectSingleFace(
+      video,
+      new faceapi.TinyFaceDetectorOptions({
+        inputSize: 416,
+        scoreThreshold: 0.2
+      })
+    )
+    .withFaceLandmarks()
+    .withFaceDescriptor();
 
-        if (!deteccao) {
-          return;
-        }
+const videoEl =
+  document.getElementById(
+    "video"
+  );
 
-        const melhor =
-          faceMatcher.findBestMatch(
-            deteccao.descriptor
-          );
+if (!deteccao) {
 
-        console.log(melhor);
-        console.log(melhor.label);
+  videoEl.classList.remove(
+    "faceDetectada"
+  );
 
-        if (melhor.distance < 0.40) {
+  return;
+
+}
+
+videoEl.classList.add(
+  "faceDetectada"
+);
+
+const melhor =
+  faceMatcher.findBestMatch(
+    deteccao.descriptor
+  );
+
+console.log(melhor);
+console.log(melhor.label);
+
+if (melhor.distance < 0.40) {
 
   const partes =
     melhor.label.split("|");
@@ -212,12 +227,12 @@ video.addEventListener(
   const nome =
     partes[1];
 
- resultado.innerHTML =
+  resultado.innerHTML =
 `
 <div class="cardReconhecido">
 
   <div class="tituloReconhecido">
-    ✓ IRMÂO IDENTIFICADO
+    ✓ IRMÃO IDENTIFICADO
   </div>
 
   <div class="nomeReconhecido">
@@ -231,30 +246,33 @@ video.addEventListener(
 </div>
 `;
 
- if (ultimoEnviado !== id) {
+  if (ultimoEnviado !== id) {
 
-  bloqueado = true;
+    bloqueado = true;
 
-  ultimoEnviado = id;
+    ultimoEnviado = id;
 
-  mostrarProcessando(nome);
+    mostrarProcessando(nome);
 
-  processarPresenca(
-    id,
-    nome
-  );
+    processarPresenca(
+      id,
+      nome
+    );
 
-}
+  }
 
 } else {
 
-          resultado.innerHTML =
-            "Pessoa não cadastrada";
+  resultado.innerHTML =
+`
+<div class="cardNaoCadastrado">
 
-        }
+  ❌ NÃO CADASTRADO
 
-      },
+</div>
+`;
 
+}
       1000
 
     );
