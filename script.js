@@ -9,9 +9,13 @@ document.getElementById('video');
 const resultado =
 document.getElementById('resultado');
 
+let intervaloReconhecimento = null;
+
 let faceMatcher = null;
 
 let ultimoEnviado = "";
+
+let processando = false;
 
 let bloqueado = false;
 
@@ -153,14 +157,19 @@ async function iniciarCamera(){
 }
 
 video.addEventListener(
-
   'play',
-
   () => {
 
-    console.log("Evento PLAY disparou");
+    if(intervaloReconhecimento){
+      return;
+    }
+
+    console.log(
+      "Criando intervalo"
+    );
+
     
-    setInterval(
+    intervaloReconhecimento = setInterval(
 
       async () => {
 
@@ -252,6 +261,12 @@ async function processarPresenca(
     nome
   );
 
+  if(processando){
+  return;
+}
+
+processando = true;
+
   await new Promise(
     r => setTimeout(r,3000)
   );
@@ -322,6 +337,8 @@ else {
     esconderProcessando();
 
     bloqueado = false;
+
+    processando = false;
 
   },3000);
 
