@@ -1,9 +1,14 @@
 body{
 
   margin:0;
-  padding:20px;
+  padding:0;
 
-  background:#10131a;
+ background:
+linear-gradient(
+  180deg,
+  #0b1020 0%,
+  #05070d 100%
+);
 
   color:white;
 
@@ -35,11 +40,13 @@ h2{
 
 #video{
 
-  width:95vw;
-
-  max-width:none;
+  width:96vw;
 
   height:auto;
+
+  min-height:55vh;
+
+  object-fit:cover;
 
   border-radius:25px;
 
@@ -53,9 +60,9 @@ h2{
 
 #resultado{
 
-  margin-top:25px;
+  margin-top:30px;
 
-  font-size:34px;
+  font-size:42px;
 
   font-weight:700;
 
@@ -63,11 +70,10 @@ h2{
 
   color:white;
 
-  width:90%;
+  width:95%;
 
 }
 
-}
 
 #confirmacao{
 
@@ -190,13 +196,11 @@ h2{
 
 .titulo{
 
-  font-size:42px;
+  font-size:56px;
 
-  font-weight:700;
+  font-weight:800;
 
-  color:white;
-
-  margin-bottom:8px;
+  letter-spacing:-1px;
 
 }
 
@@ -204,8 +208,6 @@ h2{
 
   color:#9aa4b2;
 
-  font-size:18px;
+  font-size:26px;
 
-  margin-bottom:30px;
-
-}
+  line-height:1.4;
