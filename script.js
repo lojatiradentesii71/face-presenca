@@ -210,7 +210,7 @@ video.addEventListener(
     melhor.distance.toFixed(2) +
     ")";
 
-  if (ultimoEnviado !== id) {
+ if (ultimoEnviado !== id) {
 
   bloqueado = true;
 
@@ -218,18 +218,10 @@ video.addEventListener(
 
   mostrarProcessando(nome);
 
-  registrarPresenca(
+  processarPresenca(
     id,
     nome
   );
-
-  setTimeout(() => {
-
-    esconderProcessando();
-
-    bloqueado = false;
-
-  }, 3000);
 
 }
 
@@ -249,6 +241,92 @@ video.addEventListener(
   }
 
 );
+
+async function processarPresenca(
+  id,
+  nome
+){
+
+  await registrarPresenca(
+    id,
+    nome
+  );
+
+  await new Promise(
+    r => setTimeout(r,1000)
+  );
+
+  try {
+
+    const status =
+      await fetch(
+        APPS_SCRIPT_URL +
+        "?acao=status"
+      )
+      .then(r => r.text());
+
+    console.log(
+      "STATUS:",
+      status
+    );
+
+    if (
+      status.includes(
+        "Presença criada"
+      ) ||
+      status === "OK"
+    ){
+
+      mostrarStatus(
+        "✅ PRESENÇA REGISTRADA",
+        nome,
+        "#0a8f08"
+      );
+
+      tocarBip();
+
+    }
+
+    else if (
+      status.includes(
+        "Presença já registrada"
+      ) ||
+      status === "DUPLICADO"
+    ){
+
+      mostrarStatus(
+        "⚠ PRESENÇA DUPLICADA",
+        nome,
+        "#d4a000"
+      );
+
+    }
+
+    else {
+
+      mostrarStatus(
+        "❌ SEM SESSÃO",
+        "",
+        "#c00000"
+      );
+
+    }
+
+  } catch(err){
+
+    console.error(err);
+
+  }
+
+  setTimeout(() => {
+
+    esconderProcessando();
+
+    bloqueado = false;
+
+  },3000);
+
+}
 
 async function registrarPresenca(id, nome) {
 
@@ -342,6 +420,36 @@ function esconderProcessando(){
     .classList.remove(
       "mostrar"
     );
+
+}
+
+function mostrarStatus(titulo, nome, cor){
+
+  const tela =
+    document.getElementById(
+      "processando"
+    );
+
+  tela.style.background =
+    cor;
+
+  document
+    .querySelector(
+      "#processando h1"
+    )
+    .innerHTML =
+      titulo;
+
+  document
+    .getElementById(
+      "nomeProcessando"
+    )
+    .innerHTML =
+      nome;
+
+  tela.classList.add(
+    "mostrar"
+  );
 
 }
 
