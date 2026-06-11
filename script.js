@@ -197,9 +197,24 @@ video.addEventListener(
             .withFaceLandmarks()
             .withFaceDescriptor();
 
+        const scanner =
+  document.querySelector(
+    ".scanner"
+  );
+
         if (!deteccao) {
-          return;
-        }
+
+  scanner.classList.remove(
+    "ativo"
+  );
+
+  return;
+
+}
+
+scanner.classList.add(
+  "ativo"
+);
 
         const melhor =
           faceMatcher.findBestMatch(
