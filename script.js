@@ -21,6 +21,9 @@ let bloqueado = false;
 
 async function iniciar() {
 
+  console.log("INICIOU");
+  alert("INICIOU");
+
   resultado.innerHTML =
   'Carregando modelos...';
 
@@ -33,6 +36,8 @@ async function iniciar() {
     faceapi.nets.faceRecognitionNet.loadFromUri('./weights')
 
   ]);
+
+  alert("MODELOS OK");
 
   resultado.innerHTML =
   'Carregando membros...';
@@ -57,6 +62,8 @@ async function iniciar() {
             img.width,
             img.height
         );
+
+      alert("MEMBROS OK");
 
          // document.body.appendChild(img);
 
@@ -138,6 +145,8 @@ async function iniciarCamera(){
         audio: false
 
       });
+
+    alert("CAMERA OK");
 
     console.log("Câmera iniciada");
 
