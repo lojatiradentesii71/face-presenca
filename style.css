@@ -319,7 +319,7 @@ h2{
 
   0%{
 
-    top:0;
+    transform:translateY(0);
 
     opacity:0;
 
@@ -339,7 +339,7 @@ h2{
 
   100%{
 
-    top:95%;
+    transform:translateY(55vh);
 
     opacity:0;
 
@@ -354,6 +354,10 @@ h2{
   width:95vw;
 
   display:inline-block;
+
+  overflow:hidden;
+
+  border-radius:25px;
 
 }
 .faceDetectada{
