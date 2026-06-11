@@ -22,8 +22,7 @@ let bloqueado = false;
 async function iniciar() {
 
   console.log("INICIOU");
-  alert("INICIOU");
-
+  
   resultado.innerHTML =
   'Carregando modelos...';
 
@@ -37,7 +36,7 @@ async function iniciar() {
 
   ]);
 
-  alert("MODELOS OK");
+  
 
   resultado.innerHTML =
   'Carregando membros...';
@@ -63,7 +62,7 @@ async function iniciar() {
             img.height
         );
 
-      alert("MEMBROS OK");
+      
 
          // document.body.appendChild(img);
 
@@ -146,7 +145,7 @@ async function iniciarCamera(){
 
       });
 
-    alert("CAMERA OK");
+    
 
     console.log("Câmera iniciada");
 
