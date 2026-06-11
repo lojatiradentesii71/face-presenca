@@ -40,7 +40,7 @@ h2{
 
 #video{
 
-  width:95vw;
+  width:100%;
 
   height:auto;
 
@@ -348,7 +348,7 @@ h2{
 
   100%{
 
-    transform:translateY(55vh);
+    transform:translateY(100%);
 
     opacity:0;
 
