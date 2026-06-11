@@ -35,9 +35,9 @@ h2{
 
 #video{
 
-  width:90vw;
+  width:95vw;
 
-  max-width:500px;
+  max-width:none;
 
   height:auto;
 
@@ -55,11 +55,17 @@ h2{
 
   margin-top:25px;
 
-  font-size:32px;
+  font-size:34px;
 
-  font-weight:bold;
+  font-weight:700;
 
-  min-height:80px;
+  text-align:center;
+
+  color:white;
+
+  width:90%;
+
+}
 
 }
 
