@@ -216,12 +216,16 @@ video.addEventListener(
 
   ultimoEnviado = id;
 
+  mostrarProcessando(nome);
+
   registrarPresenca(
     id,
     nome
   );
 
   setTimeout(() => {
+
+    esconderProcessando();
 
     bloqueado = false;
 
@@ -308,6 +312,36 @@ function tocarBip(){
     );
 
   audio.play();
+
+}
+
+function mostrarProcessando(nome){
+
+  document
+    .getElementById(
+      "nomeProcessando"
+    )
+    .innerHTML = nome;
+
+  document
+    .getElementById(
+      "processando"
+    )
+    .classList.add(
+      "mostrar"
+    );
+
+}
+
+function esconderProcessando(){
+
+  document
+    .getElementById(
+      "processando"
+    )
+    .classList.remove(
+      "mostrar"
+    );
 
 }
 
