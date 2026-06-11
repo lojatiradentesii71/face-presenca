@@ -356,14 +356,11 @@ async function registrarPresenca(id, nome) {
     nome:nome
   })
 });
-     mostrarConfirmacao(nome);
     
     console.log(
       "Presença registrada:",
       nome
     );
-
-    tocarBip();
 
     
   } catch(err){
@@ -373,30 +370,7 @@ async function registrarPresenca(id, nome) {
   }
 
 }
-function mostrarConfirmacao(nome){
 
-  const tela =
-    document.getElementById(
-      "confirmacao"
-    );
-
-  tela.innerHTML =
-    "✓ PRESENÇA REGISTRADA<br><br>" +
-    nome;
-
-  tela.classList.add(
-    "mostrar"
-  );
-
-  setTimeout(() => {
-
-    tela.classList.remove(
-      "mostrar"
-    );
-
-  },3000);
-
-}
 
 function tocarBip(){
 
