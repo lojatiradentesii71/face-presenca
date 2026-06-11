@@ -177,31 +177,31 @@ video.addEventListener(
 
         if (bloqueado) return;
 
-  const deteccao =
-  await faceapi
-    .detectSingleFace(
-      video,
-      new faceapi.TinyFaceDetectorOptions({
-        inputSize: 416,
-        scoreThreshold: 0.2
-      })
-    )
-    .withFaceLandmarks()
-    .withFaceDescriptor();
+ const deteccao =
+          await faceapi
+            .detectSingleFace(
+              video,
+              new faceapi.TinyFaceDetectorOptions({
+                inputSize: 416,
+                scoreThreshold: 0.2
+              })
+            )
+            .withFaceLandmarks()
+            .withFaceDescriptor();
 
-if (!deteccao) {
-  return;
-}
+        if (!deteccao) {
+          return;
+        }
 
-const melhor =
-  faceMatcher.findBestMatch(
-    deteccao.descriptor
-  );
+        const melhor =
+          faceMatcher.findBestMatch(
+            deteccao.descriptor
+          );
 
-console.log(melhor);
-console.log(melhor.label);
+        console.log(melhor);
+        console.log(melhor.label);
 
-if (melhor.distance < 0.40) {
+        if (melhor.distance < 0.40) {
 
   const partes =
     melhor.label.split("|");
@@ -212,12 +212,12 @@ if (melhor.distance < 0.40) {
   const nome =
     partes[1];
 
-  resultado.innerHTML =
+ resultado.innerHTML =
 `
 <div class="cardReconhecido">
 
   <div class="tituloReconhecido">
-    ✓ IRMÃO IDENTIFICADO
+    ✓ IRMÂO IDENTIFICADO
   </div>
 
   <div class="nomeReconhecido">
@@ -231,33 +231,27 @@ if (melhor.distance < 0.40) {
 </div>
 `;
 
-  if (ultimoEnviado !== id) {
+ if (ultimoEnviado !== id) {
 
-    bloqueado = true;
+  bloqueado = true;
 
-    ultimoEnviado = id;
+  ultimoEnviado = id;
 
-    mostrarProcessando(nome);
+  mostrarProcessando(nome);
 
-    processarPresenca(
-      id,
-      nome
-    );
+  processarPresenca(
+    id,
+    nome
+  );
 
-  }
+}
 
 } else {
 
-  resultado.innerHTML =
-`
-<div class="cardNaoCadastrado">
+          resultado.innerHTML =
+            "Pessoa não cadastrada";
 
-  ❌ NÃO CADASTRADO
-
-</div>
-`;
-
-}
+        }
       1000
 
     );
