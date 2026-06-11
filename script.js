@@ -121,7 +121,7 @@ console.log("Detecção concluída:", membro.nome);
      );
 
   resultado.innerHTML =
-  'Abrindo câmera...';
+  'Aguardando reconhecimento...';
 
   iniciarCamera();
 
