@@ -42,6 +42,8 @@ h2{
 
   width:100%;
 
+  box-sizing:border-box;
+
   height:auto;
 
   min-height:55vh;
@@ -53,12 +55,11 @@ h2{
   border:3px solid #2962ff;
 
   box-shadow:
-  0 0 15px #2962ff,
-  0 0 30px #2962ff,
-  0 0 60px rgba(41,98,255,.5);
+    0 0 15px #2962ff,
+    0 0 30px #2962ff,
+    0 0 60px rgba(41,98,255,.5);
 
 }
-
 #resultado{
 
   margin-top:20px;
