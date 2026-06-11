@@ -60,15 +60,15 @@ h2{
 
 #resultado{
 
-  margin-top:30px;
+  margin-top:20px;
 
-  font-size:42px;
+  font-size:48px !important;
 
   font-weight:700;
 
-  text-align:center;
-
   color:white;
+
+  text-align:center;
 
   width:95%;
 
@@ -196,18 +196,23 @@ h2{
 
 .titulo{
 
-  font-size:56px;
+  font-size:64px !important;
 
   font-weight:800;
 
-  letter-spacing:-1px;
+  color:white;
+
+  margin-bottom:10px;
 
 }
 
+
 .subtitulo{
 
-  color:#9aa4b2;
+  color:#c0c7d1;
 
-  font-size:26px;
+  font-size:30px !important;
 
-  line-height:1.4;
+  margin-bottom:30px;
+
+}
