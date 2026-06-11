@@ -145,21 +145,22 @@ h2{
 
 #processando h1{
 
-  font-size:56px;
+  font-size:72px;
 
-  margin-bottom:20px;
+  font-weight:800;
 
-  animation:pulsar 1s infinite;
+  letter-spacing:2px;
+
+  text-shadow:
+    0 0 20px rgba(255,255,255,.5);
 
 }
 
 #processando h2{
 
-  font-size:34px;
+  font-size:48px;
 
-  font-weight:normal;
-
-  max-width:90%;
+  font-weight:700;
 
 }
 
@@ -214,5 +215,63 @@ h2{
   font-size:30px !important;
 
   margin-bottom:30px;
+
+}
+
+.cardReconhecido{
+
+  width:95%;
+
+  margin-top:20px;
+
+  padding:20px;
+
+  border-radius:20px;
+
+  background:
+    linear-gradient(
+      135deg,
+      rgba(41,98,255,.25),
+      rgba(41,98,255,.10)
+    );
+
+  border:2px solid #2962ff;
+
+  box-shadow:
+    0 0 15px rgba(41,98,255,.5);
+
+}
+
+.tituloReconhecido{
+
+  font-size:24px;
+
+  font-weight:700;
+
+  color:#7ee787;
+
+  margin-bottom:10px;
+
+}
+
+.nomeReconhecido{
+
+  font-size:42px;
+
+  font-weight:800;
+
+  color:white;
+
+  line-height:1.2;
+
+}
+
+.scoreReconhecido{
+
+  margin-top:10px;
+
+  font-size:20px;
+
+  color:#b8c2cc;
 
 }
