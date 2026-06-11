@@ -40,7 +40,7 @@ h2{
 
 #video{
 
-  width:96vw;
+  width:95vw;
 
   height:auto;
 
@@ -311,7 +311,7 @@ h2{
 
   z-index:10;
 
-  opacity:0;
+  opacity:1;
 
 }
 
