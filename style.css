@@ -368,3 +368,40 @@ h2{
     0 0 60px rgba(0,255,136,.6);
 
 }
+
+.faceDetectada{
+
+  border-color:#00ff88 !important;
+
+  box-shadow:
+    0 0 15px #00ff88,
+    0 0 30px #00ff88,
+    0 0 60px rgba(0,255,136,.6);
+
+}
+
+.cardNaoCadastrado{
+
+  width:95%;
+
+  margin-top:20px;
+
+  padding:20px;
+
+  border-radius:20px;
+
+  background:
+    rgba(255,0,0,.15);
+
+  border:2px solid #ff4040;
+
+  box-shadow:
+    0 0 15px rgba(255,64,64,.4);
+
+  color:#ff8080;
+
+  font-size:42px;
+
+  font-weight:700;
+
+}
