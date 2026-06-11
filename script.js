@@ -177,7 +177,7 @@ video.addEventListener(
 
         if (bloqueado) return;
 
- const deteccao =
+        const deteccao =
           await faceapi
             .detectSingleFace(
               video,
@@ -252,6 +252,9 @@ video.addEventListener(
             "Pessoa não cadastrada";
 
         }
+
+      },
+
       1000
 
     );
