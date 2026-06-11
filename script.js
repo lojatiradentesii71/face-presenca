@@ -256,16 +256,16 @@ async function processarPresenca(
   nome
 ){
 
-  await registrarPresenca(
-    id,
-    nome
-  );
-
   if(processando){
   return;
 }
 
 processando = true;
+
+await registrarPresenca(
+  id,
+  nome
+);
 
   await new Promise(
     r => setTimeout(r,3000)
