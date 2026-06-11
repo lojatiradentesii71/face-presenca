@@ -35,17 +35,19 @@ h2{
 
 #video{
 
-  width:100%;
+  width:90vw;
 
   max-width:500px;
 
+  height:auto;
+
   border-radius:25px;
 
-  border:3px solid #2d65ff;
+  border:3px solid #2962ff;
 
   box-shadow:
-    0 0 25px
-    rgba(45,101,255,.4);
+    0 0 20px #2962ff,
+    0 0 40px rgba(41,98,255,.4);
 
 }
 
@@ -162,5 +164,20 @@ h2{
   100%{
     transform:scale(1);
   }
+
+}
+.container{
+
+  display:flex;
+
+  flex-direction:column;
+
+  align-items:center;
+
+  justify-content:flex-start;
+
+  min-height:100vh;
+
+  padding:20px;
 
 }
