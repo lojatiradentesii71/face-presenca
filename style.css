@@ -311,7 +311,16 @@ h2{
 
   z-index:10;
 
-  animation:scan 2.5s linear infinite;
+  opacity:0;
+
+}
+
+.scanner.ativo{
+
+  opacity:1;
+
+  animation:
+    scan 2.5s linear infinite;
 
 }
 
