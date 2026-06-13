@@ -16,7 +16,7 @@ const somSucesso =
 
 const somDuplicado =
   new Audio(
-    "https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg"
+    "https://actions.google.com/sounds/v1/emergency/emergency_siren_short_burst.ogg.ogg"
   );
 
 const somErro =
