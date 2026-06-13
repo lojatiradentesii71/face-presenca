@@ -9,9 +9,6 @@ const video =
 const resultado =
   document.getElementById('resultado');
 
-const faceBox =
-  document.getElementById("faceBox");
-
 const faceLabel =
   document.getElementById("faceLabel");
 
@@ -214,8 +211,6 @@ video.addEventListener(
     "ativo"
   );
 
-  faceBox.style.display =
-    "none";
 
   faceLabel.style.display =
     "none";
@@ -229,23 +224,6 @@ scanner.classList.add(
   "ativo"
 );
       
-const box =
-  deteccao.detection.box;
-
-faceBox.style.display =
-  "block";
-
-faceBox.style.left =
-  box.x + "px";
-
-faceBox.style.top =
-  box.y + "px";
-
-faceBox.style.width =
-  box.width + "px";
-
-faceBox.style.height =
-  box.height + "px";
 
         const melhor =
           faceMatcher.findBestMatch(
