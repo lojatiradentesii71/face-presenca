@@ -248,13 +248,7 @@ faceLabel.style.display =
   "block";
 
 faceLabel.innerHTML =
-  nome;
-
-faceLabel.style.left =
-  box.x + "px";
-
-faceLabel.style.top =
-  (box.y - 35) + "px";
+  "✓ " + nome;
 
  resultado.innerHTML =
 `
