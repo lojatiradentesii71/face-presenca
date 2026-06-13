@@ -381,25 +381,6 @@ h2{
 
 }
 
-#faceBox{
-
-  position:absolute;
-
-  display:none;
-
-  border:3px solid #00ff88;
-
-  border-radius:12px;
-
-  box-shadow:
-    0 0 15px #00ff88,
-    0 0 30px #00ff88;
-
-  z-index:20;
-
-  pointer-events:none;
-
-}
 
 #faceLabel{
 
