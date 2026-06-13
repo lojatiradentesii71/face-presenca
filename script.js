@@ -9,8 +9,6 @@ const video =
 const resultado =
   document.getElementById('resultado');
 
-const faceLabel =
-  document.getElementById("faceLabel");
 
 let intervaloReconhecimento = null;
 
@@ -212,9 +210,6 @@ video.addEventListener(
   );
 
 
-  faceLabel.style.display =
-    "none";
-
   return;
 
 }
@@ -244,11 +239,6 @@ scanner.classList.add(
   const nome =
     partes[1];
 
-faceLabel.style.display =
-  "block";
-
-faceLabel.innerHTML =
-  "✓ " + nome;
 
  resultado.innerHTML =
 `
@@ -286,11 +276,6 @@ faceLabel.innerHTML =
 
 } else {
 
-  faceLabel.style.display =
-    "none";
-
-  faceBox.style.display =
-    "none";
 
   resultado.innerHTML =
     "Pessoa não cadastrada";
