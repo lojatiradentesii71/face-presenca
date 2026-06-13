@@ -456,12 +456,58 @@ function tocarErro(){
   somErro.play();
 
 }
+
+function tocarProcessando(){
+
+  const ctx =
+    new AudioContext();
+
+  const osc =
+    ctx.createOscillator();
+
+  const gain =
+    ctx.createGain();
+
+  osc.type = "sine";
+
+  osc.frequency.setValueAtTime(
+    300,
+    ctx.currentTime
+  );
+
+  osc.frequency.linearRampToValueAtTime(
+    700,
+    ctx.currentTime + 0.25
+  );
+
+  gain.gain.setValueAtTime(
+    0.05,
+    ctx.currentTime
+  );
+
+  osc.connect(gain);
+
+  gain.connect(
+    ctx.destination
+  );
+
+  osc.start();
+
+  osc.stop(
+    ctx.currentTime + 0.3
+  );
+
+}
+
 function mostrarProcessando(nome){
 
   document
     .getElementById(
       "nomeProcessando"
     )
+
+    tocarProcessando();
+  
     .innerHTML = nome;
 
   document
