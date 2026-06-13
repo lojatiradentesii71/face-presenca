@@ -32,7 +32,7 @@ h2{
 
   color:#b5b5b5;
 
-  font-size:20px;
+  font-size:clamp(14px, 3vw, 18px);
 
   margin-bottom:25px;
 
@@ -59,7 +59,7 @@ h2{
 
   margin-top:20px;
 
-  font-size:48px !important;
+  font-size:clamp(22px, 4vw, 34px);
 
   font-weight:700;
 
@@ -90,7 +90,7 @@ h2{
 
   z-index:9999;
 
-  font-size:48px;
+  font-size:clamp(28px, 6vw, 48px);
 
   font-weight:bold;
 
@@ -142,7 +142,7 @@ h2{
 
 #processando h1{
 
-  font-size:72px;
+  font-size:clamp(34px, 7vw, 56px);
 
   font-weight:800;
 
@@ -155,7 +155,7 @@ h2{
 
 #processando h2{
 
-  font-size:48px;
+  font-size:clamp(22px, 5vw, 34px);
 
   font-weight:700;
 
@@ -196,7 +196,7 @@ h2{
 
 .titulo{
 
-  font-size:64px !important;
+  font-size:clamp(28px, 5vw, 42px);
 
   font-weight:800;
 
@@ -216,7 +216,7 @@ h2{
 
   color:#d5dbe3;
 
-  font-size:28px !important;
+  font-size:clamp(14px, 3vw, 18px);
 
   margin-bottom:30px;
 
