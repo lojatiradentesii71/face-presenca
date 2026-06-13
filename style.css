@@ -296,14 +296,15 @@ h2{
 
   width:100%;
 
-  height:4px;
+  height:6px;
 
   background:#00ff88;
 
-  box-shadow:
-    0 0 10px #00ff88,
-    0 0 20px #00ff88,
-    0 0 40px #00ff88;
+ box-shadow:
+  0 0 15px #00ff88,
+  0 0 30px #00ff88,
+  0 0 60px #00ff88,
+  0 0 100px rgba(0,255,136,.7);
 
   border-radius:10px;
 
@@ -320,7 +321,7 @@ h2{
   opacity:1;
 
   animation:
-    scan 0.5s linear infinite;
+    scan 4.5s ease-in-out infinite;
 
 }
 
