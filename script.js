@@ -9,6 +9,21 @@ const video =
 const resultado =
   document.getElementById('resultado');
 
+const somSucesso =
+  new Audio(
+    "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
+  );
+
+const somDuplicado =
+  new Audio(
+    "https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg"
+  );
+
+const somErro =
+  new Audio(
+    "https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg"
+  );
+
 
 let intervaloReconhecimento = null;
 
@@ -349,6 +364,7 @@ else if (status === "DUPLICADO") {
     nome,
     "#d4a000"
   );
+  tocarDuplicado();
 
 }
 else if (status === "SEM_SESSAO") {
@@ -358,6 +374,7 @@ else if (status === "SEM_SESSAO") {
     "",
     "#c00000"
   );
+  tocarErro();
 
 }
 else {
@@ -418,15 +435,27 @@ async function registrarPresenca(id, nome) {
 
 function tocarBip(){
 
-  const audio =
-    new Audio(
-      "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
-    );
+  somSucesso.currentTime = 0;
 
-  audio.play();
+  somSucesso.play();
 
 }
 
+function tocarDuplicado(){
+
+  somDuplicado.currentTime = 0;
+
+  somDuplicado.play();
+
+}
+
+function tocarErro(){
+
+  somErro.currentTime = 0;
+
+  somErro.play();
+
+}
 function mostrarProcessando(nome){
 
   document
