@@ -228,9 +228,9 @@ h2{
 
   width:95%;
 
-  margin-top:20px;
+  margin-top:15px;
 
-  padding:20px;
+  padding:15px;
 
   border-radius:20px;
 
@@ -250,21 +250,23 @@ h2{
 
 .tituloReconhecido{
 
-  font-size:24px;
+  font-size:16px;
 
   font-weight:700;
 
-  color:#7ee787;
+  color:#8ab4ff;
 
-  margin-bottom:10px;
+  letter-spacing:1px;
+
+  margin-bottom:8px;
 
 }
 
 .nomeReconhecido{
 
-  font-size:42px;
+  font-size:24px;
 
-  font-weight:800;
+  font-weight:700;
 
   color:white;
 
@@ -274,11 +276,11 @@ h2{
 
 .scoreReconhecido{
 
-  margin-top:10px;
+  font-size:13px;
 
-  font-size:20px;
+  color:#c0c0c0;
 
-  color:#b8c2cc;
+  margin-top:8px;
 
 }
 
