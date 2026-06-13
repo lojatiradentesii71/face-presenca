@@ -4,10 +4,16 @@ const APPS_SCRIPT_URL =
 'https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec';
 
 const video =
-document.getElementById('video');
+  document.getElementById('video');
 
 const resultado =
-document.getElementById('resultado');
+  document.getElementById('resultado');
+
+const faceBox =
+  document.getElementById("faceBox");
+
+const faceLabel =
+  document.getElementById("faceLabel");
 
 let intervaloReconhecimento = null;
 
@@ -202,19 +208,44 @@ video.addEventListener(
     ".scanner"
   );
 
-        if (!deteccao) {
+       if (!deteccao) {
 
   scanner.classList.remove(
     "ativo"
   );
 
+  faceBox.style.display =
+    "none";
+
+  faceLabel.style.display =
+    "none";
+
   return;
 
 }
 
+
 scanner.classList.add(
   "ativo"
 );
+      
+const box =
+  deteccao.detection.box;
+
+faceBox.style.display =
+  "block";
+
+faceBox.style.left =
+  box.x + "px";
+
+faceBox.style.top =
+  box.y + "px";
+
+faceBox.style.width =
+  box.width + "px";
+
+faceBox.style.height =
+  box.height + "px";
 
         const melhor =
           faceMatcher.findBestMatch(
@@ -234,6 +265,18 @@ scanner.classList.add(
 
   const nome =
     partes[1];
+
+faceLabel.style.display =
+  "block";
+
+faceLabel.innerHTML =
+  nome;
+
+faceLabel.style.left =
+  box.x + "px";
+
+faceLabel.style.top =
+  (box.y - 35) + "px";
 
  resultado.innerHTML =
 `
@@ -271,10 +314,17 @@ scanner.classList.add(
 
 } else {
 
-          resultado.innerHTML =
-            "Pessoa não cadastrada";
+  faceLabel.style.display =
+    "none";
 
-        }
+  faceBox.style.display =
+    "none";
+
+  resultado.innerHTML =
+    "Pessoa não cadastrada";
+
+}
+
 
       },
 
