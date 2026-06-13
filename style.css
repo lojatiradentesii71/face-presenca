@@ -57,7 +57,7 @@ h2{
 }
 #resultado{
 
-  margin-top:8px;
+  margin-top:6px;
 
   font-size:clamp(22px, 4vw, 34px);
 
@@ -190,7 +190,7 @@ h2{
 
   min-height:100vh;
 
-  padding:20px;
+  padding:5px;
 
 }
 
@@ -202,7 +202,9 @@ h2{
 
   color:#2962ff;
 
-  margin-bottom:4px;
+  margin-top:0;
+
+  margin-bottom:2px;
 
   text-shadow:
     0 0 10px #2962ff,
@@ -218,7 +220,7 @@ h2{
 
   font-size:clamp(14px, 3vw, 18px);
 
-  margin-bottom:12px;
+  margin-bottom:8px;
 
   letter-spacing:1px;
 
