@@ -287,7 +287,7 @@ scanner.classList.add(
     nome
   );
 
-}; 500);
+} 500);
 
 } else {
 
