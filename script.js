@@ -336,7 +336,7 @@ await registrarPresenca(
 (
   await fetch(
     APPS_SCRIPT_URL +
-   ?acao=status&id=" +
+   "?acao=status&id=" +
    encodeURIComponent(id)
   )
   .then(r => r.text())
