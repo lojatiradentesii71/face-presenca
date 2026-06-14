@@ -282,12 +282,14 @@ scanner.classList.add(
 
   mostrarProcessando(nome);
 
-  processarPresenca(
-    id,
-    nome
-  );
+ setTimeout(() => {
 
-}, 500);
+    processarPresenca(
+      id,
+      nome
+    );
+
+  }, 500);
 
 } else {
 
