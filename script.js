@@ -288,7 +288,7 @@ scanner.classList.add(
         nome
       );
 
-    }, 500);
+    }, 3000);
 
   }
 
