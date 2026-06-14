@@ -288,7 +288,7 @@ scanner.classList.add(
         nome
       );
 
-    }, 3000);
+    }, 500);
 
   }
 
@@ -349,6 +349,17 @@ const idStatus =
 
 const status =
   partes[1];
+
+console.log(
+  "PROCURANDO:",
+  id
+);
+
+console.log(
+  "RETORNADO:",
+  idStatus,
+  status
+);
 
 if (idStatus !== id) {
 
