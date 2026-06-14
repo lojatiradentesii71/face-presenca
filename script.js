@@ -243,7 +243,7 @@ scanner.classList.add(
         console.log(melhor);
         console.log(melhor.label);
 
-        if (melhor.distance < 0.40) {
+       if (melhor.distance < 0.40) {
 
   const partes =
     melhor.label.split("|");
@@ -254,45 +254,45 @@ scanner.classList.add(
   const nome =
     partes[1];
 
+  resultado.innerHTML =
+  `
+  <div class="cardReconhecido">
 
- resultado.innerHTML =
-`
-<div class="cardReconhecido">
+    <div class="tituloReconhecido">
+      ✓ IRMÂO IDENTIFICADO
+    </div>
 
-  <div class="tituloReconhecido">
-    ✓ IRMÂO IDENTIFICADO
+    <div class="nomeReconhecido">
+      ${nome}
+    </div>
+
+    <div class="scoreReconhecido">
+      Confiança: ${(1 - melhor.distance).toFixed(2)}
+    </div>
+
   </div>
+  `;
 
-  <div class="nomeReconhecido">
-    ${nome}
-  </div>
+  if (ultimoEnviado !== id) {
 
-  <div class="scoreReconhecido">
-    Confiança: ${(1 - melhor.distance).toFixed(2)}
-  </div>
+    bloqueado = true;
 
-</div>
-`;
+    ultimoEnviado = id;
 
- if (ultimoEnviado !== id) {
+    mostrarProcessando(nome);
 
-  bloqueado = true;
+    setTimeout(() => {
 
-  ultimoEnviado = id;
+      processarPresenca(
+        id,
+        nome
+      );
 
-  mostrarProcessando(nome);
+    }, 500);
 
- setTimeout(() => {
-
-    processarPresenca(
-      id,
-      nome
-    );
-
-  }, 500);
+  }
 
 } else {
-
 
   resultado.innerHTML =
     "Pessoa não cadastrada";
