@@ -330,14 +330,34 @@ await registrarPresenca(
 
   try {
 
-    const status =
-  (
-    await fetch(
-      APPS_SCRIPT_URL +
-      "?acao=status"
-    )
-    .then(r => r.text())
-  ).trim();
+    const resposta =
+(
+  await fetch(
+    APPS_SCRIPT_URL +
+    "?acao=status"
+  )
+  .then(r => r.text())
+).trim();
+
+const partes =
+  resposta.split("|");
+
+const idStatus =
+  partes[0];
+
+const status =
+  partes[1];
+
+if (idStatus !== id) {
+
+  console.log(
+    "Status de outro membro:",
+    idStatus
+  );
+
+  return;
+
+}
 
     console.log(
   "STATUS RECEBIDO:",
