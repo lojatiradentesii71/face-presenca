@@ -501,13 +501,13 @@ function tocarProcessando(){
 
 function mostrarProcessando(nome){
 
+  tocarProcessando();
+  
   document
     .getElementById(
       "nomeProcessando"
     )
 
-    tocarProcessando();
-  
     .innerHTML = nome;
 
   document
