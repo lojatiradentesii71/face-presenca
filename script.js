@@ -356,6 +356,12 @@ if (idStatus !== id) {
     "Status de outro membro:",
     idStatus
   );
+  
+  processando = false;
+
+  bloqueado = false;
+
+  esconderProcessando();
 
   return;
 
