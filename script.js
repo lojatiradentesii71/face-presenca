@@ -155,19 +155,35 @@ async function iniciarCamera(){
 
   try {
 
+    if (video.srcObject) {
+
+      video.srcObject
+        .getTracks()
+        .forEach(
+          track => track.stop()
+        );
+
+    }
+
     const stream =
       await navigator.mediaDevices.getUserMedia({
 
-        video: true,
+        video: {
+          facingMode:
+            cameraAtual
+        },
+
         audio: false
 
       });
 
-    
+    console.log(
+      "Câmera iniciada:",
+      cameraAtual
+    );
 
-    console.log("Câmera iniciada");
-
-    video.srcObject = stream;
+    video.srcObject =
+      stream;
 
     await video.play();
 
