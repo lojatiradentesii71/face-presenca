@@ -391,7 +391,7 @@ if (status === "OK") {
   mostrarStatus(
     "✅ PRESENÇA REGISTRADA",
     nome,
-    "#0a8f08"
+    "rgba(0,100,40,0.85)"
   );
 
   tocarBip();
@@ -402,7 +402,7 @@ else if (status === "DUPLICADO") {
   mostrarStatus(
     "⚠ PRESENÇA DUPLICADA",
     nome,
-    "#d4a000"
+    "rgba(160,120,0,0.85)"
   );
   tocarDuplicado();
 
@@ -412,7 +412,7 @@ else if (status === "SEM_SESSAO") {
   mostrarStatus(
     "❌ SEM SESSÃO",
     "",
-    "#c00000"
+    "rgba(120,0,0,0.85)"
   );
   tocarErro();
 
