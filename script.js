@@ -490,6 +490,17 @@ async function registrarPresenca(id, nome) {
 
 }
 
+async function trocarCamera(){
+
+  cameraAtual =
+    cameraAtual === "user"
+      ? "environment"
+      : "user";
+
+  await iniciarCamera();
+
+}
+
 
 function tocarBip(){
 
