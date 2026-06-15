@@ -549,7 +549,7 @@ function mostrarProcessando(nome){
     );
 
   tela.style.background =
-    "#0066cc";
+    "";
 
   document
     .querySelector(
