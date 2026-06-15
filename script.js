@@ -267,7 +267,7 @@ scanner.classList.add(
     </div>
 
     <div class="scoreReconhecido">
-      Confiança: ${(1 - melhor.distance).toFixed(2)}
+      Confiança: ${Math.round((1 - melhor.distance) * 100)}%
     </div>
 
   </div>
