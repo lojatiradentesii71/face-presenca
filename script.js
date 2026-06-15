@@ -542,21 +542,32 @@ function tocarProcessando(){
 function mostrarProcessando(nome){
 
   tocarProcessando();
-  
+
+  const tela =
+    document.getElementById(
+      "processando"
+    );
+
+  tela.style.background =
+    "#0066cc";
+
+  document
+    .querySelector(
+      "#processando h1"
+    )
+    .innerHTML =
+      "⏳ PROCESSANDO";
+
   document
     .getElementById(
       "nomeProcessando"
     )
+    .innerHTML =
+      nome;
 
-    .innerHTML = nome;
-
-  document
-    .getElementById(
-      "processando"
-    )
-    .classList.add(
-      "mostrar"
-    );
+  tela.classList.add(
+    "mostrar"
+  );
 
 }
 
