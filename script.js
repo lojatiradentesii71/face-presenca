@@ -327,7 +327,7 @@ await registrarPresenca(
 );
 
   await new Promise(
-    r => setTimeout(r,1000)
+    r => setTimeout(r,2500)
   );
 
   try {
