@@ -441,7 +441,7 @@ else {
 
     processando = false;
 
-  },1500);
+  },3000);
 
 }
 
