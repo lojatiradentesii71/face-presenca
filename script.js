@@ -35,6 +35,8 @@ let processando = false;
 
 let bloqueado = false;
 
+let cameraAtual = "user";
+
 async function iniciar() {
 
   console.log("INICIOU");
