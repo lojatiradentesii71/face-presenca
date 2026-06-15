@@ -37,6 +37,20 @@ let bloqueado = false;
 
 let cameraAtual = "user";
 
+window.addEventListener(
+  "load",
+  () => {
+
+    document
+      .getElementById(
+        "btnCamera"
+      )
+      .innerHTML =
+        "📱 Frontal";
+
+  }
+);
+
 async function iniciar() {
 
   console.log("INICIOU");
@@ -496,6 +510,15 @@ async function trocarCamera(){
     cameraAtual === "user"
       ? "environment"
       : "user";
+
+  document
+    .getElementById(
+      "btnCamera"
+    )
+    .innerHTML =
+      cameraAtual === "user"
+      ? "📱 Frontal"
+      : "📷 Traseira";
 
   await iniciarCamera();
 
