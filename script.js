@@ -106,7 +106,7 @@ const deteccao =
     img,
     new faceapi.TinyFaceDetectorOptions({
       inputSize: 608,
-      scoreThreshold: 0.1
+      scoreThreshold: 0.5
     })
   )
   .withFaceLandmarks()
@@ -239,7 +239,7 @@ video.addEventListener(
               video,
               new faceapi.TinyFaceDetectorOptions({
                 inputSize: 416,
-                scoreThreshold: 0.2
+                scoreThreshold: 0.6
               })
             )
             .withFaceLandmarks()
@@ -271,6 +271,12 @@ scanner.classList.add(
           faceMatcher.findBestMatch(
             deteccao.descriptor
           );
+
+        if(
+          melhor.label === "unknown"
+        ){
+          return;
+        }
 
         console.log(melhor);
         console.log(melhor.label);
