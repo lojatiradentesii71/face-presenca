@@ -387,7 +387,9 @@ const idStatus =
   partes[0];
 
 const status =
-  partes[1];
+  (partes[1] || "")
+    .trim()
+    .toUpperCase();
 
 console.log(
   "PROCURANDO:",
