@@ -387,7 +387,9 @@ const idStatus =
   partes[0];
 
 const status =
-  (partes[1] || "")
+  String(partes[1] || "")
+    .replace(/\r/g, "")
+    .replace(/\n/g, "")
     .trim()
     .toUpperCase();
 
