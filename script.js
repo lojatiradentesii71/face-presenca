@@ -393,12 +393,6 @@ const status =
     .trim()
     .toUpperCase();
 
-mostrarStatus(
-  "DEBUG",
-  "Resposta: " + resposta +
-  " | Status: " + status,
-  "#000080"
-);
 
 await new Promise(r => setTimeout(r, 3000));
 
