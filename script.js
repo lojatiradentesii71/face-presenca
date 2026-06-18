@@ -393,16 +393,14 @@ const status =
     .trim()
     .toUpperCase();
 
-console.log(
-  "PROCURANDO:",
-  id
+mostrarStatus(
+  "DEBUG",
+  "Resposta: " + resposta +
+  " | Status: " + status,
+  "#000080"
 );
 
-console.log(
-  "RETORNADO:",
-  idStatus,
-  status
-);
+await new Promise(r => setTimeout(r, 3000));
 
 if (idStatus !== id) {
 
