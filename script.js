@@ -365,8 +365,6 @@ processando = true;
 
   debugTexto += "INICIO\n";
 
-const inicio = Date.now();
-
 await registrarPresenca(
   id,
   nome
