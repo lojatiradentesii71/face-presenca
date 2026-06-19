@@ -319,14 +319,14 @@ scanner.classList.add(
 
     mostrarProcessando(nome);
 
-    setTimeout(() => {
+    //setTimeout(() => {      //Tentando reduzir temp de "Processando"
 
       processarPresenca(
         id,
         nome
       );
 
-    }, 500);
+   //}, 500);
 
   }
 
@@ -365,7 +365,7 @@ await registrarPresenca(
 );
 
   await new Promise(
-    r => setTimeout(r,1500)
+    r => setTimeout(r,200) //Tentando reduzir o tempo de "Precessando" reduziu de 1500 para 200
   );
 
   try {
@@ -394,7 +394,7 @@ const status =
     .toUpperCase();
 
 
-await new Promise(r => setTimeout(r, 1000));
+await new Promise(r => setTimeout(r, 100)); //Tentando reduzir o tempo de "Precessando" reduziu de 1000 para 100
 
 if (idStatus !== id) {
 
