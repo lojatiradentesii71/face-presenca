@@ -340,7 +340,7 @@ scanner.classList.add(
 
       },
 
-      1000
+      250  //Tentando reduzir o tempo de "Processando" reduziu de 1000 para 250
 
     );
 
