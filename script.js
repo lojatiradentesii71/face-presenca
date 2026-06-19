@@ -359,6 +359,8 @@ async function processarPresenca(
 
 processando = true;
 
+const inicio = Date.now();
+
 await registrarPresenca(
   id,
   nome
@@ -379,6 +381,14 @@ await registrarPresenca(
   )
   .then(r => r.text())
 ).trim();
+
+mostrarStatus(
+  "DEBUG",
+  "TEMPO TOTAL = " +
+  (Date.now() - inicio) +
+  " ms",
+  "#000080"
+);
 
 const partes =
   resposta.split("|");
