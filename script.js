@@ -484,12 +484,15 @@ async function registrarPresenca(id, nome) {
 
   try {
 
+   const imagem = capturarFrameBase64();
+
    await fetch(APPS_SCRIPT_URL, {
-  method: "POST",
-  mode: "no-cors",
-  body: JSON.stringify({
-    id:id,
-    nome:nome
+    method: "POST",
+    mode: "no-cors",
+    body: JSON.stringify({
+    id: id,
+    nome: nome,
+    image: imagem.split(",")[1] // remove "data:image/jpeg;base64,"
   })
 });
     
@@ -665,6 +668,22 @@ function mostrarStatus(titulo, nome, cor){
   tela.classList.add(
     "mostrar"
   );
+
+}
+
+function capturarFrameBase64() {
+
+  const canvas = document.createElement("canvas");
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  const ctx = canvas.getContext("2d");
+
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  // qualidade 0.7 para não pesar o Apps Script
+  return canvas.toDataURL("image/jpeg", 0.7);
 
 }
 
