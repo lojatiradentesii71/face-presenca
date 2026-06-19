@@ -359,36 +359,19 @@ async function processarPresenca(
 
 processando = true;
 
-  let debugTexto = "";
-
-  const inicio = Date.now();
-
-  debugTexto += "INICIO\n";
-
-await registrarPresenca(
+  await registrarPresenca(
   id,
   nome
 );
-
-   debugTexto +=
-    "POST: " +
-    (Date.now() - inicio) +
-    " ms\n";
 
   await new Promise(
     r => setTimeout(r,200) //Tentando reduzir o tempo de "Precessando" reduziu de 1500 para 200
   );
 
-  debugTexto +=
-  "APOS ESPERA: " +
-  (Date.now() - inicio) +
-  " ms\n";
 
   try {
 
-    const inicioGet = Date.now();
-
-const resposta =
+    const resposta =
 (
   await fetch(
     APPS_SCRIPT_URL +
@@ -397,17 +380,6 @@ const resposta =
   )
   .then(r => r.text())
 ).trim();
-
-debugTexto +=
-  "GET STATUS: " +
-  (Date.now() - inicioGet) +
-  " ms\n";
-
-debugTexto +=
-  "TOTAL: " +
-  (Date.now() - inicio) +
-  " ms\n";
-
 
 const partes =
   resposta.split("|");
@@ -421,26 +393,6 @@ const status =
     .replace(/\n/g, "")
     .trim()
     .toUpperCase();
-
-resultado.innerHTML = `
-<div style="
-background:#000080;
-color:white;
-padding:20px;
-font-size:22px;
-text-align:left;
-white-space:pre-wrap;
-">
-${debugTexto}
-</div>
-
-RESPOSTA:
-${resposta}
-
-STATUS:
-${status}
-</div>
-`;
 
 
 await new Promise(r => setTimeout(r, 100)); //Tentando reduzir o tempo de "Precessando" reduziu de 1000 para 100
