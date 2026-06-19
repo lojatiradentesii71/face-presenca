@@ -359,6 +359,12 @@ async function processarPresenca(
 
 processando = true;
 
+  let debugTexto = "";
+
+  const inicio = Date.now();
+
+  debugTexto += "INICIO\n";
+
 const inicio = Date.now();
 
 await registrarPresenca(
@@ -366,29 +372,44 @@ await registrarPresenca(
   nome
 );
 
+   debugTexto +=
+    "POST: " +
+    (Date.now() - inicio) +
+    " ms\n";
+
   await new Promise(
     r => setTimeout(r,200) //Tentando reduzir o tempo de "Precessando" reduziu de 1500 para 200
   );
 
+  debugTexto +=
+  "APOS ESPERA: " +
+  (Date.now() - inicio) +
+  " ms\n";
+
   try {
 
-    const resposta =
+    const inicioGet = Date.now();
+
+const resposta =
 (
   await fetch(
     APPS_SCRIPT_URL +
-   "?acao=status&id=" +
-   encodeURIComponent(id)
+    "?acao=status&id=" +
+    encodeURIComponent(id)
   )
   .then(r => r.text())
 ).trim();
 
-mostrarStatus(
-  "DEBUG",
-  "TEMPO TOTAL = " +
+debugTexto +=
+  "GET STATUS: " +
+  (Date.now() - inicioGet) +
+  " ms\n";
+
+debugTexto +=
+  "TOTAL: " +
   (Date.now() - inicio) +
-  " ms",
-  "#000080"
-);
+  " ms\n";
+
 
 const partes =
   resposta.split("|");
@@ -402,6 +423,26 @@ const status =
     .replace(/\n/g, "")
     .trim()
     .toUpperCase();
+
+resultado.innerHTML = `
+<div style="
+background:#000080;
+color:white;
+padding:20px;
+font-size:22px;
+text-align:left;
+white-space:pre-wrap;
+">
+${debugTexto}
+</div>
+
+RESPOSTA:
+${resposta}
+
+STATUS:
+${status}
+</div>
+`;
 
 
 await new Promise(r => setTimeout(r, 100)); //Tentando reduzir o tempo de "Precessando" reduziu de 1000 para 100
