@@ -414,10 +414,15 @@ if (idStatus !== id) {
 
 }
 
-    console.log(
-  "STATUS RECEBIDO:",
-  "[" + status + "]"
+   mostrarStatus(
+  "DEBUG",
+  "Resposta: " + resposta +
+  " | ID: " + idStatus +
+  " | Status: [" + status + "]",
+  "#0066cc"
 );
+
+return;
 
     
 
