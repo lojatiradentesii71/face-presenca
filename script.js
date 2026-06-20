@@ -368,7 +368,11 @@ processando = true;
     r => setTimeout(r,2000) //Tentando reduzir o tempo de "Precessando" reduziu de 1500 para 200
   );
 
-
+mostrarStatus(
+  "DEBUG",
+  "Consultando status...",
+  "#0066cc"
+);
   try {
 
     const resposta =
