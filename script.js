@@ -423,16 +423,7 @@ if (idStatus !== id) {
 
 }
 
-   mostrarStatus(
-  "DEBUG",
-  "Resposta: " + resposta +
-  " | ID: " + idStatus +
-  " | Status: [" + status + "]",
-  "#0066cc"
-);
-
-return;
-
+   
     if (status.startsWith("DEBUG")) { //colocado temporariamente para debug
 
   mostrarStatus(
