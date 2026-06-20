@@ -385,6 +385,8 @@ mostrarStatus(
   .then(r => r.text())
 ).trim();
 
+    alert("RESPOSTA=" + resposta);
+
 const partes =
   resposta.split("|");
 
