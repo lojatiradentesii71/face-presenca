@@ -385,7 +385,10 @@ mostrarStatus(
   .then(r => r.text())
 ).trim();
 
-    alert("RESPOSTA=" + resposta);
+    alert(
+  "Status=[" + status + "]\n" +
+  "Tamanho=" + status.length
+);
 
 const partes =
   resposta.split("|");
