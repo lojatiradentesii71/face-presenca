@@ -413,8 +413,7 @@ if (idStatus !== id) {
 
   return;
 
-}
-    
+}    
 
 if (status === "OK") {
 
