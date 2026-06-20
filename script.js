@@ -385,11 +385,7 @@ mostrarStatus(
   .then(r => r.text())
 ).trim();
 
-    alert(
-  "Status=[" + status + "]\n" +
-  "Tamanho=" + status.length
-);
-
+    
 const partes =
   resposta.split("|");
 
@@ -402,6 +398,11 @@ const status =
     .replace(/\n/g, "")
     .trim()
     .toUpperCase();
+
+    alert(
+  "Status=[" + status + "]\n" +
+  "Tamanho=" + status.length
+);
 
 
 await new Promise(r => setTimeout(r, 100)); //Tentando reduzir o tempo de "Precessando" reduziu de 1000 para 100
