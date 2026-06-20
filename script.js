@@ -368,11 +368,7 @@ processando = true;
     r => setTimeout(r,2000) //Tentando reduzir o tempo de "Precessando" reduziu de 1500 para 200
   );
 
-mostrarStatus(
-  "DEBUG",
-  "Consultando status...",
-  "#0066cc"
-);
+
   try {
 
     const resposta =
@@ -399,10 +395,6 @@ const status =
     .trim()
     .toUpperCase();
 
-    alert(
-  "Status=[" + status + "]\n" +
-  "Tamanho=" + status.length
-);
 
 await new Promise(r => setTimeout(r, 100)); //Tentando reduzir o tempo de "Precessando" reduziu de 1000 para 100
 
@@ -423,16 +415,8 @@ if (idStatus !== id) {
 
 }
 
-   
-    if (status.startsWith("DEBUG")) { //colocado temporariamente para debug
-
-  mostrarStatus(
-    "DEBUG",
-    status,
-    "#0066cc"
-  );
-
   processando = false;
+    
   bloqueado = false;
 
   return;
