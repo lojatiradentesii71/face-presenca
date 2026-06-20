@@ -319,14 +319,14 @@ scanner.classList.add(
 
     mostrarProcessando(nome);
 
-    //setTimeout(() => {      //Tentando reduzir temp de "Processando"
+    setTimeout(() => {      //Tentando reduzir temp de "Processando"
 
       processarPresenca(
         id,
         nome
       );
 
-   //}, 500);
+   }, 500);
 
   }
 
