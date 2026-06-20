@@ -424,6 +424,19 @@ if (idStatus !== id) {
 
 return;
 
+    if (status.startsWith("DEBUG")) { //colocado temporariamente para debug
+
+  mostrarStatus(
+    "DEBUG",
+    status,
+    "#0066cc"
+  );
+
+  processando = false;
+  bloqueado = false;
+
+  return;
+}
     
 
 if (status === "OK") {
