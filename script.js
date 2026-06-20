@@ -404,7 +404,6 @@ const status =
   "Tamanho=" + status.length
 );
 
-
 await new Promise(r => setTimeout(r, 100)); //Tentando reduzir o tempo de "Precessando" reduziu de 1000 para 100
 
 if (idStatus !== id) {
