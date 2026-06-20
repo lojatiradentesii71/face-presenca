@@ -365,7 +365,7 @@ processando = true;
 );
 
   await new Promise(
-    r => setTimeout(r,200) //Tentando reduzir o tempo de "Precessando" reduziu de 1500 para 200
+    r => setTimeout(r,2000) //Tentando reduzir o tempo de "Precessando" reduziu de 1500 para 200
   );
 
 
