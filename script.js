@@ -414,13 +414,6 @@ if (idStatus !== id) {
   return;
 
 }
-
-  processando = false;
-    
-  bloqueado = false;
-
-  return;
-}
     
 
 if (status === "OK") {
