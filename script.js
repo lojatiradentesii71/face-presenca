@@ -73,13 +73,56 @@ async function iniciar() {
   resultado.innerHTML =
   'Carregando membros...';
 
-  const membros =
-    await fetch(APPS_SCRIPT_URL)
-    .then(r => r.json());
+  //const membros =
+   // await fetch(APPS_SCRIPT_URL)
+   // .then(r => r.json());
+
+  let membros = []; //colocado para debug
+
+try {
+
+  resultado.innerHTML =
+    "Buscando dados no Apps Script...";
+
+  const resposta =
+    await fetch(APPS_SCRIPT_URL);
+
+  const texto =
+    await resposta.text();
+
+  resultado.innerHTML =
+    "Dados recebidos. Tamanho: " + texto.length;
+
+  await new Promise(r => setTimeout(r, 1500));
+
+  membros =
+    JSON.parse(texto);
+
+  resultado.innerHTML =
+    "Membros recebidos: " + membros.length;
+
+  await new Promise(r => setTimeout(r, 1500));
+
+} catch(err) {
+
+  resultado.innerHTML =
+    "ERRO AO CARREGAR MEMBROS: " + err;
+
+  return;
+
+} // até aqui colocado para debug
 
   const descritores = [];
 
   for (const membro of membros) {
+
+    resultado.innerHTML = //colocado para debug
+     "Processando: " +
+    membro.nome +
+     "<br>ID: " +
+    membro.id +
+     "<br>Telefone: " +
+    (membro.telefone || "");
 
     try {
 
