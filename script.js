@@ -180,7 +180,7 @@ console.log("Detecção concluída:", membro.nome);
 
         descritores.push(
           new faceapi.LabeledFaceDescriptors(
-              membro.id + "|" + membro.nome
+              membro.id + "|" + membro.nome,
               [deteccao.descriptor]
            )
       );
