@@ -114,6 +114,8 @@ try {
 
   const descritores = [];
 
+  const telefonesPorId = {};
+
   for (const membro of membros) {
 
     resultado.innerHTML = //colocado para debug
@@ -123,6 +125,9 @@ try {
     membro.id +
      "<br>Telefone: " +
     (membro.telefone || "");
+
+    telefonesPorId[String(membro.id)] =
+  String(membro.telefone || "");
 
     try {
 
@@ -175,9 +180,7 @@ console.log("Detecção concluída:", membro.nome);
 
         descritores.push(
           new faceapi.LabeledFaceDescriptors(
-              String(membro.id) + "|" +
-              String(membro.nome) + "|" +
-              String(membro.telefone || "")
+              membro.id + "|" + membro.nome
               [deteccao.descriptor]
            )
       );
@@ -338,7 +341,7 @@ scanner.classList.add(
     partes[1];
 
   const telefone =
-    partes[2] || "";
+  telefonesPorId[String(id)] || "";
 
   resultado.innerHTML =
   `
