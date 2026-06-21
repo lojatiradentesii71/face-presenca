@@ -37,6 +37,8 @@ let bloqueado = false;
 
 let cameraAtual = "user";
 
+let telefonesPorId = {};
+
 window.addEventListener(
   "load",
   () => {
@@ -113,8 +115,6 @@ try {
 } // até aqui colocado para debug
 
   const descritores = [];
-
-  const telefonesPorId = {};
 
   for (const membro of membros) {
 
