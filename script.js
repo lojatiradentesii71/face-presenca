@@ -132,7 +132,9 @@ console.log("Detecção concluída:", membro.nome);
 
         descritores.push(
           new faceapi.LabeledFaceDescriptors(
-              membro.id + "|" + membro.nome + "|" + membro.telefone
+              String(membro.id) + "|" +
+              String(membro.nome) + "|" +
+              String(membro.telefone || "")
               [deteccao.descriptor]
            )
       );
@@ -293,7 +295,7 @@ scanner.classList.add(
     partes[1];
 
   const telefone =
-    partes[2];
+    partes[2] || "";
 
   resultado.innerHTML =
   `
