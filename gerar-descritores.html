@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <title>Gerar Descritores</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 </head>
 <body>
 
   <h2>Gerador de Descritores Faciais</h2>
 
-  <button onclick="gerarDescritores()">
-    Gerar descritores
+  <button id="btnGerar">
+  Gerar descritores
   </button>
-
+  
   <pre id="status">Aguardando...</pre>
 
   <script>
@@ -128,6 +128,13 @@
         "\nConfira a aba FaceDescriptors.";
 
     }
+
+    document
+    .getElementById("btnGerar")
+    .addEventListener(
+     "click",
+     gerarDescritores
+    );
   </script>
 
 </body>
