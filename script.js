@@ -75,56 +75,13 @@ async function iniciar() {
   resultado.innerHTML =
   'Carregando membros...';
 
-  //const membros =
-   // await fetch(APPS_SCRIPT_URL)
-   // .then(r => r.json());
-
-  let membros = []; //colocado para debug
-
-try {
-
-  resultado.innerHTML =
-    "Buscando dados no Apps Script...";
-
-  const resposta =
-    await fetch(APPS_SCRIPT_URL);
-
-  const texto =
-    await resposta.text();
-
-  resultado.innerHTML =
-    "Dados recebidos. Tamanho: " + texto.length;
-
-  await new Promise(r => setTimeout(r, 1500));
-
-  membros =
-    JSON.parse(texto);
-
-  resultado.innerHTML =
-    "Membros recebidos: " + membros.length;
-
-  await new Promise(r => setTimeout(r, 1500));
-
-} catch(err) {
-
-  resultado.innerHTML =
-    "ERRO AO CARREGAR MEMBROS: " + err;
-
-  return;
-
-} // até aqui colocado para debug
+  const membros =
+    await fetch(APPS_SCRIPT_URL)
+    .then(r => r.json());
 
   const descritores = [];
 
   for (const membro of membros) {
-
-    resultado.innerHTML = //colocado para debug
-     "Processando: " +
-    membro.nome +
-     "<br>ID: " +
-    membro.id +
-     "<br>Telefone: " +
-    (membro.telefone || "");
 
     telefonesPorId[String(membro.id)] =
   String(membro.telefone || "");
@@ -374,7 +331,8 @@ scanner.classList.add(
 
       processarPresenca(
         id,
-        nome
+        nome,
+        telefone
       );
 
    }, 500);
@@ -401,7 +359,8 @@ scanner.classList.add(
 
 async function processarPresenca(
   id,
-  nome
+  nome,
+  telefone
 ){
 
   if(processando){
@@ -412,7 +371,8 @@ processando = true;
 
   await registrarPresenca(
   id,
-  nome
+  nome,
+  telefone
 );
 
   await new Promise(
@@ -525,7 +485,7 @@ else {
 
 }
 
-async function registrarPresenca(id, nome) {
+async function registrarPresenca(id, nome, telefone) {
 
   try {
 
@@ -537,6 +497,7 @@ async function registrarPresenca(id, nome) {
     body: JSON.stringify({
     id: id,
     nome: nome,
+    telefone: telefone,
     image: imagem.split(",")[1] // remove "data:image/jpeg;base64,"
   })
 });
