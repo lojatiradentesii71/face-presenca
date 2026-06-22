@@ -87,17 +87,31 @@ const tentativas = [
 
 for (const opt of tentativas) {
 
-  deteccao =
-    await faceapi
-      .detectSingleFace(
-        img,
-        new faceapi.TinyFaceDetectorOptions(opt)
-      )
-      .withFaceLandmarks()
-      .withFaceDescriptor();
+  try {
 
-  if (deteccao) {
-    break;
+    deteccao =
+      await faceapi
+        .detectSingleFace(
+          img,
+          new faceapi.TinyFaceDetectorOptions(opt)
+        )
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+
+    if (deteccao) {
+      break;
+    }
+
+  } catch (err) {
+
+    console.log(
+      "Erro tentativa:",
+      membro.nome,
+      err
+    );
+
+    deteccao = null;
+
   }
 
 }
