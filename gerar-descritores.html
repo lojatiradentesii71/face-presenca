@@ -77,18 +77,30 @@
             await faceapi.fetchImage(
               membro.imagem
             );
+let deteccao = null;
 
-          const deteccao =
-            await faceapi
-              .detectSingleFace(
-                img,
-                new faceapi.TinyFaceDetectorOptions({
-                  inputSize: 608,
-                  scoreThreshold: 0.5
-                })
-              )
-              .withFaceLandmarks()
-              .withFaceDescriptor();
+const tentativas = [
+  { inputSize: 608, scoreThreshold: 0.1 },
+  { inputSize: 416, scoreThreshold: 0.1 },
+  { inputSize: 320, scoreThreshold: 0.1 }
+];
+
+for (const opt of tentativas) {
+
+  deteccao =
+    await faceapi
+      .detectSingleFace(
+        img,
+        new faceapi.TinyFaceDetectorOptions(opt)
+      )
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+  if (deteccao) {
+    break;
+  }
+
+}
 
           console.log("Processado:", membro.nome, deteccao);
 
