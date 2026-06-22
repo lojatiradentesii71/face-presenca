@@ -72,96 +72,42 @@ async function iniciar() {
 
   
 
-  resultado.innerHTML =
-  'Carregando membros...';
+resultado.innerHTML =
+  "Carregando descritores...";
 
-  const membros =
-    await fetch(APPS_SCRIPT_URL)
-    .then(r => r.json());
-
-  const descritores = [];
-
-  for (const membro of membros) {
-
-    telefonesPorId[String(membro.id)] =
-  String(membro.telefone || "");
-
-    try {
-
-      const img =
-        await faceapi.fetchImage(
-          membro.imagem
-        );
-      
-          console.log(
-           "Imagem carregada:",
-            img.width,
-            img.height
-        );
-
-      
-
-         // document.body.appendChild(img);
-
-     console.log("Iniciando detecção:", membro.nome);
-
-const deteccao =
- await faceapi
-  .detectSingleFace(
-    img,
-    new faceapi.TinyFaceDetectorOptions({
-      inputSize: 608,
-      scoreThreshold: 0.5
-    })
+const membros =
+  await fetch(
+    APPS_SCRIPT_URL + "?acao=descritores"
   )
-  .withFaceLandmarks()
-  .withFaceDescriptor();
+  .then(r => r.json());
 
-console.log("Detecção concluída:", membro.nome);
-      
+const descritores = [];
 
-      if (!deteccao) {
+telefonesPorId = {};
 
-         console.log(
-           "Rosto não encontrado em:",
-            membro.nome
-       );
+for (const membro of membros) {
 
-       continue;
+  telefonesPorId[String(membro.id)] =
+    String(membro.telefone || "");
 
-     }
-         console.log(
-           "Membro carregado:",
-            membro.id + "|" + membro.nome
-       );
+  descritores.push(
+    new faceapi.LabeledFaceDescriptors(
+      String(membro.id) + "|" + String(membro.nome),
+      [
+        new Float32Array(
+          membro.descriptor
+        )
+      ]
+    )
+  );
 
-        descritores.push(
-          new faceapi.LabeledFaceDescriptors(
-              membro.id + "|" + membro.nome,
-              [deteccao.descriptor]
-           )
-      );
+}
 
-    } catch(err){
-
-      console.log(err);
-
-    }
-
-  }
-
-      console.log(
-        "Quantidade de descritores:",
-         descritores.length
-     );
-
-      console.log(descritores);
-
-      faceMatcher =
-       new faceapi.FaceMatcher(
-       descritores,
-       0.6
-     );
+faceMatcher =
+  new faceapi.FaceMatcher(
+    descritores,
+    0.6
+  );
 
   resultado.innerHTML =
   'Aguardando reconhecimento...';
