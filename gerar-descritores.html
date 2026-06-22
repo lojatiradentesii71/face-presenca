@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Gerar Descritores</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+</head>
+<body>
+
+  <h2>Gerador de Descritores Faciais</h2>
+
+  <button onclick="gerarDescritores()">
+    Gerar descritores
+  </button>
+
+  <pre id="status">Aguardando...</pre>
+
+  <script>
+    const APPS_SCRIPT_URL =
+      'https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec';
+
+    const statusEl =
+      document.getElementById("status");
+
+    async function gerarDescritores() {
+
+      statusEl.innerText =
+        "Carregando modelos...";
+
+      await Promise.all([
+
+        faceapi.nets.tinyFaceDetector.loadFromUri('./weights'),
+
+        faceapi.nets.faceLandmark68Net.loadFromUri('./weights'),
+
+        faceapi.nets.faceRecognitionNet.loadFromUri('./weights')
+
+      ]);
+
+      statusEl.innerText =
+        "Buscando fotos do CadastroBio...";
+
+      const membros =
+        await fetch(APPS_SCRIPT_URL)
+          .then(r => r.json());
+
+      const descritores = [];
+
+      let total =
+        membros.length;
+
+      let processados =
+        0;
+
+      for (const membro of membros) {
+
+        processados++;
+
+        statusEl.innerText =
+          "Processando " +
+          processados +
+          " de " +
+          total +
+          "\n" +
+          membro.nome;
+
+        try {
+
+          const img =
+            await faceapi.fetchImage(
+              membro.imagem
+            );
+
+          const deteccao =
+            await faceapi
+              .detectSingleFace(
+                img,
+                new faceapi.TinyFaceDetectorOptions({
+                  inputSize: 608,
+                  scoreThreshold: 0.5
+                })
+              )
+              .withFaceLandmarks()
+              .withFaceDescriptor();
+
+          if (!deteccao) {
+
+            statusEl.innerText +=
+              "\nRosto não encontrado. Pulando.";
+
+            continue;
+
+          }
+
+          descritores.push({
+            id: String(membro.id),
+            nome: String(membro.nome),
+            telefone: String(membro.telefone || ""),
+            descriptor: Array.from(deteccao.descriptor)
+          });
+
+        } catch (err) {
+
+          statusEl.innerText +=
+            "\nErro: " + err;
+
+        }
+
+      }
+
+      statusEl.innerText =
+        "Enviando " +
+        descritores.length +
+        " descritores para a planilha...";
+
+      await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        body: JSON.stringify({
+          acao: "salvarDescritores",
+          descritores: descritores
+        })
+      });
+
+      statusEl.innerText =
+        "Concluído!\nDescritores enviados: " +
+        descritores.length +
+        "\nConfira a aba FaceDescriptors.";
+
+    }
+  </script>
+
+</body>
+</html>
