@@ -46,6 +46,11 @@
         await fetch(APPS_SCRIPT_URL)
           .then(r => r.json());
 
+      statusEl.innerText =
+       "Fotos recebidas: " + membros.length;
+
+      await new Promise(r => setTimeout(r, 2000));
+
       const descritores = [];
 
       let total =
@@ -85,14 +90,23 @@
               .withFaceLandmarks()
               .withFaceDescriptor();
 
+          console.log("Processado:", membro.nome, deteccao);
+
           if (!deteccao) {
 
-            statusEl.innerText +=
-              "\nRosto não encontrado. Pulando.";
+              statusEl.innerText =
+               "Rosto não encontrado em:\n" +
+              membro.nome +
+               "\n\nProcessados: " +
+              processados +
+               " de " +
+              total;
 
-            continue;
+           await new Promise(r => setTimeout(r, 1000));
 
-          }
+           continue;
+
+           }
 
           descritores.push({
             id: String(membro.id),
