@@ -11,10 +11,6 @@
 
   <h2>Gerador de Descritores Faciais</h2>
 
-  <button id="btnGerar">
-  Gerar descritores
-  </button>
-  
   <pre id="status">Aguardando...</pre>
 
   <script>
@@ -171,12 +167,17 @@ for (const opt of tentativas) {
 
     }
 
-    document
-    .getElementById("btnGerar")
-    .addEventListener(
-     "click",
-     gerarDescritores
-    );
+    window.addEventListener(
+      "load",
+      () => {
+
+        setTimeout(
+         gerarDescritores,
+         1000
+        );
+
+    }
+);
   </script>
 
 </body>
