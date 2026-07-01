@@ -130,12 +130,13 @@ for (const opt of tentativas) {
 
            }
 
-          descritores.push({
-            id: String(membro.id),
-            nome: String(membro.nome),
-            telefone: String(membro.telefone || ""),
-            descriptor: Array.from(deteccao.descriptor)
-          });
+         descritores.push({
+           id: String(membro.id),
+           nome: String(membro.nome),
+           telefone: String(membro.telefone || ""),
+           tipoPessoa: String(membro.tipoPessoa || "MEMBRO"),
+           descriptor: Array.from(deteccao.descriptor)
+         });
 
         } catch (err) {
 
