@@ -252,7 +252,14 @@ scanner.classList.add(
   telefonesPorId[String(id)] || "";
 
   const tipoPessoa =
-  tiposPorId[String(id)] || "MEMBRO";       
+  tiposPorId[String(id)] || "MEMBRO";  
+
+         alert(  
+  "ID: " + id +
+  "\nNome: " + nome +
+  "\nTelefone: " + telefone +
+  "\nTipo: " + tipoPessoa
+);
 
   resultado.innerHTML =
   `
