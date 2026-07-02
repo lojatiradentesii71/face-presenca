@@ -39,6 +39,8 @@ let cameraAtual = "user";
 
 let telefonesPorId = {};
 
+let tiposPorId = {};
+
 window.addEventListener(
   "load",
   () => {
@@ -89,6 +91,9 @@ for (const membro of membros) {
 
   telefonesPorId[String(membro.id)] =
     String(membro.telefone || "");
+
+  tiposPorId[String(membro.id)] =
+  String(membro.tipoPessoa || "MEMBRO");
 
   descritores.push(
     new faceapi.LabeledFaceDescriptors(
@@ -246,6 +251,9 @@ scanner.classList.add(
   const telefone =
   telefonesPorId[String(id)] || "";
 
+  const tipoPessoa =
+  tiposPorId[String(id)] || "MEMBRO";       
+
   resultado.innerHTML =
   `
   <div class="cardReconhecido">
@@ -275,11 +283,12 @@ scanner.classList.add(
 
     setTimeout(() => {      //Tentando reduzir temp de "Processando"
 
-      processarPresenca(
+    processarPresenca(
         id,
         nome,
-        telefone
-      );
+        telefone,
+        tipoPessoa
+    );
 
    }, 500);
 
@@ -306,7 +315,8 @@ scanner.classList.add(
 async function processarPresenca(
   id,
   nome,
-  telefone
+  telefone,
+  tipoPessoa
 ){
 
   if(processando){
@@ -318,7 +328,8 @@ processando = true;
   await registrarPresenca(
   id,
   nome,
-  telefone
+  telefone,
+  tipoPessoa
 );
 
   await new Promise(
@@ -431,30 +442,31 @@ else {
 
 }
 
-async function registrarPresenca(id, nome, telefone) {
+async function registrarPresenca(id, nome, telefone, tipoPessoa) {
 
   try {
 
-   const imagem = capturarFrameBase64();
+    const imagem =
+      capturarFrameBase64();
 
-   await fetch(APPS_SCRIPT_URL, {
-    method: "POST",
-    mode: "no-cors",
-    body: JSON.stringify({
-    id: id,
-    nome: nome,
-    telefone: telefone,
-    image: imagem.split(",")[1] // remove "data:image/jpeg;base64,"
-  })
-});
-    
+    await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      mode: "no-cors",
+      body: JSON.stringify({
+        id: id,
+        nome: nome,
+        telefone: telefone,
+        tipoPessoa: tipoPessoa,
+        image: imagem.split(",")[1]
+      })
+    });
+
     console.log(
       "Presença registrada:",
       nome
     );
 
-    
-  } catch(err){
+  } catch(err) {
 
     console.error(err);
 
