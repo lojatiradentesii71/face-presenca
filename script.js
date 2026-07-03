@@ -254,12 +254,6 @@ scanner.classList.add(
   const tipoPessoa =
   tiposPorId[String(id)] || "MEMBRO";  
 
-         alert(  
-  "ID: " + id +
-  "\nNome: " + nome +
-  "\nTelefone: " + telefone +
-  "\nTipo: " + tipoPessoa
-);
 
   resultado.innerHTML =
   `
