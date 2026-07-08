@@ -223,44 +223,79 @@ scanner.classList.add(
 );
       
 
-        const melhor =
-          faceMatcher.findBestMatch(
-            deteccao.descriptor
-          );
+       let resultados = [];
 
-        if(
-          melhor.label === "unknown"
-        ){
-          return;
-        }
+for (const item of faceMatcher.labeledDescriptors) {
 
-        console.log(melhor);
-        console.log(melhor.label);
+  for (const descriptorBase of item.descriptors) {
 
-       if (melhor.distance < 0.40) {
+    resultados.push({
+      label: item.label,
+      distance: faceapi.euclideanDistance(
+        deteccao.descriptor,
+        descriptorBase
+      )
+    });
 
-  const partes =
-    melhor.label.split("|");
+  }
 
-  const id =
-    partes[0];
+}
 
-  const nome =
-    partes[1];
+resultados.sort(
+  (a, b) => a.distance - b.distance
+);
 
-  const telefone =
+const melhor =
+  resultados[0];
+
+const segundoMelhor =
+  resultados[1];
+
+if (!melhor) {
+  return;
+}
+
+const partes =
+  melhor.label.split("|");
+
+const id =
+  partes[0];
+
+const nome =
+  partes[1];
+
+const telefone =
   telefonesPorId[String(id)] || "";
 
-  const tipoPessoa =
-  tiposPorId[String(id)] || "MEMBRO";  
+const tipoPessoa =
+  tiposPorId[String(id)] || "MEMBRO";
 
+const limiteReconhecimento =
+  tipoPessoa === "VISITANTE"
+    ? 0.34
+    : 0.40;
+
+const diferencaSegundo =
+  segundoMelhor
+    ? segundoMelhor.distance - melhor.distance
+    : 1;
+
+const margemMinima =
+  tipoPessoa === "VISITANTE"
+    ? 0.08
+    : 0.04;
+
+if (
+  melhor.distance < limiteReconhecimento &&
+  diferencaSegundo >= margemMinima
+) {
 
   resultado.innerHTML =
   `
   <div class="cardReconhecido">
 
     <div class="tituloReconhecido">
-      ✓ IRMÂO IDENTIFICADO
+      ✓ ${tipoPessoa === "VISITANTE" ? "VISITANTE IDENTIFICADO" : "IRMÃO IDENTIFICADO"}
     </div>
 
     <div class="nomeReconhecido">
@@ -282,16 +317,16 @@ scanner.classList.add(
 
     mostrarProcessando(nome);
 
-    setTimeout(() => {      //Tentando reduzir temp de "Processando"
+    setTimeout(() => {
 
-    processarPresenca(
+      processarPresenca(
         id,
         nome,
         telefone,
         tipoPessoa
-    );
+      );
 
-   }, 500);
+    }, 500);
 
   }
 
@@ -301,7 +336,6 @@ scanner.classList.add(
     "Pessoa não cadastrada";
 
 }
-
 
       },
 
