@@ -41,6 +41,11 @@ let telefonesPorId = {};
 
 let tiposPorId = {};
 
+let limiteMembro = 0.40;
+let limiteVisitante = 0.34;
+let margemVisitante = 0.08;
+let margemMembro = 0.04;
+
 window.addEventListener(
   "load",
   () => {
@@ -272,8 +277,8 @@ const tipoPessoa =
 
 const limiteReconhecimento =
   tipoPessoa === "VISITANTE"
-    ? 0.34
-    : 0.40;
+    ? limiteVisitante
+    : limiteMembro;
 
 const diferencaSegundo =
   segundoMelhor
@@ -282,8 +287,8 @@ const diferencaSegundo =
 
 const margemMinima =
   tipoPessoa === "VISITANTE"
-    ? 0.08
-    : 0.04;
+    ? margemVisitante
+    : margemMembro;
 
 if (
   melhor.distance < limiteReconhecimento &&
