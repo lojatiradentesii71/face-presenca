@@ -95,6 +95,38 @@ Aguardando reconhecimento...
   <button onclick="aplicarAjustesReconhecimento()">
     Aplicar ajustes
   </button>
+
+    <hr>
+
+<h4>Último reconhecimento</h4>
+
+<div id="debugReconhecimento">
+  Nenhum reconhecimento ainda.
+</div>
+
+<hr>
+
+<h4>Como ajustar</h4>
+
+<p>
+  <b>Limite Visitante:</b> quanto menor, mais difícil reconhecer visitante.
+  Se membro for reconhecido como visitante, reduza de 0.34 para 0.33 ou 0.32.
+</p>
+
+<p>
+  <b>Margem Visitante:</b> diferença mínima entre o melhor resultado e o segundo.
+  Quanto maior, menor a chance de falso positivo. Se houver confusão,
+  aumente de 0.08 para 0.10 ou 0.12.
+</p>
+
+<p>
+  <b>Limite Membro:</b> controla o reconhecimento dos membros.
+  Evite mexer muito se os membros estão reconhecendo bem.
+</p>
+
+<p>
+  <b>Margem Membro:</b> evita reconhecer quando dois membros estão muito parecidos.
+</p>
 </div>
 
 </body>
