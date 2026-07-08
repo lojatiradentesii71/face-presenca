@@ -381,7 +381,7 @@ h2{
 
 }
 
-#btnCamera{
+/*#btnCamera{
 
   margin-top:15px;
 
@@ -420,6 +420,37 @@ h2{
   transition:
     all .3s ease;
 
+}*/
+
+#btnCamera {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 9999;
+
+  font-size: 14px;
+  padding: 6px 10px;
+  border-radius: 10px;
+
+  opacity: 0.75;
+}
+
+#painelAjustes {
+  margin-top: 120vh;
+  padding: 20px;
+  background: #111;
+  color: white;
+  font-size: 14px;
+}
+
+#painelAjustes label {
+  display: block;
+  margin-bottom: 12px;
+}
+
+#painelAjustes input {
+  width: 80px;
+  margin-left: 10px;
 }
 
 
