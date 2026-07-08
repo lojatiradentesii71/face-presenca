@@ -69,6 +69,34 @@ Aguardando reconhecimento...
 
 </div>
 
+  <div id="painelAjustes">
+  <h3>Ajustes de Reconhecimento</h3>
+
+  <label>
+    Limite membro:
+    <input id="limiteMembro" type="number" step="0.01" value="0.40">
+  </label>
+
+  <label>
+    Limite visitante:
+    <input id="limiteVisitante" type="number" step="0.01" value="0.34">
+  </label>
+
+  <label>
+    Margem membro:
+    <input id="margemMembro" type="number" step="0.01" value="0.04">
+  </label>
+
+  <label>
+    Margem visitante:
+    <input id="margemVisitante" type="number" step="0.01" value="0.08">
+  </label>
+
+  <button onclick="aplicarAjustesReconhecimento()">
+    Aplicar ajustes
+  </button>
+</div>
+
 </body>
 
 </html>
