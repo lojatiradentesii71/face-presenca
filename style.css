@@ -453,5 +453,19 @@ h2{
   margin-left: 10px;
 }
 
+#debugReconhecimento {
+  background: #222;
+  padding: 12px;
+  border-radius: 8px;
+  font-family: monospace;
+  white-space: pre-line;
+  margin-bottom: 15px;
+}
+
+#painelAjustes p {
+  line-height: 1.4;
+  color: #ddd;
+}
+
 
 
