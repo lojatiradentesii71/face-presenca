@@ -290,6 +290,14 @@ const margemMinima =
     ? margemVisitante
     : margemMembro;
 
+atualizarDebugReconhecimento(
+  melhor,
+  segundoMelhor,
+  tipoPessoa,
+  limiteReconhecimento,
+  margemMinima
+);
+
 if (
   melhor.distance < limiteReconhecimento &&
   diferencaSegundo >= margemMinima
@@ -712,6 +720,48 @@ function aplicarAjustesReconhecimento() {
     "Margem membro: " + margemMembro + "\n" +
     "Margem visitante: " + margemVisitante
   );
+
+}
+
+function atualizarDebugReconhecimento(
+  melhor,
+  segundoMelhor,
+  tipoPessoa,
+  limiteReconhecimento,
+  margemMinima
+) {
+
+  const debug =
+    document.getElementById(
+      "debugReconhecimento"
+    );
+
+  if (!debug) {
+    return;
+  }
+
+  const distancia =
+    melhor
+      ? melhor.distance.toFixed(3)
+      : "-";
+
+  const segundo =
+    segundoMelhor
+      ? segundoMelhor.distance.toFixed(3)
+      : "-";
+
+  const margem =
+    segundoMelhor
+      ? (segundoMelhor.distance - melhor.distance).toFixed(3)
+      : "-";
+
+  debug.innerHTML =
+    "Tipo: " + tipoPessoa + "\n" +
+    "Distância: " + distancia + "\n" +
+    "Segundo: " + segundo + "\n" +
+    "Margem: " + margem + "\n" +
+    "Limite usado: " + limiteReconhecimento + "\n" +
+    "Margem mínima: " + margemMinima;
 
 }
 
