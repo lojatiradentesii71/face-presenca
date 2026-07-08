@@ -691,4 +691,28 @@ function capturarFrameBase64() {
 
 }
 
+function aplicarAjustesReconhecimento() {
+
+  limiteMembro =
+    Number(document.getElementById("limiteMembro").value);
+
+  limiteVisitante =
+    Number(document.getElementById("limiteVisitante").value);
+
+  margemMembro =
+    Number(document.getElementById("margemMembro").value);
+
+  margemVisitante =
+    Number(document.getElementById("margemVisitante").value);
+
+  alert(
+    "Ajustes aplicados:\n\n" +
+    "Membro: " + limiteMembro + "\n" +
+    "Visitante: " + limiteVisitante + "\n" +
+    "Margem membro: " + margemMembro + "\n" +
+    "Margem visitante: " + margemVisitante
+  );
+
+}
+
 iniciar();
