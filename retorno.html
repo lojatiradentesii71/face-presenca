@@ -356,10 +356,7 @@ function registrarNoPDV() {
     return;
   }
 
-  if (
-    !APPS_SCRIPT_URL ||
-    APPS_SCRIPT_URL.includes("https://script.google.com/macros/s/AKfycbyfFI6t-gkycm4_A5_ayWuvGAOdjfwCJ4TvMXZboBFLHFPVwGOccrH4NXCAyc-ItlCnHw/exec")
-  ) {
+  if (!APPS_SCRIPT_URL) {
     statusRegistro.textContent =
       "A URL do Apps Script não foi configurada.";
 
