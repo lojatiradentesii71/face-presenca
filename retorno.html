@@ -344,132 +344,97 @@
     .textContent =
       texto;
 
-  /*
-   * Função chamada pelo Apps Script através de JSONP.
-   */
-  window.retornoInfinitePayRegistrado =
-    function(resposta) {
-      if (
-        resposta &&
-        resposta.sucesso === true
-      ) {
-        statusRegistro.textContent =
-          "✓ Resultado registrado no PDV: " +
-          resposta.status;
+/*
+ * Registra automaticamente o resultado no Apps Script
+ * usando um iframe invisível.
+ */
+function registrarNoPDV() {
+  if (!orderId) {
+    statusRegistro.textContent =
+      "Não foi possível registrar: pedido não recebido.";
 
-        if (resposta.status === "APROVADO") {
-          mensagem.textContent =
-            "Pagamento aprovado e registrado. Volte ao AppSheet para confirmar a venda.";
-        }
+    return;
+  }
 
-      } else {
-        statusRegistro.textContent =
-          "Não foi possível registrar no PDV: " +
-          (
-            resposta &&
-            resposta.mensagem
-              ? resposta.mensagem
-              : "erro desconhecido"
-          );
+  if (
+    !APPS_SCRIPT_URL ||
+    APPS_SCRIPT_URL.includes("COLE_AQUI")
+  ) {
+    statusRegistro.textContent =
+      "A URL do Apps Script não foi configurada.";
+
+    return;
+  }
+
+  const url =
+    APPS_SCRIPT_URL +
+    "?order_id=" +
+    encodeURIComponent(orderId) +
+    "&failure=" +
+    encodeURIComponent(failure) +
+    "&nsu=" +
+    encodeURIComponent(nsu) +
+    "&aut=" +
+    encodeURIComponent(aut) +
+    "&card_brand=" +
+    encodeURIComponent(cardBrand) +
+    "&user_id=" +
+    encodeURIComponent(userId) +
+    "&access_id=" +
+    encodeURIComponent(accessId) +
+    "&handle=" +
+    encodeURIComponent(handle) +
+    "&merchant_document=" +
+    encodeURIComponent(merchantDocument) +
+    "&nocache=" +
+    Date.now();
+
+  const iframe =
+    document.createElement("iframe");
+
+  iframe.id =
+    "registroInfinitePay";
+
+  iframe.style.display =
+    "none";
+
+  iframe.src =
+    url;
+
+  iframe.onload =
+    function() {
+      statusRegistro.textContent =
+        "✓ Resultado enviado ao PDV.";
+
+      if (!failure && nsu && aut) {
+        mensagem.textContent =
+          "Pagamento aprovado. Volte ao AppSheet e sincronize para confirmar a venda.";
+
+      } else if (failure) {
+        mensagem.textContent =
+          "O pagamento não foi realizado. O resultado da tentativa foi registrado no PDV.";
       }
 
-      const scriptJsonp =
-        document.getElementById(
-          "scriptRetornoInfinitePay"
-        );
-
-      if (scriptJsonp) {
-        scriptJsonp.remove();
-      }
+      setTimeout(function() {
+        iframe.remove();
+      }, 2000);
     };
 
-  /*
-   * Faz a chamada automática ao Apps Script.
-   */
-  function registrarNoPDV() {
-    if (!orderId) {
-      statusRegistro.textContent =
-        "Não foi possível registrar: order_id não recebido.";
+  document.body.appendChild(iframe);
 
-      return;
-    }
-
+  setTimeout(function() {
     if (
-      !APPS_SCRIPT_URL ||
-      APPS_SCRIPT_URL.includes(
-        "COLE_AQUI"
+      document.getElementById(
+        "registroInfinitePay"
       )
     ) {
       statusRegistro.textContent =
-        "A URL do Apps Script ainda não foi configurada.";
-
-      return;
+        "Resultado enviado ao PDV. Confira a planilha ou sincronize o AppSheet.";
     }
+  }, 8000);
+}
 
-    const url =
-      APPS_SCRIPT_URL +
-      "?callback=" +
-      encodeURIComponent(
-        "retornoInfinitePayRegistrado"
-      ) +
-      "&order_id=" +
-      encodeURIComponent(orderId) +
-      "&failure=" +
-      encodeURIComponent(failure) +
-      "&nsu=" +
-      encodeURIComponent(nsu) +
-      "&aut=" +
-      encodeURIComponent(aut) +
-      "&card_brand=" +
-      encodeURIComponent(cardBrand) +
-      "&user_id=" +
-      encodeURIComponent(userId) +
-      "&access_id=" +
-      encodeURIComponent(accessId) +
-      "&handle=" +
-      encodeURIComponent(handle) +
-      "&merchant_document=" +
-      encodeURIComponent(
-        merchantDocument
-      ) +
-      "&nocache=" +
-      Date.now();
-
-    const scriptJsonp =
-      document.createElement("script");
-
-    scriptJsonp.id =
-      "scriptRetornoInfinitePay";
-
-    scriptJsonp.src =
-      url;
-
-    scriptJsonp.onerror =
-      function() {
-        statusRegistro.textContent =
-          "Erro de comunicação com o Apps Script.";
-      };
-
-    document.body.appendChild(
-      scriptJsonp
-    );
-
-    setTimeout(function() {
-      const scriptPendente =
-        document.getElementById(
-          "scriptRetornoInfinitePay"
-        );
-
-      if (scriptPendente) {
-        statusRegistro.textContent =
-          "O Apps Script demorou para responder. Confira a planilha.";
-
-        scriptPendente.remove();
-      }
-    }, 15000);
-  }
-
-  registrarNoPDV();
+registrarNoPDV();
 </script>
 
 </body>
