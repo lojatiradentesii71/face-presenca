@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Retorno InfinitePay</title>
+
+<style>
+
+body{
+font-family:Arial;
+background:#111827;
+color:white;
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+margin:0;
+text-align:center;
+}
+
+.card{
+
+background:#1f2937;
+
+padding:40px;
+
+border-radius:20px;
+
+width:90%;
+
+max-width:500px;
+
+}
+
+h1{
+
+margin-top:0;
+
+}
+
+pre{
+
+text-align:left;
+
+background:#000;
+
+padding:15px;
+
+border-radius:10px;
+
+overflow:auto;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="card">
+
+<h1>Retorno recebido</h1>
+
+<p>Se esta página apareceu, significa que a InfinitePay retornou para nosso sistema.</p>
+
+<pre id="dados"></pre>
+
+</div>
+
+<script>
+
+const parametros=new URLSearchParams(window.location.search);
+
+let texto="";
+
+for(const [chave,valor] of parametros){
+
+texto+=chave+" = "+valor+"\n";
+
+}
+
+if(texto===""){
+
+texto="Nenhum parâmetro recebido.";
+
+}
+
+document.getElementById("dados").textContent=texto;
+
+</script>
+
+</body>
+</html>
