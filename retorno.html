@@ -198,6 +198,16 @@
      Registrando o resultado no PDV...
     </p>
 
+    <p
+  id="urlDebug"
+  style="
+    font-size: 10px;
+    color: #6b7280;
+    overflow-wrap: anywhere;
+    text-align: left;
+  "
+></p>
+
     <details>
       <summary>
         Mostrar dados técnicos
@@ -444,10 +454,10 @@ function registrarNoPDV() {
 
   console.log(url);
 
-statusRegistro.innerHTML =
-  "<small style='font-size:10px'>" +
-  url +
-  "</small>";
+document
+  .getElementById("urlDebug")
+  .textContent =
+    url;
 
   const scriptJsonp =
     document.createElement("script");
@@ -459,12 +469,10 @@ statusRegistro.innerHTML =
     url;
 
   scriptJsonp.onerror =
-    function() {
-      statusRegistro.textContent =
-        "Erro ao carregar a resposta do Apps Script.";
-
-      scriptJsonp.remove();
-    };
+  function() {
+    statusRegistro.textContent =
+      "Erro ao carregar a resposta do Apps Script. Veja a URL abaixo.";
+  };
 
   document.body.appendChild(
     scriptJsonp
