@@ -345,8 +345,57 @@
       texto;
 
 /*
- * Registra automaticamente o resultado no Apps Script
- * usando um iframe invisível.
+ * Função global chamada pela resposta do Apps Script.
+ */
+window.retornoInfinitePayRegistrado =
+  function(resposta) {
+
+    const scriptJsonp =
+      document.getElementById(
+        "scriptRetornoInfinitePay"
+      );
+
+    if (scriptJsonp) {
+      scriptJsonp.remove();
+    }
+
+    if (
+      resposta &&
+      resposta.sucesso === true
+    ) {
+      statusRegistro.textContent =
+        "✓ Resultado registrado no PDV: " +
+        resposta.status;
+
+      if (resposta.status === "APROVADO") {
+        mensagem.textContent =
+          "Pagamento aprovado e registrado. Volte ao AppSheet e sincronize para confirmar a venda.";
+
+      } else if (resposta.status === "FALHOU") {
+        mensagem.textContent =
+          "A tentativa de pagamento não foi aprovada e foi registrada no PDV.";
+
+      } else {
+        mensagem.textContent =
+          "O retorno da InfinitePay foi registrado, mas os dados estão incompletos.";
+      }
+
+      return;
+    }
+
+    statusRegistro.textContent =
+      "Não foi possível registrar no PDV: " +
+      (
+        resposta &&
+        resposta.mensagem
+          ? resposta.mensagem
+          : "erro desconhecido"
+      );
+  };
+
+
+/*
+ * Envia automaticamente o retorno para o Apps Script.
  */
 function registrarNoPDV() {
   if (!orderId) {
@@ -368,7 +417,11 @@ function registrarNoPDV() {
 
   const url =
     APPS_SCRIPT_URL +
-    "?order_id=" +
+    "?callback=" +
+    encodeURIComponent(
+      "retornoInfinitePayRegistrado"
+    ) +
+    "&order_id=" +
     encodeURIComponent(orderId) +
     "&failure=" +
     encodeURIComponent(failure) +
@@ -389,49 +442,40 @@ function registrarNoPDV() {
     "&nocache=" +
     Date.now();
 
-  const iframe =
-    document.createElement("iframe");
+  const scriptJsonp =
+    document.createElement("script");
 
-  iframe.id =
-    "registroInfinitePay";
+  scriptJsonp.id =
+    "scriptRetornoInfinitePay";
 
-  iframe.style.display =
-    "none";
-
-  iframe.src =
+  scriptJsonp.src =
     url;
 
-  iframe.onload =
+  scriptJsonp.onerror =
     function() {
       statusRegistro.textContent =
-        "✓ Resultado enviado ao PDV.";
+        "Erro ao carregar a resposta do Apps Script.";
 
-      if (!failure && nsu && aut) {
-        mensagem.textContent =
-          "Pagamento aprovado. Volte ao AppSheet e sincronize para confirmar a venda.";
-
-      } else if (failure) {
-        mensagem.textContent =
-          "O pagamento não foi realizado. O resultado da tentativa foi registrado no PDV.";
-      }
-
-      setTimeout(function() {
-        iframe.remove();
-      }, 2000);
+      scriptJsonp.remove();
     };
 
-  document.body.appendChild(iframe);
+  document.body.appendChild(
+    scriptJsonp
+  );
 
   setTimeout(function() {
-    if (
+    const scriptPendente =
       document.getElementById(
-        "registroInfinitePay"
-      )
-    ) {
+        "scriptRetornoInfinitePay"
+      );
+
+    if (scriptPendente) {
       statusRegistro.textContent =
-        "Resultado enviado ao PDV. Confira a planilha ou sincronize o AppSheet.";
+        "O Apps Script não retornou uma confirmação. Verifique o IdVenda e a implantação.";
+
+      scriptPendente.remove();
     }
-  }, 8000);
+  }, 15000);
 }
 
 registrarNoPDV();
