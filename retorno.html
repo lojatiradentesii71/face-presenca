@@ -191,6 +191,13 @@
 
     </section>
 
+    <p
+     id="statusRegistro"
+     class="mensagem"
+    >
+     Registrando o resultado no PDV...
+    </p>
+
     <details>
       <summary>
         Mostrar dados técnicos
@@ -201,90 +208,269 @@
 
   </main>
 
-  <script>
-    const parametros =
-      new URLSearchParams(window.location.search);
+ <script>
+  const APPS_SCRIPT_URL =
+    "https://script.google.com/macros/s/AKfycbyfFI6t-gkycm4_A5_ayWuvGAOdjfwCJ4TvMXZboBFLHFPVwGOccrH4NXCAyc-ItlCnHw/exec";
 
-    const failure =
-      parametros.get("failure");
+  const parametros =
+    new URLSearchParams(window.location.search);
 
-    const orderId =
-      parametros.get("order_id") || "-";
+  const failure =
+    parametros.get("failure") || "";
 
-    const cardBrand =
-      parametros.get("card_brand") || "-";
+  const orderId =
+    parametros.get("order_id") || "";
 
-    const icone =
-      document.getElementById("icone");
+  const nsu =
+    parametros.get("nsu") || "";
 
-    const titulo =
-      document.getElementById("titulo");
+  const aut =
+    parametros.get("aut") || "";
 
-    const mensagem =
-      document.getElementById("mensagem");
+  const cardBrand =
+    parametros.get("card_brand") || "";
 
-    const resultado =
-      document.getElementById("resultado");
+  const userId =
+    parametros.get("user_id") || "";
 
-    document
-      .getElementById("pedido")
-      .textContent = orderId;
+  const accessId =
+    parametros.get("access_id") || "";
 
-    document
-      .getElementById("bandeira")
-      .textContent = cardBrand;
+  const handle =
+    parametros.get("handle") || "";
 
-    if (failure) {
-      icone.className =
-        "icone icone-falha";
+  const merchantDocument =
+    parametros.get("merchant_document") || "";
 
-      icone.textContent =
-        "✕";
+  const icone =
+    document.getElementById("icone");
 
-      titulo.textContent =
-        "Pagamento não realizado";
+  const titulo =
+    document.getElementById("titulo");
 
-      mensagem.textContent =
-        "A venda não foi confirmada. Você pode retornar ao PDV e tentar novamente.";
+  const mensagem =
+    document.getElementById("mensagem");
 
-      resultado.textContent =
-        failure;
-    } else {
-      icone.className =
-        "icone icone-retorno";
+  const resultado =
+    document.getElementById("resultado");
 
-      icone.textContent =
-        "✓";
+  const statusRegistro =
+    document.getElementById("statusRegistro");
 
-      titulo.textContent =
-        "Retorno recebido";
+  document
+    .getElementById("pedido")
+    .textContent =
+      orderId || "-";
 
-      mensagem.textContent =
-        "A InfinitePay retornou sem informar uma falha. Ainda precisamos confirmar os parâmetros enviados em um pagamento aprovado.";
+  document
+    .getElementById("bandeira")
+    .textContent =
+      cardBrand || "-";
 
-      resultado.textContent =
-        "Sem falha informada";
+  /*
+   * Primeiro mostramos o resultado recebido
+   * diretamente da InfinitePay.
+   */
+  if (failure) {
+    icone.className =
+      "icone icone-falha";
+
+    icone.textContent =
+      "✕";
+
+    titulo.textContent =
+      "Pagamento não realizado";
+
+    mensagem.textContent =
+      "A transação não foi aprovada. A venda não deve ser confirmada.";
+
+    resultado.textContent =
+      failure;
+
+  } else if (nsu && aut) {
+    icone.className =
+      "icone icone-retorno";
+
+    icone.textContent =
+      "✓";
+
+    titulo.textContent =
+      "Pagamento aprovado";
+
+    mensagem.textContent =
+      "O pagamento foi aprovado. Estamos registrando o resultado no PDV.";
+
+    resultado.textContent =
+      "APROVADO";
+
+  } else {
+    icone.className =
+      "icone icone-falha";
+
+    icone.textContent =
+      "!";
+
+    titulo.textContent =
+      "Retorno incompleto";
+
+    mensagem.textContent =
+      "A InfinitePay retornou, mas não informou todos os dados necessários.";
+
+    resultado.textContent =
+      "RETORNO_INCOMPLETO";
+  }
+
+  /*
+   * Exibe todos os parâmetros recebidos
+   * na área de dados técnicos.
+   */
+  let texto = "";
+
+  for (const [chave, valor] of parametros) {
+    texto +=
+      chave +
+      " = " +
+      valor +
+      "\n";
+  }
+
+  if (texto === "") {
+    texto =
+      "Nenhum parâmetro recebido.";
+  }
+
+  document
+    .getElementById("dados")
+    .textContent =
+      texto;
+
+  /*
+   * Função chamada pelo Apps Script através de JSONP.
+   */
+  window.retornoInfinitePayRegistrado =
+    function(resposta) {
+      if (
+        resposta &&
+        resposta.sucesso === true
+      ) {
+        statusRegistro.textContent =
+          "✓ Resultado registrado no PDV: " +
+          resposta.status;
+
+        if (resposta.status === "APROVADO") {
+          mensagem.textContent =
+            "Pagamento aprovado e registrado. Volte ao AppSheet para confirmar a venda.";
+        }
+
+      } else {
+        statusRegistro.textContent =
+          "Não foi possível registrar no PDV: " +
+          (
+            resposta &&
+            resposta.mensagem
+              ? resposta.mensagem
+              : "erro desconhecido"
+          );
+      }
+
+      const scriptJsonp =
+        document.getElementById(
+          "scriptRetornoInfinitePay"
+        );
+
+      if (scriptJsonp) {
+        scriptJsonp.remove();
+      }
+    };
+
+  /*
+   * Faz a chamada automática ao Apps Script.
+   */
+  function registrarNoPDV() {
+    if (!orderId) {
+      statusRegistro.textContent =
+        "Não foi possível registrar: order_id não recebido.";
+
+      return;
     }
 
-    let texto = "";
+    if (
+      !APPS_SCRIPT_URL ||
+      APPS_SCRIPT_URL.includes(
+        "COLE_AQUI"
+      )
+    ) {
+      statusRegistro.textContent =
+        "A URL do Apps Script ainda não foi configurada.";
 
-    for (const [chave, valor] of parametros) {
-      texto +=
-        chave +
-        " = " +
-        valor +
-        "\n";
+      return;
     }
 
-    if (texto === "") {
-      texto =
-        "Nenhum parâmetro recebido.";
-    }
+    const url =
+      APPS_SCRIPT_URL +
+      "?callback=" +
+      encodeURIComponent(
+        "retornoInfinitePayRegistrado"
+      ) +
+      "&order_id=" +
+      encodeURIComponent(orderId) +
+      "&failure=" +
+      encodeURIComponent(failure) +
+      "&nsu=" +
+      encodeURIComponent(nsu) +
+      "&aut=" +
+      encodeURIComponent(aut) +
+      "&card_brand=" +
+      encodeURIComponent(cardBrand) +
+      "&user_id=" +
+      encodeURIComponent(userId) +
+      "&access_id=" +
+      encodeURIComponent(accessId) +
+      "&handle=" +
+      encodeURIComponent(handle) +
+      "&merchant_document=" +
+      encodeURIComponent(
+        merchantDocument
+      ) +
+      "&nocache=" +
+      Date.now();
 
-    document
-      .getElementById("dados")
-      .textContent = texto;
-  </script>
+    const scriptJsonp =
+      document.createElement("script");
+
+    scriptJsonp.id =
+      "scriptRetornoInfinitePay";
+
+    scriptJsonp.src =
+      url;
+
+    scriptJsonp.onerror =
+      function() {
+        statusRegistro.textContent =
+          "Erro de comunicação com o Apps Script.";
+      };
+
+    document.body.appendChild(
+      scriptJsonp
+    );
+
+    setTimeout(function() {
+      const scriptPendente =
+        document.getElementById(
+          "scriptRetornoInfinitePay"
+        );
+
+      if (scriptPendente) {
+        statusRegistro.textContent =
+          "O Apps Script demorou para responder. Confira a planilha.";
+
+        scriptPendente.remove();
+      }
+    }, 15000);
+  }
+
+  registrarNoPDV();
+</script>
 
 </body>
 </html>
