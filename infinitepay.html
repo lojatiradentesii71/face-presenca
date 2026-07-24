@@ -2,13 +2,12 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>Abrindo InfinitePay</title>
+  <title>Abrir InfinitePay</title>
 
   <style>
     body {
@@ -18,31 +17,38 @@
       align-items: center;
       justify-content: center;
       font-family: Arial, sans-serif;
-      background: #f5f5f5;
-      text-align: center;
+      background: #f4f4f4;
     }
 
     .card {
-      width: min(88%, 400px);
-      padding: 28px;
-      border-radius: 16px;
+      width: min(88%, 420px);
+      padding: 25px;
       background: white;
-      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12);
+      border-radius: 15px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+      text-align: center;
     }
 
-    button {
-      width: 100%;
-      padding: 16px;
-      border: 0;
+    .botao {
+      display: block;
+      padding: 18px;
+      margin-top: 20px;
       border-radius: 10px;
-      font-size: 17px;
+      background: #111;
+      color: white;
+      font-size: 18px;
       font-weight: bold;
-      cursor: pointer;
+      text-decoration: none;
     }
 
-    .erro {
-      color: #b00020;
-      margin-bottom: 18px;
+    #debug {
+      margin-top: 20px;
+      padding: 10px;
+      font-size: 12px;
+      text-align: left;
+      overflow-wrap: anywhere;
+      background: #eeeeee;
+      border-radius: 8px;
     }
   </style>
 </head>
@@ -51,15 +57,19 @@
 
   <div class="card">
 
-    <h2>Abrindo InfinitePay</h2>
+    <h2>Pagamento InfinitePay</h2>
 
-    <p id="mensagem">
-      Aguarde enquanto preparamos o pagamento.
-    </p>
+    <p id="resumo"></p>
 
-    <button id="botao" style="display:none;">
+    <a
+      id="abrir"
+      class="botao"
+      href="#"
+    >
       ABRIR INFINITEPAY
-    </button>
+    </a>
+
+    <div id="debug"></div>
 
   </div>
 
@@ -68,74 +78,76 @@
       new URLSearchParams(window.location.search);
 
     const amount =
-      parametros.get("amount");
+      parametros.get("amount") || "100";
 
     const paymentMethod =
-      parametros.get("payment_method");
+      parametros.get("payment_method") || "debit";
 
     const installments =
       parametros.get("installments") || "1";
 
     const orderId =
-      parametros.get("order_id") || "";
+      parametros.get("order_id") || "TESTE123";
 
-    const mensagem =
-      document.getElementById("mensagem");
+    /*
+     * Neste primeiro teste, usamos uma URL HTTPS
+     * apenas para garantir que result_url seja enviado.
+     */
+    const resultUrl =
+      window.location.origin +
+      window.location.pathname +
+      "?retorno=1";
 
-    const botao =
-      document.getElementById("botao");
+    let deeplink =
+      "infinitepaydash://infinitetap-app" +
+      "?amount=" +
+      encodeURIComponent(amount) +
+      "&payment_method=" +
+      encodeURIComponent(paymentMethod);
 
-    function abrirInfinitePay() {
-
-      if (!amount || !paymentMethod) {
-        mensagem.innerHTML =
-          '<span class="erro">' +
-          'Dados do pagamento incompletos.' +
-          '</span>';
-
-        return;
-      }
-
-      let deeplink =
-        "infinitepaydash://infinitetap-app" +
-        "?amount=" +
-        encodeURIComponent(amount) +
-        "&payment_method=" +
-        encodeURIComponent(paymentMethod);
-
-      if (paymentMethod === "credit") {
-        deeplink +=
-          "&installments=" +
-          encodeURIComponent(installments);
-      }
-
-      if (orderId) {
-        deeplink +=
-          "&order_id=" +
-          encodeURIComponent(orderId);
-      }
-
+    if (paymentMethod === "credit") {
       deeplink +=
-        "&app_client_referrer=" +
-        encodeURIComponent("AppSheetPDV");
-
-      window.location.href = deeplink;
-
-      mensagem.textContent =
-        "Caso o aplicativo não abra automaticamente, toque no botão abaixo.";
-
-      botao.style.display = "block";
+        "&installments=" +
+        encodeURIComponent(installments);
     }
 
-    botao.addEventListener(
-      "click",
-      abrirInfinitePay
-    );
+    deeplink +=
+      "&order_id=" +
+      encodeURIComponent(orderId) +
+      "&result_url=" +
+      encodeURIComponent(resultUrl) +
+      "&app_client_referrer=" +
+      encodeURIComponent("AppSheetPDV");
 
-    setTimeout(
-      abrirInfinitePay,
-      500
-    );
+    document
+      .getElementById("abrir")
+      .setAttribute("href", deeplink);
+
+    const valorReais =
+      (Number(amount) / 100)
+        .toLocaleString(
+          "pt-BR",
+          {
+            style: "currency",
+            currency: "BRL"
+          }
+        );
+
+    document
+      .getElementById("resumo")
+      .textContent =
+        valorReais +
+        " — " +
+        (
+          paymentMethod === "credit"
+            ? "Crédito 1x"
+            : "Débito"
+        );
+
+    document
+      .getElementById("debug")
+      .textContent =
+        deeplink;
   </script>
 
 </body>
