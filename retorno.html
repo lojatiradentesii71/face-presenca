@@ -345,9 +345,8 @@
       texto;
 
 /*
- * Envia o resultado para o Apps Script por navegação direta.
- * Este método usa o mesmo processo que funcionou
- * manualmente no navegador do celular.
+ * Envia o resultado ao Apps Script por POST,
+ * sem sair da página retorno.html.
  */
 function registrarNoPDV() {
   if (!orderId) {
@@ -359,7 +358,7 @@ function registrarNoPDV() {
 
   if (
     !APPS_SCRIPT_URL ||
-    APPS_SCRIPT_URL.includes("COLE_AQUI")
+    APPS_SCRIPT_URL.includes("https://script.google.com/macros/s/AKfycbyfFI6t-gkycm4_A5_ayWuvGAOdjfwCJ4TvMXZboBFLHFPVwGOccrH4NXCAyc-ItlCnHw/exec")
   ) {
     statusRegistro.textContent =
       "A URL do Apps Script não foi configurada.";
@@ -367,39 +366,148 @@ function registrarNoPDV() {
     return;
   }
 
-  const url =
-    APPS_SCRIPT_URL +
-    "?order_id=" +
-    encodeURIComponent(orderId) +
-    "&failure=" +
-    encodeURIComponent(failure) +
-    "&nsu=" +
-    encodeURIComponent(nsu) +
-    "&aut=" +
-    encodeURIComponent(aut) +
-    "&card_brand=" +
-    encodeURIComponent(cardBrand) +
-    "&user_id=" +
-    encodeURIComponent(userId) +
-    "&access_id=" +
-    encodeURIComponent(accessId) +
-    "&handle=" +
-    encodeURIComponent(handle) +
-    "&merchant_document=" +
-    encodeURIComponent(merchantDocument) +
-    "&nocache=" +
-    Date.now();
+  /*
+   * Cria um iframe invisível para receber a resposta
+   * do Apps Script sem trocar a página do navegador.
+   */
+  const iframe =
+    document.createElement("iframe");
+
+  iframe.name =
+    "respostaInfinitePay";
+
+  iframe.id =
+    "respostaInfinitePay";
+
+  iframe.style.display =
+    "none";
+
+  document.body.appendChild(iframe);
+
+  /*
+   * Cria um formulário POST invisível.
+   */
+  const formulario =
+    document.createElement("form");
+
+  formulario.method =
+    "POST";
+
+  formulario.action =
+    APPS_SCRIPT_URL;
+
+  formulario.target =
+    "respostaInfinitePay";
+
+  formulario.style.display =
+    "none";
+
+  function adicionarCampo(nome, valor) {
+    const campo =
+      document.createElement("input");
+
+    campo.type =
+      "hidden";
+
+    campo.name =
+      nome;
+
+    campo.value =
+      valor || "";
+
+    formulario.appendChild(campo);
+  }
+
+  adicionarCampo(
+    "order_id",
+    orderId
+  );
+
+  adicionarCampo(
+    "failure",
+    failure
+  );
+
+  adicionarCampo(
+    "nsu",
+    nsu
+  );
+
+  adicionarCampo(
+    "aut",
+    aut
+  );
+
+  adicionarCampo(
+    "card_brand",
+    cardBrand
+  );
+
+  adicionarCampo(
+    "user_id",
+    userId
+  );
+
+  adicionarCampo(
+    "access_id",
+    accessId
+  );
+
+  adicionarCampo(
+    "handle",
+    handle
+  );
+
+  adicionarCampo(
+    "merchant_document",
+    merchantDocument
+  );
+
+  adicionarCampo(
+    "nocache",
+    String(Date.now())
+  );
+
+  document.body.appendChild(
+    formulario
+  );
 
   statusRegistro.textContent =
     "Registrando o resultado no PDV...";
 
+  formulario.submit();
+
   /*
-   * Pequeno intervalo apenas para a tela de retorno
-   * aparecer antes de navegar para o Apps Script.
+   * Como a resposta está em outro domínio,
+   * não tentamos ler seu conteúdo.
    */
   setTimeout(function() {
-    window.location.href = url;
-  }, 1000);
+    if (!failure && nsu && aut) {
+      statusRegistro.textContent =
+        "✓ Resultado enviado ao PDV.";
+
+      mensagem.textContent =
+        "Pagamento aprovado. Volte ao AppSheet e sincronize para confirmar a venda.";
+
+    } else if (failure) {
+      statusRegistro.textContent =
+        "Resultado da tentativa enviado ao PDV.";
+
+      mensagem.textContent =
+        "O pagamento não foi realizado. Você pode voltar ao PDV e tentar novamente.";
+
+    } else {
+      statusRegistro.textContent =
+        "Retorno incompleto enviado ao PDV.";
+    }
+
+    formulario.remove();
+
+    setTimeout(function() {
+      iframe.remove();
+    }, 3000);
+
+  }, 2500);
 }
 
 registrarNoPDV();
