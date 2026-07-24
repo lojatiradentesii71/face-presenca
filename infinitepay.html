@@ -2,6 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
+
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1.0"
@@ -62,7 +63,7 @@
     <p id="resumo"></p>
 
     <p id="mensagem">
-       Abrindo o aplicativo automaticamente...
+      Abrindo o aplicativo automaticamente...
     </p>
 
     <a
@@ -93,10 +94,6 @@
     const orderId =
       parametros.get("order_id") || "TESTE123";
 
-    /*
-     * Neste primeiro teste, usamos uma URL HTTPS
-     * apenas para garantir que result_url seja enviado.
-     */
     const resultUrl =
       window.location.origin +
       window.location.pathname +
@@ -144,7 +141,7 @@
         " — " +
         (
           paymentMethod === "credit"
-            ? "Crédito 1x"
+            ? "Crédito " + installments + "x"
             : "Débito"
         );
 
@@ -157,10 +154,11 @@
       document.getElementById("abrir").click();
 
       document
-       .getElementById("mensagem")
-       .textContent =
-         "Caso o aplicativo não abra, toque no botão abaixo.";
+        .getElementById("mensagem")
+        .textContent =
+          "Caso o aplicativo não abra, toque no botão abaixo.";
     }, 800);
+  </script>
 
 </body>
 </html>
