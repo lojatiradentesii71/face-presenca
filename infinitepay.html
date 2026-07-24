@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>Abrindo InfinitePay</title>
+
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      text-align: center;
+    }
+
+    .card {
+      width: min(88%, 400px);
+      padding: 28px;
+      border-radius: 16px;
+      background: white;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12);
+    }
+
+    button {
+      width: 100%;
+      padding: 16px;
+      border: 0;
+      border-radius: 10px;
+      font-size: 17px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .erro {
+      color: #b00020;
+      margin-bottom: 18px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="card">
+
+    <h2>Abrindo InfinitePay</h2>
+
+    <p id="mensagem">
+      Aguarde enquanto preparamos o pagamento.
+    </p>
+
+    <button id="botao" style="display:none;">
+      ABRIR INFINITEPAY
+    </button>
+
+  </div>
+
+  <script>
+    const parametros =
+      new URLSearchParams(window.location.search);
+
+    const amount =
+      parametros.get("amount");
+
+    const paymentMethod =
+      parametros.get("payment_method");
+
+    const installments =
+      parametros.get("installments") || "1";
+
+    const orderId =
+      parametros.get("order_id") || "";
+
+    const mensagem =
+      document.getElementById("mensagem");
+
+    const botao =
+      document.getElementById("botao");
+
+    function abrirInfinitePay() {
+
+      if (!amount || !paymentMethod) {
+        mensagem.innerHTML =
+          '<span class="erro">' +
+          'Dados do pagamento incompletos.' +
+          '</span>';
+
+        return;
+      }
+
+      let deeplink =
+        "infinitepaydash://infinitetap-app" +
+        "?amount=" +
+        encodeURIComponent(amount) +
+        "&payment_method=" +
+        encodeURIComponent(paymentMethod);
+
+      if (paymentMethod === "credit") {
+        deeplink +=
+          "&installments=" +
+          encodeURIComponent(installments);
+      }
+
+      if (orderId) {
+        deeplink +=
+          "&order_id=" +
+          encodeURIComponent(orderId);
+      }
+
+      deeplink +=
+        "&app_client_referrer=" +
+        encodeURIComponent("AppSheetPDV");
+
+      window.location.href = deeplink;
+
+      mensagem.textContent =
+        "Caso o aplicativo não abra automaticamente, toque no botão abaixo.";
+
+      botao.style.display = "block";
+    }
+
+    botao.addEventListener(
+      "click",
+      abrirInfinitePay
+    );
+
+    setTimeout(
+      abrirInfinitePay,
+      500
+    );
+  </script>
+
+</body>
+</html>
