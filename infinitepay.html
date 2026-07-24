@@ -11,58 +11,214 @@
   <title>Pagamento InfinitePay</title>
 
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
+      padding: 20px;
       font-family: Arial, sans-serif;
-      background: #f4f4f4;
+      background:
+        linear-gradient(
+          135deg,
+          #111827,
+          #1f2937
+        );
     }
 
     .card {
-      width: min(88%, 420px);
-      padding: 25px;
-      background: white;
-      border-radius: 15px;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+      width: 100%;
+      max-width: 420px;
+      padding: 28px 24px;
+      border-radius: 22px;
+      background: #ffffff;
+      box-shadow:
+        0 18px 45px
+        rgba(0, 0, 0, 0.28);
       text-align: center;
+    }
+
+    .icone {
+      width: 68px;
+      height: 68px;
+      margin: 0 auto 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: #eef2ff;
+      font-size: 34px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      color: #111827;
+    }
+
+    .subtitulo {
+      margin: 8px 0 24px;
+      color: #6b7280;
+      font-size: 15px;
+    }
+
+    .valor-label {
+      margin-bottom: 6px;
+      color: #6b7280;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .valor {
+      margin: 0;
+      color: #111827;
+      font-size: 38px;
+      font-weight: 700;
+    }
+
+    .detalhes {
+      margin: 24px 0;
+      padding: 16px;
+      border-radius: 14px;
+      background: #f9fafb;
+      text-align: left;
+    }
+
+    .linha {
+      display: flex;
+      justify-content: space-between;
+      gap: 15px;
+      padding: 8px 0;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 15px;
+    }
+
+    .linha:last-child {
+      border-bottom: 0;
+    }
+
+    .rotulo {
+      color: #6b7280;
+    }
+
+    .dado {
+      color: #111827;
+      font-weight: 700;
+      text-align: right;
     }
 
     .botao {
       display: block;
-      padding: 18px;
-      margin-top: 20px;
-      border-radius: 10px;
-      background: #111;
-      color: white;
+      width: 100%;
+      padding: 18px 16px;
+      border-radius: 14px;
+      background: #111827;
+      color: #ffffff;
       font-size: 18px;
-      font-weight: bold;
+      font-weight: 700;
       text-decoration: none;
+      box-shadow:
+        0 10px 22px
+        rgba(17, 24, 39, 0.28);
+      transition:
+        transform 0.15s ease,
+        opacity 0.15s ease;
+    }
+
+    .botao:active {
+      transform: scale(0.98);
+      opacity: 0.9;
+    }
+
+    .aviso {
+      margin: 16px 0 0;
+      color: #6b7280;
+      font-size: 13px;
+      line-height: 1.5;
     }
 
     #debug {
-      margin-top: 20px;
-      padding: 10px;
-      font-size: 12px;
-      text-align: left;
-      overflow-wrap: anywhere;
-      background: #eeeeee;
-      border-radius: 8px;
+      display: none;
     }
   </style>
 </head>
 
 <body>
 
-  <div class="card">
+  <main class="card">
 
-    <h2>Pagamento InfinitePay</h2>
+    <div class="icone">
+      💳
+    </div>
 
-    <p id="resumo">
-      Preparando pagamento...
+    <h1>Pagamento</h1>
+
+    <p class="subtitulo">
+      Confira os dados antes de abrir a InfinitePay
     </p>
+
+    <div class="valor-label">
+      Valor da venda
+    </div>
+
+    <p
+      id="valor"
+      class="valor"
+    >
+      R$ 0,00
+    </p>
+
+    <section class="detalhes">
+
+      <div class="linha">
+        <span class="rotulo">
+          Forma de pagamento
+        </span>
+
+        <span
+          id="formaPagamento"
+          class="dado"
+        >
+          -
+        </span>
+      </div>
+
+      <div
+        id="linhaParcelas"
+        class="linha"
+      >
+        <span class="rotulo">
+          Parcelas
+        </span>
+
+        <span
+          id="parcelas"
+          class="dado"
+        >
+          -
+        </span>
+      </div>
+
+      <div class="linha">
+        <span class="rotulo">
+          Pedido
+        </span>
+
+        <span
+          id="pedido"
+          class="dado"
+        >
+          -
+        </span>
+      </div>
+
+    </section>
 
     <a
       id="abrir"
@@ -72,9 +228,14 @@
       ABRIR INFINITEPAY
     </a>
 
+    <p class="aviso">
+      Ao tocar no botão, a InfinitePay será aberta
+      com os dados desta venda.
+    </p>
+
     <div id="debug"></div>
 
-  </div>
+  </main>
 
   <script>
     const parametros =
@@ -118,10 +279,9 @@
       "&app_client_referrer=" +
       encodeURIComponent("AppSheetPDV");
 
-    const botao =
-      document.getElementById("abrir");
-
-    botao.href = deeplink;
+    document
+      .getElementById("abrir")
+      .setAttribute("href", deeplink);
 
     const valorReais =
       (Number(amount) / 100)
@@ -134,15 +294,36 @@
         );
 
     document
-      .getElementById("resumo")
+      .getElementById("valor")
       .textContent =
-        valorReais +
-        " — " +
-        (
-          paymentMethod === "credit"
-            ? "Crédito " + installments + "x"
-            : "Débito"
-        );
+        valorReais;
+
+    const formaTexto =
+      paymentMethod === "credit"
+        ? "Crédito"
+        : "Débito";
+
+    document
+      .getElementById("formaPagamento")
+      .textContent =
+        formaTexto;
+
+    const linhaParcelas =
+      document.getElementById("linhaParcelas");
+
+    if (paymentMethod === "credit") {
+      document
+        .getElementById("parcelas")
+        .textContent =
+          installments + "x";
+    } else {
+      linhaParcelas.style.display = "none";
+    }
+
+    document
+      .getElementById("pedido")
+      .textContent =
+        orderId;
 
     document
       .getElementById("debug")
