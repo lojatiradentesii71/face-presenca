@@ -61,6 +61,10 @@
 
     <p id="resumo"></p>
 
+    <p id="mensagem">
+       Abrindo o aplicativo automaticamente...
+    </p>
+
     <a
       id="abrir"
       class="botao"
@@ -148,7 +152,15 @@
       .getElementById("debug")
       .textContent =
         deeplink;
-  </script>
+
+    setTimeout(() => {
+      document.getElementById("abrir").click();
+
+      document
+       .getElementById("mensagem")
+       .textContent =
+         "Caso o aplicativo não abra, toque no botão abaixo.";
+    }, 800);
 
 </body>
 </html>
