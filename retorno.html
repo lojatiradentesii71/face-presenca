@@ -1,94 +1,290 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<title>Retorno InfinitePay</title>
+  <meta charset="UTF-8">
 
-<style>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
 
-body{
-font-family:Arial;
-background:#111827;
-color:white;
-display:flex;
-justify-content:center;
-align-items:center;
-height:100vh;
-margin:0;
-text-align:center;
-}
+  <title>Resultado do pagamento</title>
 
-.card{
+  <style>
+    * {
+      box-sizing: border-box;
+    }
 
-background:#1f2937;
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #111827;
+    }
 
-padding:40px;
+    .card {
+      width: 100%;
+      max-width: 440px;
+      padding: 28px 24px;
+      border-radius: 22px;
+      background: #ffffff;
+      text-align: center;
+      box-shadow:
+        0 18px 45px
+        rgba(0, 0, 0, 0.35);
+    }
 
-border-radius:20px;
+    .icone {
+      width: 74px;
+      height: 74px;
+      margin: 0 auto 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      font-size: 38px;
+    }
 
-width:90%;
+    .icone-falha {
+      color: #b91c1c;
+      background: #fee2e2;
+    }
 
-max-width:500px;
+    .icone-retorno {
+      color: #1d4ed8;
+      background: #dbeafe;
+    }
 
-}
+    h1 {
+      margin: 0;
+      font-size: 25px;
+      color: #111827;
+    }
 
-h1{
+    .mensagem {
+      margin: 12px 0 22px;
+      color: #6b7280;
+      font-size: 15px;
+      line-height: 1.5;
+    }
 
-margin-top:0;
+    .detalhes {
+      padding: 16px;
+      border-radius: 14px;
+      background: #f9fafb;
+      text-align: left;
+    }
 
-}
+    .linha {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 9px 0;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 14px;
+    }
 
-pre{
+    .linha:last-child {
+      border-bottom: 0;
+    }
 
-text-align:left;
+    .rotulo {
+      color: #6b7280;
+    }
 
-background:#000;
+    .valor {
+      color: #111827;
+      font-weight: bold;
+      text-align: right;
+      overflow-wrap: anywhere;
+    }
 
-padding:15px;
+    details {
+      margin-top: 20px;
+      text-align: left;
+    }
 
-border-radius:10px;
+    summary {
+      cursor: pointer;
+      color: #6b7280;
+      font-size: 13px;
+    }
 
-overflow:auto;
-
-}
-
-</style>
-
+    pre {
+      padding: 12px;
+      border-radius: 10px;
+      background: #111827;
+      color: #ffffff;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-size: 12px;
+    }
+  </style>
 </head>
 
 <body>
 
-<div class="card">
+  <main class="card">
 
-<h1>Retorno recebido</h1>
+    <div
+      id="icone"
+      class="icone icone-retorno"
+    >
+      ⏳
+    </div>
 
-<p>Se esta página apareceu, significa que a InfinitePay retornou para nosso sistema.</p>
+    <h1 id="titulo">
+      Verificando pagamento
+    </h1>
 
-<pre id="dados"></pre>
+    <p
+      id="mensagem"
+      class="mensagem"
+    >
+      Aguarde enquanto analisamos o retorno da InfinitePay.
+    </p>
 
-</div>
+    <section class="detalhes">
 
-<script>
+      <div class="linha">
+        <span class="rotulo">
+          Pedido
+        </span>
 
-const parametros=new URLSearchParams(window.location.search);
+        <span
+          id="pedido"
+          class="valor"
+        >
+          -
+        </span>
+      </div>
 
-let texto="";
+      <div class="linha">
+        <span class="rotulo">
+          Resultado
+        </span>
 
-for(const [chave,valor] of parametros){
+        <span
+          id="resultado"
+          class="valor"
+        >
+          -
+        </span>
+      </div>
 
-texto+=chave+" = "+valor+"\n";
+      <div class="linha">
+        <span class="rotulo">
+          Bandeira
+        </span>
 
-}
+        <span
+          id="bandeira"
+          class="valor"
+        >
+          -
+        </span>
+      </div>
 
-if(texto===""){
+    </section>
 
-texto="Nenhum parâmetro recebido.";
+    <details>
+      <summary>
+        Mostrar dados técnicos
+      </summary>
 
-}
+      <pre id="dados"></pre>
+    </details>
 
-document.getElementById("dados").textContent=texto;
+  </main>
 
-</script>
+  <script>
+    const parametros =
+      new URLSearchParams(window.location.search);
+
+    const failure =
+      parametros.get("failure");
+
+    const orderId =
+      parametros.get("order_id") || "-";
+
+    const cardBrand =
+      parametros.get("card_brand") || "-";
+
+    const icone =
+      document.getElementById("icone");
+
+    const titulo =
+      document.getElementById("titulo");
+
+    const mensagem =
+      document.getElementById("mensagem");
+
+    const resultado =
+      document.getElementById("resultado");
+
+    document
+      .getElementById("pedido")
+      .textContent = orderId;
+
+    document
+      .getElementById("bandeira")
+      .textContent = cardBrand;
+
+    if (failure) {
+      icone.className =
+        "icone icone-falha";
+
+      icone.textContent =
+        "✕";
+
+      titulo.textContent =
+        "Pagamento não realizado";
+
+      mensagem.textContent =
+        "A venda não foi confirmada. Você pode retornar ao PDV e tentar novamente.";
+
+      resultado.textContent =
+        failure;
+    } else {
+      icone.className =
+        "icone icone-retorno";
+
+      icone.textContent =
+        "✓";
+
+      titulo.textContent =
+        "Retorno recebido";
+
+      mensagem.textContent =
+        "A InfinitePay retornou sem informar uma falha. Ainda precisamos confirmar os parâmetros enviados em um pagamento aprovado.";
+
+      resultado.textContent =
+        "Sem falha informada";
+    }
+
+    let texto = "";
+
+    for (const [chave, valor] of parametros) {
+      texto +=
+        chave +
+        " = " +
+        valor +
+        "\n";
+    }
+
+    if (texto === "") {
+      texto =
+        "Nenhum parâmetro recebido.";
+    }
+
+    document
+      .getElementById("dados")
+      .textContent = texto;
+  </script>
 
 </body>
 </html>
