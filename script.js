@@ -683,6 +683,7 @@ function mostrarStatus(titulo, nome, cor){
 
 }
 
+
 function capturarFrameBase64() {
 
   const canvas = document.createElement("canvas");
@@ -692,12 +693,113 @@ function capturarFrameBase64() {
 
   const ctx = canvas.getContext("2d");
 
+  // Captura a fotografia normalmente
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-  // qualidade 0.7 para não pesar o Apps Script
+  const largura = canvas.width;
+  const altura = canvas.height;
+
+  // Data e hora no fuso de Brasília
+  const agora = new Date();
+
+  const data = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  }).format(agora);
+
+  const hora = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  }).format(agora);
+
+  // Dimensões proporcionais à fotografia
+  const margem = largura * 0.035;
+  const cardLargura = largura - margem * 2;
+  const cardAltura = altura * 0.105;
+  const cardX = margem;
+  const cardY = altura - cardAltura - margem;
+
+  const raio = Math.min(22, cardAltura * 0.25);
+
+  // Card com cantos arredondados
+  ctx.save();
+
+  ctx.beginPath();
+  ctx.roundRect(
+    cardX,
+    cardY,
+    cardLargura,
+    cardAltura,
+    raio
+  );
+
+  ctx.clip();
+
+  // Azul translúcido com efeito degradê
+  const gradiente = ctx.createLinearGradient(
+    cardX,
+    cardY,
+    cardX + cardLargura,
+    cardY + cardAltura
+  );
+
+  gradiente.addColorStop(0, "rgba(13, 71, 135, 0.78)");
+  gradiente.addColorStop(1, "rgba(20, 125, 205, 0.60)");
+
+  ctx.fillStyle = gradiente;
+  ctx.fillRect(cardX, cardY, cardLargura, cardAltura);
+
+  ctx.restore();
+
+  // Borda fina azul-clara
+  ctx.beginPath();
+  ctx.roundRect(
+    cardX,
+    cardY,
+    cardLargura,
+    cardAltura,
+    raio
+  );
+
+  ctx.strokeStyle = "rgba(190, 225, 255, 0.85)";
+  ctx.lineWidth = Math.max(1, largura * 0.002);
+  ctx.stroke();
+
+  // Texto branco
+  const tamanhoFonte = Math.max(12, largura * 0.038);
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = "600 " + tamanhoFonte + "px Arial";
+  ctx.textBaseline = "middle";
+
+  const centroY = cardY + cardAltura / 2;
+
+  // Data à esquerda
+  ctx.textAlign = "left";
+  ctx.fillText(
+    data,
+    cardX + cardLargura * 0.06,
+    centroY
+  );
+
+  // Hora à direita
+  ctx.textAlign = "right";
+  ctx.fillText(
+    hora,
+    cardX + cardLargura * 0.94,
+    centroY
+  );
+
+  // Mantém a qualidade JPEG original
   return canvas.toDataURL("image/jpeg", 0.7);
 
 }
+
 
 function aplicarAjustesReconhecimento() {
 
