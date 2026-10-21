@@ -684,6 +684,7 @@ function mostrarStatus(titulo, nome, cor){
 }
 
 
+
 function capturarFrameBase64() {
 
   const canvas = document.createElement("canvas");
@@ -693,11 +694,11 @@ function capturarFrameBase64() {
 
   const ctx = canvas.getContext("2d");
 
-  // Captura a fotografia normalmente
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
   const largura = canvas.width;
   const altura = canvas.height;
+
+  // Fotografia original
+  ctx.drawImage(video, 0, 0, largura, altura);
 
   // Data e hora no fuso de Brasília
   const agora = new Date();
@@ -717,88 +718,260 @@ function capturarFrameBase64() {
     hourCycle: "h23"
   }).format(agora);
 
-  // Dimensões proporcionais à fotografia
-  const margem = largura * 0.035;
-  const cardLargura = largura - margem * 2;
-  const cardAltura = altura * 0.105;
-  const cardX = margem;
-  const cardY = altura - cardAltura - margem;
+  // Função para desenhar retângulos arredondados
+  function retanguloArredondado(x, y, w, h, r) {
+    const raio = Math.min(r, w / 2, h / 2);
 
-  const raio = Math.min(22, cardAltura * 0.25);
+    ctx.beginPath();
+    ctx.moveTo(x + raio, y);
+    ctx.lineTo(x + w - raio, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + raio);
+    ctx.lineTo(x + w, y + h - raio);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - raio, y + h);
+    ctx.lineTo(x + raio, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - raio);
+    ctx.lineTo(x, y + raio);
+    ctx.quadraticCurveTo(x, y, x + raio, y);
+    ctx.closePath();
+  }
 
-  // Card com cantos arredondados
+  // ====================================
+  // MOLDURA AZUL DA FOTOGRAFIA
+  // ====================================
+
+  const espessura = Math.max(5, largura * 0.012);
+  const raioMoldura = largura * 0.035;
+
   ctx.save();
 
-  ctx.beginPath();
-  ctx.roundRect(
-    cardX,
-    cardY,
-    cardLargura,
-    cardAltura,
-    raio
+  const gradienteMoldura = ctx.createLinearGradient(
+    0, 0, largura, altura
   );
 
-  ctx.clip();
+  gradienteMoldura.addColorStop(0, "rgba(110, 205, 255, 0.90)");
+  gradienteMoldura.addColorStop(0.5, "rgba(18, 105, 185, 0.75)");
+  gradienteMoldura.addColorStop(1, "rgba(120, 215, 255, 0.90)");
 
-  // Azul translúcido com efeito degradê
-  const gradiente = ctx.createLinearGradient(
-    cardX,
-    cardY,
+  retanguloArredondado(
+    espessura / 2,
+    espessura / 2,
+    largura - espessura,
+    altura - espessura,
+    raioMoldura
+  );
+
+  ctx.strokeStyle = gradienteMoldura;
+  ctx.lineWidth = espessura;
+  ctx.stroke();
+
+  // Linha interna fina
+  retanguloArredondado(
+    espessura * 1.5,
+    espessura * 1.5,
+    largura - espessura * 3,
+    altura - espessura * 3,
+    raioMoldura * 0.8
+  );
+
+  ctx.strokeStyle = "rgba(210, 240, 255, 0.50)";
+  ctx.lineWidth = Math.max(1, largura * 0.002);
+  ctx.stroke();
+
+  ctx.restore();
+
+  // ====================================
+  // CARD AZUL INFERIOR
+  // ====================================
+
+  const margem = largura * 0.04;
+
+  const cardX = margem;
+  const cardLargura = largura - margem * 2;
+  const cardAltura = Math.max(46, altura * 0.105);
+  const cardY = altura - cardAltura - margem;
+
+  const raioCard = Math.min(22, cardAltura * 0.25);
+
+  ctx.save();
+
+  // Sombra suave
+  ctx.shadowColor = "rgba(0, 20, 50, 0.45)";
+  ctx.shadowBlur = largura * 0.018;
+  ctx.shadowOffsetY = largura * 0.006;
+
+  retanguloArredondado(
+    cardX, cardY,
+    cardLargura, cardAltura,
+    raioCard
+  );
+
+  const gradienteCard = ctx.createLinearGradient(
+    cardX, cardY,
     cardX + cardLargura,
     cardY + cardAltura
   );
 
-  gradiente.addColorStop(0, "rgba(13, 71, 135, 0.78)");
-  gradiente.addColorStop(1, "rgba(20, 125, 205, 0.60)");
+  gradienteCard.addColorStop(0, "rgba(13, 71, 135, 0.82)");
+  gradienteCard.addColorStop(1, "rgba(20, 125, 205, 0.65)");
 
-  ctx.fillStyle = gradiente;
-  ctx.fillRect(cardX, cardY, cardLargura, cardAltura);
+  ctx.fillStyle = gradienteCard;
+  ctx.fill();
 
   ctx.restore();
 
-  // Borda fina azul-clara
-  ctx.beginPath();
-  ctx.roundRect(
-    cardX,
-    cardY,
-    cardLargura,
-    cardAltura,
-    raio
+  // Borda do card
+  retanguloArredondado(
+    cardX, cardY,
+    cardLargura, cardAltura,
+    raioCard
   );
 
-  ctx.strokeStyle = "rgba(190, 225, 255, 0.85)";
+  ctx.strokeStyle = "rgba(190, 225, 255, 0.90)";
   ctx.lineWidth = Math.max(1, largura * 0.002);
   ctx.stroke();
 
-  // Texto branco
+  // ====================================
+  // ÍCONES VETORIAIS
+  // ====================================
+
   const tamanhoFonte = Math.max(12, largura * 0.038);
+  const tamanhoIcone = tamanhoFonte * 1.05;
+
+  const centroY = cardY + cardAltura / 2;
+
+  function desenharCalendario(x, y, tamanho) {
+
+    ctx.save();
+    ctx.strokeStyle = "#FFFFFF";
+    ctx.lineWidth = Math.max(1.5, tamanho * 0.10);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    const topo = y - tamanho / 2;
+
+    ctx.strokeRect(
+      x,
+      topo + tamanho * 0.15,
+      tamanho,
+      tamanho * 0.80
+    );
+
+    // Divisória
+    ctx.beginPath();
+    ctx.moveTo(x, topo + tamanho * 0.38);
+    ctx.lineTo(x + tamanho, topo + tamanho * 0.38);
+
+    // Argolas
+    ctx.moveTo(x + tamanho * 0.25, topo);
+    ctx.lineTo(x + tamanho * 0.25, topo + tamanho * 0.25);
+    ctx.moveTo(x + tamanho * 0.75, topo);
+    ctx.lineTo(x + tamanho * 0.75, topo + tamanho * 0.25);
+
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function desenharRelogio(x, y, tamanho) {
+
+    ctx.save();
+    ctx.strokeStyle = "#FFFFFF";
+    ctx.lineWidth = Math.max(1.5, tamanho * 0.10);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    ctx.beginPath();
+    ctx.arc(
+      x + tamanho / 2,
+      y,
+      tamanho * 0.46,
+      0,
+      Math.PI * 2
+    );
+
+    // Ponteiros
+    ctx.moveTo(x + tamanho / 2, y);
+    ctx.lineTo(x + tamanho / 2, y - tamanho * 0.25);
+    ctx.moveTo(x + tamanho / 2, y);
+    ctx.lineTo(x + tamanho * 0.72, y + tamanho * 0.12);
+
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ====================================
+  // DATA E HORA
+  // ====================================
+
+  ctx.save();
 
   ctx.fillStyle = "#FFFFFF";
   ctx.font = "600 " + tamanhoFonte + "px Arial";
   ctx.textBaseline = "middle";
 
-  const centroY = cardY + cardAltura / 2;
+  const espacamento = tamanhoFonte * 0.45;
+
+  const larguraData = ctx.measureText(data).width;
+  const larguraHora = ctx.measureText(hora).width;
+
+  const blocoData = tamanhoIcone + espacamento + larguraData;
+  const blocoHora = tamanhoIcone + espacamento + larguraHora;
+
+  const espacoDisponivel = cardLargura * 0.88;
+
+  // Reduz proporcionalmente se a câmera gerar foto estreita
+  const escala = Math.min(
+    1,
+    espacoDisponivel / (blocoData + blocoHora + tamanhoFonte)
+  );
+
+  const fonteFinal = tamanhoFonte * escala;
+  const iconeFinal = tamanhoIcone * escala;
+  const espacoFinal = espacamento * escala;
+
+  ctx.font = "600 " + fonteFinal + "px Arial";
 
   // Data à esquerda
+  const xData = cardX + cardLargura * 0.06;
+
+  desenharCalendario(
+    xData,
+    centroY,
+    iconeFinal
+  );
+
   ctx.textAlign = "left";
   ctx.fillText(
     data,
-    cardX + cardLargura * 0.06,
+    xData + iconeFinal + espacoFinal,
     centroY
   );
 
   // Hora à direita
-  ctx.textAlign = "right";
+  const xFimHora = cardX + cardLargura * 0.94;
+  const xInicioHora =
+    xFimHora - ctx.measureText(hora).width
+    - espacoFinal - iconeFinal;
+
+  desenharRelogio(
+    xInicioHora,
+    centroY,
+    iconeFinal
+  );
+
+  ctx.textAlign = "left";
   ctx.fillText(
     hora,
-    cardX + cardLargura * 0.94,
+    xInicioHora + iconeFinal + espacoFinal,
     centroY
   );
 
-  // Mantém a qualidade JPEG original
+  ctx.restore();
+
+  // Mantém qualidade e formato originais
   return canvas.toDataURL("image/jpeg", 0.7);
 
 }
+
 
 
 function aplicarAjustesReconhecimento() {
