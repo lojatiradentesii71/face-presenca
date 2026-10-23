@@ -233,3 +233,62 @@ function QC_exibirTelaCarteira() {
 // Por segurança, sempre iniciar na tela de acesso.
 // A carteira só será exibida após autenticação.
 QC_exibirTelaAcesso();
+
+async function QC_testarConexaoServidor() {
+
+  const URL_APPS_SCRIPT =
+    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+  const separador = URL_APPS_SCRIPT.includes("?") ? "&" : "?";
+
+  try {
+
+    const resposta = await fetch(
+      URL_APPS_SCRIPT + separador + "acao=qc_teste",
+      {
+        method: "GET",
+        redirect: "follow"
+      }
+    );
+
+    if (!resposta.ok) {
+      throw new Error("HTTP " + resposta.status);
+    }
+
+    const dados = await resposta.json();
+
+    console.log("QuintosCoin:", dados);
+
+    return dados;
+
+  } catch (erro) {
+
+    console.error("Falha na conexão QuintosCoin:", erro);
+
+    return {
+      status: "ERRO",
+      mensagem: erro.message
+    };
+  }
+}
+
+QC_testarConexaoServidor().then(function(resultado) {
+
+  const mensagem = document.getElementById("qcMensagemAcesso");
+
+  if (resultado.status === "OK") {
+
+    mensagem.textContent =
+      "✅ Conexão com QuintosCoin estabelecida!";
+
+    mensagem.className = "sucesso";
+
+  } else {
+
+    mensagem.textContent =
+      "⚠️ Falha na comunicação: " + resultado.mensagem;
+
+    mensagem.className = "erro";
+  }
+
+});
