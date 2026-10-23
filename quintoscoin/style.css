@@ -170,3 +170,8 @@ button {
   border: 2px solid #ff5252;
   box-shadow: 0 0 10px rgba(255, 82, 82, 0.35);
 }
+
+/* Oculta a carteira até a autenticação */
+#telaCarteira {
+  display: none;
+}
