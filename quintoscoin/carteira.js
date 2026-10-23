@@ -111,44 +111,78 @@ document.getElementById("linkPrimeiroAcesso")
 
   });
 
+function QC_mostrarMensagemAcesso(texto, tipo) {
+
+  const mensagem = document.getElementById(
+    "qcMensagemAcesso"
+  );
+
+  mensagem.className = "";
+  void mensagem.offsetWidth; // Reinicia a animação
+
+  mensagem.textContent =
+    (tipo === "erro" ? "⚠️ " : "✅ ") + texto;
+
+  mensagem.className = tipo;
+
+  mensagem.scrollIntoView({
+    behavior: "smooth",
+    block: "nearest"
+  });
+}
+
+
 document.getElementById("btnAtivarCarteira")
   .addEventListener("click", function(evento) {
 
     evento.preventDefault();
 
-    const id = document.getElementById("qcIdCadastro")
-      .value.trim();
+    const campoId = document.getElementById("qcIdCadastro");
+    const campoSenha = document.getElementById("qcNovaSenha");
+    const campoConfirmar = document.getElementById("qcConfirmarSenha");
 
-    const senha = document.getElementById("qcNovaSenha")
-      .value;
+    const id = campoId.value.trim();
+    const senha = campoSenha.value;
+    const confirmar = campoConfirmar.value;
 
-    const confirmar = document.getElementById("qcConfirmarSenha")
-      .value;
-
-    const mensagem = document.getElementById("qcMensagemAcesso");
-
-    // Mostra imediatamente que o botão respondeu
-    mensagem.textContent = "Verificando informações...";
+    [campoId, campoSenha, campoConfirmar].forEach(
+      campo => campo.classList.remove("campo-erro")
+    );
 
     if (!id) {
-      mensagem.textContent = "Informe seu IdCadastro.";
+      campoId.classList.add("campo-erro");
+      QC_mostrarMensagemAcesso(
+        "Informe seu IdCadastro para continuar.",
+        "erro"
+      );
+      campoId.focus();
       return;
     }
 
-    if (senha.length < 10) {
-      mensagem.textContent =
-        "A senha deve ter pelo menos 10 caracteres.";
+    if (senha.length < 6 || senha.length > 8) {
+      campoSenha.classList.add("campo-erro");
+      QC_mostrarMensagemAcesso(
+        "A senha deve ter entre 6 e 8 caracteres.",
+        "erro"
+      );
+      campoSenha.focus();
       return;
     }
 
     if (senha !== confirmar) {
-      mensagem.textContent =
-        "As senhas não conferem.";
+      campoConfirmar.classList.add("campo-erro");
+      QC_mostrarMensagemAcesso(
+        "As senhas não conferem. Digite novamente.",
+        "erro"
+      );
+      campoConfirmar.focus();
       return;
     }
 
-    mensagem.textContent =
-      "Dados validados! Pronto para ativar a carteira.";
+    QC_mostrarMensagemAcesso(
+      "Dados validados! Pronto para ativar a carteira.",
+      "sucesso"
+    );
 
   });
 
