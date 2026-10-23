@@ -132,17 +132,41 @@ button {
 }
 
 #qcMensagemAcesso {
-  color: #e9c46a;
-  text-align: center;
-  margin-top: 18px;
-}
-
-#qcMensagemAcesso {
-  display: block;
-  min-height: 24px;
-  margin: 16px 0;
-  color: #e9c46a;
-  font-size: 15px;
+  display: none;
+  padding: 16px;
+  margin: 20px 0;
+  border-radius: 12px;
+  font-size: 16px;
   font-weight: bold;
   text-align: center;
+  line-height: 1.5;
+}
+
+#qcMensagemAcesso.erro {
+  display: block;
+  background: #7f1d1d;
+  color: #ffffff;
+  border: 2px solid #ff5252;
+  box-shadow: 0 0 18px rgba(255, 82, 82, 0.45);
+  animation: qcSacudir 0.35s ease;
+}
+
+#qcMensagemAcesso.sucesso {
+  display: block;
+  background: #14532d;
+  color: #ffffff;
+  border: 2px solid #4ade80;
+  box-shadow: 0 0 18px rgba(74, 222, 128, 0.3);
+}
+
+@keyframes qcSacudir {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  50% { transform: translateX(6px); }
+  75% { transform: translateX(-4px); }
+}
+
+.painel-acesso input.campo-erro {
+  border: 2px solid #ff5252;
+  box-shadow: 0 0 10px rgba(255, 82, 82, 0.35);
 }
