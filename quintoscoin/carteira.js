@@ -209,3 +209,27 @@ if (localStorage.getItem(QC_ID_LOCAL)) {
 } else {
   QC_mostrarAtivacao();
 }
+
+function QC_exibirTelaAcesso() {
+
+  document.getElementById("telaAcesso")
+    .style.display = "block";
+
+  document.getElementById("telaCarteira")
+    .style.display = "none";
+}
+
+function QC_exibirTelaCarteira() {
+
+  document.getElementById("telaAcesso")
+    .style.display = "none";
+
+  document.getElementById("telaCarteira")
+    .style.display = "block";
+
+  QC_atualizarTela();
+}
+
+// Por segurança, sempre iniciar na tela de acesso.
+// A carteira só será exibida após autenticação.
+QC_exibirTelaAcesso();
