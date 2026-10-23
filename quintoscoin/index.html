@@ -14,6 +14,82 @@
 
   <main class="carteira">
 
+    <section id="telaAcesso">
+
+  <header>
+    <h1>QUINTOSCOIN</h1>
+    <p>Acesso à Carteira Digital</p>
+  </header>
+
+  <div id="formAtivacao" class="painel-acesso">
+
+    <h3>Primeiro acesso</h3>
+
+    <p>Informe seu IdCadastro e crie sua senha.</p>
+
+    <input
+      type="text"
+      id="qcIdCadastro"
+      placeholder="IdCadastro"
+      autocomplete="off"
+    >
+
+    <input
+      type="password"
+      id="qcNovaSenha"
+      placeholder="Criar senha"
+      autocomplete="new-password"
+    >
+
+    <input
+      type="password"
+      id="qcConfirmarSenha"
+      placeholder="Confirmar senha"
+      autocomplete="new-password"
+    >
+
+    <button id="btnAtivarCarteira">
+      Ativar carteira
+    </button>
+
+    <p>
+      <a href="#" id="linkJaTenhoCarteira">
+        Já tenho uma carteira
+      </a>
+    </p>
+
+  </div>
+
+  <div id="formLogin" class="painel-acesso"
+       style="display:none;">
+
+    <h3>Entrar na carteira</h3>
+
+    <p>Digite sua senha para continuar.</p>
+
+    <input
+      type="password"
+      id="qcSenhaLogin"
+      placeholder="Sua senha"
+      autocomplete="current-password"
+    >
+
+    <button id="btnEntrarCarteira">
+      Entrar
+    </button>
+
+    <p>
+      <a href="#" id="linkPrimeiroAcesso">
+        Primeiro acesso
+      </a>
+    </p>
+
+  </div>
+
+  <p id="qcMensagemAcesso"></p>
+
+</section>
+
     <header>
       <h1>QUINTOSCOIN</h1>
       <p>Carteira Digital</p>
