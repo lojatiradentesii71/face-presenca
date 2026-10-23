@@ -74,3 +74,98 @@ document.getElementById("btnDoar")
   });
 
 QC_atualizarTela();
+
+const QC_ID_LOCAL = "QC_ID_CARTEIRA";
+
+function QC_mostrarAtivacao() {
+
+  document.getElementById("formAtivacao")
+    .style.display = "block";
+
+  document.getElementById("formLogin")
+    .style.display = "none";
+}
+
+function QC_mostrarLogin() {
+
+  document.getElementById("formAtivacao")
+    .style.display = "none";
+
+  document.getElementById("formLogin")
+    .style.display = "block";
+}
+
+document.getElementById("linkJaTenhoCarteira")
+  .addEventListener("click", function(evento) {
+
+    evento.preventDefault();
+    QC_mostrarLogin();
+
+  });
+
+document.getElementById("linkPrimeiroAcesso")
+  .addEventListener("click", function(evento) {
+
+    evento.preventDefault();
+    QC_mostrarAtivacao();
+
+  });
+
+document.getElementById("btnAtivarCarteira")
+  .addEventListener("click", function() {
+
+    const id = document.getElementById("qcIdCadastro")
+      .value.trim();
+
+    const senha = document.getElementById("qcNovaSenha")
+      .value;
+
+    const confirmar = document.getElementById("qcConfirmarSenha")
+      .value;
+
+    const mensagem = document.getElementById("qcMensagemAcesso");
+
+    if (!id) {
+      mensagem.textContent = "Informe seu IdCadastro.";
+      return;
+    }
+
+    if (senha.length < 10) {
+      mensagem.textContent =
+        "A senha deve ter pelo menos 10 caracteres.";
+      return;
+    }
+
+    if (senha !== confirmar) {
+      mensagem.textContent = "As senhas não conferem.";
+      return;
+    }
+
+    mensagem.textContent =
+      "Formulário validado. A ativação será conectada ao servidor no próximo passo.";
+
+  });
+
+document.getElementById("btnEntrarCarteira")
+  .addEventListener("click", function() {
+
+    const senha = document.getElementById("qcSenhaLogin")
+      .value;
+
+    const mensagem = document.getElementById("qcMensagemAcesso");
+
+    if (!senha) {
+      mensagem.textContent = "Informe sua senha.";
+      return;
+    }
+
+    mensagem.textContent =
+      "Formulário validado. O login será conectado ao servidor no próximo passo.";
+
+  });
+
+if (localStorage.getItem(QC_ID_LOCAL)) {
+  QC_mostrarLogin();
+} else {
+  QC_mostrarAtivacao();
+}
