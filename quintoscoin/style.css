@@ -1,0 +1,93 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 20px;
+  background: #101b30;
+  color: white;
+  font-family: Arial, sans-serif;
+}
+
+.carteira {
+  max-width: 430px;
+  margin: auto;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+header h1 {
+  color: #e9c46a;
+  letter-spacing: 2px;
+}
+
+header p {
+  color: #b9c5d8;
+}
+
+.saldo {
+  background: #1b2c48;
+  border-radius: 20px;
+  padding: 30px 20px;
+  text-align: center;
+}
+
+.saldo p {
+  color: #b9c5d8;
+}
+
+.saldo h2 {
+  font-size: 46px;
+  margin: 15px 0;
+  color: #e9c46a;
+}
+
+.saldo small {
+  color: #b9c5d8;
+}
+
+.acoes {
+  display: flex;
+  gap: 12px;
+  margin-top: 25px;
+}
+
+button {
+  flex: 1;
+  padding: 16px;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  background: #e9c46a;
+  color: #101b30;
+}
+
+.fichas {
+  margin-top: 30px;
+  background: #1b2c48;
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.fichas h3 {
+  color: #e9c46a;
+}
+
+.ficha {
+  padding: 12px;
+  margin-top: 8px;
+  background: #293e60;
+  border-radius: 8px;
+}
+
+#mensagem {
+  text-align: center;
+  margin-top: 20px;
+  color: #e9c46a;
+}
