@@ -91,3 +91,48 @@ button {
   margin-top: 20px;
   color: #e9c46a;
 }
+
+.painel-acesso {
+  background: #1b2c48;
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.painel-acesso h3 {
+  color: #e9c46a;
+  text-align: center;
+}
+
+.painel-acesso p {
+  color: #b9c5d8;
+  text-align: center;
+  font-size: 14px;
+}
+
+.painel-acesso input {
+  display: block;
+  width: 100%;
+  padding: 15px;
+  margin: 12px 0;
+  border: 1px solid #405575;
+  border-radius: 10px;
+  background: #101b30;
+  color: white;
+  font-size: 16px;
+}
+
+.painel-acesso button {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.painel-acesso a {
+  color: #e9c46a;
+  text-decoration: none;
+}
+
+#qcMensagemAcesso {
+  color: #e9c46a;
+  text-align: center;
+  margin-top: 18px;
+}
