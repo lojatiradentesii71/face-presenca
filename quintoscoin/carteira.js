@@ -112,7 +112,9 @@ document.getElementById("linkPrimeiroAcesso")
   });
 
 document.getElementById("btnAtivarCarteira")
-  .addEventListener("click", function() {
+  .addEventListener("click", function(evento) {
+
+    evento.preventDefault();
 
     const id = document.getElementById("qcIdCadastro")
       .value.trim();
@@ -124,6 +126,9 @@ document.getElementById("btnAtivarCarteira")
       .value;
 
     const mensagem = document.getElementById("qcMensagemAcesso");
+
+    // Mostra imediatamente que o botão respondeu
+    mensagem.textContent = "Verificando informações...";
 
     if (!id) {
       mensagem.textContent = "Informe seu IdCadastro.";
@@ -137,12 +142,13 @@ document.getElementById("btnAtivarCarteira")
     }
 
     if (senha !== confirmar) {
-      mensagem.textContent = "As senhas não conferem.";
+      mensagem.textContent =
+        "As senhas não conferem.";
       return;
     }
 
     mensagem.textContent =
-      "Formulário validado. A ativação será conectada ao servidor no próximo passo.";
+      "Dados validados! Pronto para ativar a carteira.";
 
   });
 
