@@ -136,3 +136,13 @@ button {
   text-align: center;
   margin-top: 18px;
 }
+
+#qcMensagemAcesso {
+  display: block;
+  min-height: 24px;
+  margin: 16px 0;
+  color: #e9c46a;
+  font-size: 15px;
+  font-weight: bold;
+  text-align: center;
+}
