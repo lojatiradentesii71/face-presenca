@@ -122,11 +122,13 @@ style="display:nome;">
 
 </main>
 
-  <script>
-    alert("Teste HTML: página atualizada!");
-  </script>
 
-  <script src="carteira.js?v=8"></script>
+  <script
+    src="carteira.js?v=10"
+    onload="alert('TESTE JS: arquivo carregando!')"
+    onerror="alert('ERRO: arquivo carteira.js não carregou!')">
+    
+  </script>
 
 </body>
 </html>
