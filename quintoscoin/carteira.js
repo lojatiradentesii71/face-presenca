@@ -272,6 +272,8 @@ async function QC_testarConexaoServidor() {
   }
 }
 
+alet("Teste 23: JavaScript carregado!");
+
 QC_testarConexaoServidor().then(function(resultado) {
 
   const mensagem = document.getElementById("qcMensagemAcesso");
