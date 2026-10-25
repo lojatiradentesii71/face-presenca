@@ -175,3 +175,71 @@ button {
 #telaCarteira {
   display: none;
 }
+
+
+.painel-recuperacao {
+  background: #1b2c48;
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+}
+
+.painel-recuperacao h3 {
+  color: #e9c46a;
+}
+
+.painel-recuperacao p {
+  line-height: 1.5;
+}
+
+#qcCodigoRecuperacao {
+  background: #101b30;
+  border: 2px solid #e9c46a;
+  border-radius: 12px;
+  padding: 18px 10px;
+  margin: 20px 0;
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+#qcBtnCopiar,
+#qcBtnContinuar {
+  width: 100%;
+  margin-top: 12px;
+}
+
+#qcBtnContinuar:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.qc-confirmacao {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  margin-top: 24px;
+  font-size: 14px;
+}
+
+.qc-confirmacao input {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+#qcMensagemCopia {
+  color: #4ade80;
+  font-weight: bold;
+  min-height: 20px;
+}
+
+.qc-aviso {
+  margin-top: 20px;
+  color: #ffcc80;
+  font-size: 13px;
+}
+
