@@ -337,5 +337,103 @@ async function QC_testarConexaoPost() {
 }
 
 
+function QC_exibirCodigoRecuperacao(codigo) {
+
+  document.getElementById("telaAcesso")
+    .style.display = "none";
+
+  document.getElementById("telaCarteira")
+    .style.display = "none";
+
+  document.getElementById("telaRecuperacao")
+    .style.display = "block";
+
+  document.getElementById("qcCodigoRecuperacao")
+    .textContent = codigo;
+
+  document.getElementById("qcMensagemCopia")
+    .textContent = "";
+
+  document.getElementById("qcConfirmouCodigo")
+    .checked = false;
+
+  document.getElementById("qcBtnContinuar")
+    .disabled = true;
+}
+
+
+document.getElementById("qcBtnCopiar")
+  .addEventListener("click", async function() {
+
+    const codigo = document.getElementById(
+      "qcCodigoRecuperacao"
+    ).textContent;
+
+    const mensagem = document.getElementById(
+      "qcMensagemCopia"
+    );
+
+    try {
+
+      await navigator.clipboard.writeText(codigo);
+
+      mensagem.textContent =
+        "✅ Código copiado! Guarde-o em local seguro.";
+
+    } catch (erro) {
+
+      mensagem.textContent =
+        "Não foi possível copiar automaticamente. Selecione o código e copie manualmente.";
+
+    }
+
+  });
+
+
+document.getElementById("qcConfirmouCodigo")
+  .addEventListener("change", function() {
+
+    document.getElementById("qcBtnContinuar")
+      .disabled = !this.checked;
+
+  });
+
+
+document.getElementById("qcBtnContinuar")
+  .addEventListener("click", function() {
+
+    // Durante o teste, retorna para a tela de acesso.
+    // A entrada na carteira será implementada
+    // após a autenticação real.
+
+    document.getElementById("telaRecuperacao")
+      .style.display = "none";
+
+    QC_exibirTelaAcesso();
+
+    QC_mostrarLogin();
+
+  });
+
+
+// TESTE TEMPORÁRIO DA TELA DE RECUPERAÇÃO
+if (
+  new URLSearchParams(window.location.search)
+    .has("testeRecuperacao")
+) {
+
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+
+  const codigo = Array.from(bytes)
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("")
+    .toUpperCase()
+    .match(/.{1,8}/g)
+    .join("-");
+
+  QC_exibirCodigoRecuperacao(codigo);
+}
+
 
 
