@@ -289,25 +289,80 @@ async function QC_testarConexaoServidor() {
 
 
 // Verificar comunicação ao abrir a carteira
-QC_testarConexaoServidor().then(function(resultado) {
+
+QC_testarConexaoPost().then(function(resultado) {
 
   if (resultado.status === "OK") {
 
     QC_mostrarMensagemAcesso(
-      "Conexão com QuintosCoin estabelecida!",
+      "Comunicação POST funcionando! " +
+      resultado.mensagem,
       "sucesso"
     );
 
   } else {
 
     QC_mostrarMensagemAcesso(
-      "Falha na comunicação: " + resultado.mensagem,
+      "Falha na comunicação POST: " +
+      resultado.mensagem,
       "erro"
     );
 
   }
 
 });
+
+
+
+async function QC_testarConexaoPost() {
+
+  const URL_APPS_SCRIPT =
+    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+  try {
+
+    const resposta = await fetch(URL_APPS_SCRIPT, {
+      method: "POST",
+      redirect: "follow",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify({
+        acao: "qc_teste_post"
+      })
+    });
+
+    if (!resposta.ok) {
+      throw new Error("HTTP " + resposta.status);
+    }
+
+    const dados = await resposta.json();
+
+    if (
+      dados.sistema !== "QuintosCoin" ||
+      dados.status !== "OK"
+    ) {
+      throw new Error(
+        dados.mensagem || "Resposta inesperada do servidor."
+      );
+    }
+
+    return {
+      status: "OK",
+      mensagem: dados.mensagem
+    };
+
+  } catch (erro) {
+
+    console.error("Erro POST QuintosCoin:", erro);
+
+    return {
+      status: "ERRO",
+      mensagem: erro.message || "Erro desconhecido."
+    };
+  }
+}
+
 
 
 
