@@ -902,3 +902,124 @@ QC_mostrarMensagemAcesso(
 QC_restaurarSessaoTeste();
 
 
+// QUINTOSCOIN - INTERFACE DE ALTERAÇÃO DE SENHA
+
+function QC_limparFormularioTrocaSenha() {
+
+  document.getElementById("qcSenhaAtual").value = "";
+  document.getElementById("qcSenhaNova").value = "";
+  document.getElementById("qcSenhaNovaConfirmar").value = "";
+
+  const mensagem = document.getElementById(
+    "qcMensagemTrocaSenha"
+  );
+
+  mensagem.textContent = "";
+  mensagem.className = "";
+}
+
+
+function QC_mostrarMensagemTrocaSenha(texto, tipo) {
+
+  const mensagem = document.getElementById(
+    "qcMensagemTrocaSenha"
+  );
+
+  mensagem.textContent =
+    (tipo === "erro" ? "⚠️ " : "✅ ") + texto;
+
+  mensagem.className = tipo;
+}
+
+
+document.getElementById("btnAbrirTrocaSenha")
+  .addEventListener("click", function() {
+
+    QC_limparFormularioTrocaSenha();
+
+    document.getElementById("qcPainelTrocaSenha")
+      .style.display = "block";
+
+    document.getElementById("btnAbrirTrocaSenha")
+      .style.display = "none";
+
+  });
+
+
+document.getElementById("btnCancelarTrocaSenha")
+  .addEventListener("click", function() {
+
+    QC_limparFormularioTrocaSenha();
+
+    document.getElementById("qcPainelTrocaSenha")
+      .style.display = "none";
+
+    document.getElementById("btnAbrirTrocaSenha")
+      .style.display = "block";
+
+  });
+
+
+document.getElementById("btnConfirmarTrocaSenha")
+  .addEventListener("click", function() {
+
+    const atual = document.getElementById(
+      "qcSenhaAtual"
+    ).value;
+
+    const nova = document.getElementById(
+      "qcSenhaNova"
+    ).value;
+
+    const confirmar = document.getElementById(
+      "qcSenhaNovaConfirmar"
+    ).value;
+
+    if (!atual) {
+
+      QC_mostrarMensagemTrocaSenha(
+        "Informe sua senha atual.",
+        "erro"
+      );
+
+      return;
+    }
+
+    if (nova.length < 6 || nova.length > 8) {
+
+      QC_mostrarMensagemTrocaSenha(
+        "A nova senha deve ter entre 6 e 8 caracteres.",
+        "erro"
+      );
+
+      return;
+    }
+
+    if (nova === atual) {
+
+      QC_mostrarMensagemTrocaSenha(
+        "A nova senha deve ser diferente da atual.",
+        "erro"
+      );
+
+      return;
+    }
+
+    if (nova !== confirmar) {
+
+      QC_mostrarMensagemTrocaSenha(
+        "A confirmação não corresponde à nova senha.",
+        "erro"
+      );
+
+      return;
+    }
+
+    QC_mostrarMensagemTrocaSenha(
+      "Formulário validado! A alteração será conectada ao servidor no próximo passo.",
+      "sucesso"
+    );
+
+  });
+
+
