@@ -312,4 +312,4 @@ QC_testarConexaoServidor().then(function(resultado) {
 
 });
 
-});
+
