@@ -242,24 +242,123 @@ async function QC_enviarAtivacaoTeste(dados) {
 }
 
 
+async function QC_enviarLoginTeste(idCarteira, senha) {
+
+  const URL_APPS_SCRIPT =
+    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+  const resposta = await fetch(URL_APPS_SCRIPT, {
+    method: "POST",
+    redirect: "follow",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify({
+      acao: "qc_login_teste",
+      idCarteira: idCarteira,
+      senha: senha
+    })
+  });
+
+  if (!resposta.ok) {
+    throw new Error("Erro HTTP: " + resposta.status);
+  }
+
+  return await resposta.json();
+}
+
+
 
 document.getElementById("btnEntrarCarteira")
-  .addEventListener("click", function() {
+  .addEventListener("click", async function(evento) {
 
-    const senha = document.getElementById("qcSenhaLogin")
-      .value;
+    evento.preventDefault();
 
-    const mensagem = document.getElementById("qcMensagemAcesso");
+    const campoSenha = document.getElementById(
+      "qcSenhaLogin"
+    );
 
-    if (!senha) {
-      mensagem.textContent = "Informe sua senha.";
+    const botao = document.getElementById(
+      "btnEntrarCarteira"
+    );
+
+    const idCarteira = localStorage.getItem(
+      QC_ID_LOCAL
+    );
+
+    const senha = campoSenha.value;
+
+    if (!idCarteira) {
+      QC_mostrarMensagemAcesso(
+        "Carteira não identificada neste dispositivo.",
+        "erro"
+      );
       return;
     }
 
-    mensagem.textContent =
-      "Formulário validado. O login será conectado ao servidor no próximo passo.";
+    if (!senha) {
+      QC_mostrarMensagemAcesso(
+        "Informe sua senha.",
+        "erro"
+      );
+      campoSenha.focus();
+      return;
+    }
+
+    botao.disabled = true;
+    botao.textContent = "Verificando senha...";
+
+    try {
+
+      const resultado = await QC_enviarLoginTeste(
+        idCarteira,
+        senha
+      );
+
+      if (resultado.status === "OK") {
+
+        // Apagar a senha do campo
+        campoSenha.value = "";
+
+        // Mostrar somente a carteira demonstrativa
+        QC_exibirTelaCarteira();
+
+        // Desabilitar operações até termos
+        // sessões autenticadas e fichas válidas
+        document.getElementById("btnReceber").disabled = true;
+        document.getElementById("btnDoar").disabled = true;
+
+        document.getElementById("mensagem").textContent =
+          "✅ Login de teste validado. " +
+          "Carteira demonstrativa: créditos e " +
+          "doações ainda não estão habilitados.";
+
+      } else {
+
+        QC_mostrarMensagemAcesso(
+          resultado.mensagem ||
+          "Não foi possível realizar o login.",
+          "erro"
+        );
+
+      }
+
+    } catch (erro) {
+
+      QC_mostrarMensagemAcesso(
+        "Falha na comunicação: " + erro.message,
+        "erro"
+      );
+
+    } finally {
+
+      botao.disabled = false;
+      botao.textContent = "Entrar";
+
+    }
 
   });
+
 
 if (localStorage.getItem(QC_ID_LOCAL)) {
   QC_mostrarLogin();
