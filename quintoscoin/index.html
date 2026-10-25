@@ -122,9 +122,26 @@ style="display:nome;">
 
 </main>
 
+  <script>
+  window.addEventListener("error", function(evento) {
+    alert(
+      "ERRO JAVASCRIPT:\n" +
+      evento.message + "\n" +
+      "Linha: " + evento.lineno + "\n" +
+      "Arquivo: " + evento.filename
+    );
+  });
+
+  window.addEventListener("unhandledrejection", function(evento) {
+    alert(
+      "ERRO ASSÍNCRONO:\n" +
+      String(evento.reason)
+    );
+  });
+</script>
 
   <script
-    src="carteira.js?v=10"
+    src="carteira.js?v=11"
     onload="alert('TESTE JS: arquivo carregando!')"
     onerror="alert('ERRO: arquivo carteira.js não carregou!')">
     
