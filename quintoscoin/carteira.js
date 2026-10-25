@@ -131,6 +131,7 @@ function QC_mostrarMensagemAcesso(texto, tipo) {
   });
 }
 
+let QC_ativacaoPendente = null;
 
 document.getElementById("btnAtivarCarteira")
   .addEventListener("click", function(evento) {
@@ -152,10 +153,9 @@ document.getElementById("btnAtivarCarteira")
     if (!id) {
       campoId.classList.add("campo-erro");
       QC_mostrarMensagemAcesso(
-        "Informe seu IdCadastro para continuar.",
+        "Informe seu IdCadastro.",
         "erro"
       );
-      campoId.focus();
       return;
     }
 
@@ -165,26 +165,83 @@ document.getElementById("btnAtivarCarteira")
         "A senha deve ter entre 6 e 8 caracteres.",
         "erro"
       );
-      campoSenha.focus();
       return;
     }
 
     if (senha !== confirmar) {
       campoConfirmar.classList.add("campo-erro");
       QC_mostrarMensagemAcesso(
-        "As senhas não conferem. Digite novamente.",
+        "As senhas não conferem.",
         "erro"
       );
-      campoConfirmar.focus();
       return;
     }
 
-    QC_mostrarMensagemAcesso(
-      "Dados validados! Pronto para ativar a carteira.",
-      "sucesso"
-    );
+    // Gerar código seguro de recuperação
+    const bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+
+    const codigo = Array.from(bytes)
+      .map(b => b.toString(16).padStart(2, "0"))
+      .join("")
+      .toUpperCase()
+      .match(/.{1,8}/g)
+      .join("-");
+
+    // Dados temporários, mantidos apenas em memória
+    QC_ativacaoPendente = {
+      idCadastro: id,
+      senha: senha,
+      codigoRecuperacao: codigo
+    };
+
+    // Exibir código ANTES de registrar a carteira
+    QC_exibirCodigoRecuperacao(codigo);
 
   });
+
+
+async function QC_enviarAtivacaoTeste(dados) {
+
+  const URL_APPS_SCRIPT =
+    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+  const resposta = await fetch(URL_APPS_SCRIPT, {
+    method: "POST",
+    redirect: "follow",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify({
+      acao: "qc_ativar_teste",
+      idCadastro: dados.idCadastro,
+      senha: dados.senha,
+      codigoRecuperacao: dados.codigoRecuperacao
+    })
+  });
+
+  if (!resposta.ok) {
+    throw new Error(
+      "Erro HTTP: " + resposta.status
+    );
+  }
+
+  const resultado = await resposta.json();
+
+  if (
+    resultado.status !== "OK" ||
+    !resultado.idCarteira
+  ) {
+    throw new Error(
+      resultado.mensagem ||
+      "Não foi possível ativar a carteira."
+    );
+  }
+
+  return resultado;
+}
+
+
 
 document.getElementById("btnEntrarCarteira")
   .addEventListener("click", function() {
@@ -399,21 +456,70 @@ document.getElementById("qcConfirmouCodigo")
   });
 
 
+
 document.getElementById("qcBtnContinuar")
-  .addEventListener("click", function() {
+  .addEventListener("click", async function() {
 
-    // Durante o teste, retorna para a tela de acesso.
-    // A entrada na carteira será implementada
-    // após a autenticação real.
+    if (
+      !QC_ativacaoPendente ||
+      !document.getElementById("qcConfirmouCodigo").checked
+    ) {
+      return;
+    }
 
-    document.getElementById("telaRecuperacao")
-      .style.display = "none";
+    const botao = document.getElementById("qcBtnContinuar");
+    const mensagem = document.getElementById("qcMensagemCopia");
 
-    QC_exibirTelaAcesso();
+    botao.disabled = true;
+    mensagem.textContent = "Registrando carteira de teste...";
 
-    QC_mostrarLogin();
+    try {
+
+      const resultado = await QC_enviarAtivacaoTeste(
+        QC_ativacaoPendente
+      );
+
+      // Memorizar somente o identificador da carteira
+      localStorage.setItem(
+        QC_ID_LOCAL,
+        resultado.idCarteira
+      );
+
+      // Limpar senha e informações temporárias
+      QC_ativacaoPendente = null;
+
+      document.getElementById("qcNovaSenha").value = "";
+      document.getElementById("qcConfirmarSenha").value = "";
+      document.getElementById("qcSenhaLogin").value = "";
+
+      document.getElementById("telaRecuperacao")
+        .style.display = "none";
+
+      QC_exibirTelaAcesso();
+      QC_mostrarLogin();
+
+      QC_mostrarMensagemAcesso(
+        "Carteira de teste ativada! " +
+        "Agora você poderá utilizar a tela de login.",
+        "sucesso"
+      );
+
+    } catch (erro) {
+
+      // Manter a tela e o código visíveis em caso de falha
+      mensagem.textContent =
+        "⚠️ Não foi possível confirmar a ativação: " +
+        erro.message +
+        ". Guarde o código apresentado.";
+
+      mensagem.style.color = "#ffcc80";
+
+      botao.disabled = false;
+
+    }
 
   });
+
 
 
 // TESTE TEMPORÁRIO DA TELA DE RECUPERAÇÃO
