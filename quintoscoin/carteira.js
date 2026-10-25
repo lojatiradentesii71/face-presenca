@@ -272,9 +272,8 @@ async function QC_testarConexaoServidor() {
   }
 }
 
-alert("Teste 23: JavaScript carregado!");
 
-QC_testarConexaoServidor().then(function(resultado) {
+/*QC_testarConexaoServidor().then(function(resultado) {
 
   const mensagem = document.getElementById("qcMensagemAcesso");
 
@@ -291,6 +290,26 @@ QC_testarConexaoServidor().then(function(resultado) {
       "⚠️ Falha na comunicação: " + resultado.mensagem;
 
     mensagem.className = "erro";
+  }*/
+
+QC_testarConexaoServidor().then(function(resultado) {
+
+  if (resultado.status === "OK") {
+
+    QC_mostrarMensagemAcesso(
+      "Conexão com QuintosCoin estabelecida!",
+      "sucesso"
+    );
+
+  } else {
+
+    QC_mostrarMensagemAcesso(
+      "Falha na comunicação: " + resultado.mensagem,
+      "erro"
+    );
+
   }
+
+});
 
 });
