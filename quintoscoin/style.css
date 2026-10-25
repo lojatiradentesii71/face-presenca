@@ -265,3 +265,25 @@ button {
   cursor: wait;
 }
 
+
+/* QUINTOSCOIN - RESTAURAÇÃO DE SESSÃO */
+
+html.qc-restaurando #telaAcesso,
+html.qc-restaurando #telaCarteira {
+  display: none !important;
+}
+
+html.qc-restaurando body::before {
+  content: "🔐 Verificando sessão QuintosCoin...";
+  display: block;
+  max-width: 430px;
+  margin: 100px auto 0;
+  padding: 25px;
+  background: #1b2c48;
+  color: #e9c46a;
+  border-radius: 16px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+}
+
