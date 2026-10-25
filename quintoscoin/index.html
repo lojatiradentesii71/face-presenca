@@ -27,26 +27,34 @@
 
     <p>Informe seu IdCadastro e crie sua senha.</p>
 
-    <input
-      type="text"
-      id="qcIdCadastro"
-      placeholder="IdCadastro"
-      autocomplete="off"
-    >
-
-    <input
-      type="password"
-      id="qcNovaSenha"
-      placeholder="Criar senha"
-      autocomplete="new-password"
-    >
-
-    <input
-      type="password"
-      id="qcConfirmarSenha"
-      placeholder="Confirmar senha"
-      autocomplete="new-password"
-    >
+   
+<input
+  type="text"
+  id="qcIdCadastro"
+  name="username"
+  placeholder="IdCadastro"
+  autocomplete="username"
+>
+   
+<input
+  type="password"
+  id="qcNovaSenha"
+  name="new-password"
+  placeholder="Criar senha"
+  autocomplete="new-password"
+  minlength="6"
+  maxlength="8"
+>
+   
+<input
+  type="password"
+  id="qcConfirmarSenha"
+  name="confirm-password"
+  placeholder="Confirmar senha"
+  autocomplete="new-password"
+  minlength="6"
+  maxlength="8"
+>
 
     <button id="btnAtivarCarteira">
       Ativar carteira
@@ -66,13 +74,15 @@
     <h3>Entrar na carteira</h3>
 
     <p>Digite sua senha para continuar.</p>
+  
+<input
+  type="password"
+  id="qcSenhaLogin"
+  name="password"
+  placeholder="Sua senha"
+  autocomplete="current-password"
+>
 
-    <input
-      type="password"
-      id="qcSenhaLogin"
-      placeholder="Sua senha"
-      autocomplete="current-password"
-    >
 
     <button id="btnEntrarCarteira">
       Entrar
