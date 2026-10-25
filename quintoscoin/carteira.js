@@ -268,6 +268,37 @@ async function QC_enviarLoginTeste(idCarteira, senha) {
 }
 
 
+const QC_CHAVE_SESSAO = "QC_TOKEN_SESSAO_TESTE";
+
+
+async function QC_validarSessaoServidor(tokenSessao) {
+
+  const URL_APPS_SCRIPT =
+    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+  const resposta = await fetch(URL_APPS_SCRIPT, {
+    method: "POST",
+    redirect: "follow",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify({
+      acao: "qc_validar_sessao_teste",
+      tokenSessao: tokenSessao
+    })
+  });
+
+  if (!resposta.ok) {
+    throw new Error(
+      "Erro de comunicação HTTP: " + resposta.status
+    );
+  }
+
+  return await resposta.json();
+}
+
+
+
 
 document.getElementById("btnEntrarCarteira")
   .addEventListener("click", async function(evento) {
@@ -315,25 +346,53 @@ document.getElementById("btnEntrarCarteira")
         senha
       );
 
-      if (resultado.status === "OK") {
+     
+if (resultado.status === "OK") {
 
-        // Apagar a senha do campo
-        campoSenha.value = "";
+  if (!resultado.tokenSessao) {
+    throw new Error(
+      "O servidor não retornou o token da sessão."
+    );
+  }
 
-        // Mostrar somente a carteira demonstrativa
-        QC_exibirTelaCarteira();
+  // Verificar o token no Apps Script
+  const verificacao = await QC_validarSessaoServidor(
+    resultado.tokenSessao
+  );
 
-        // Desabilitar operações até termos
-        // sessões autenticadas e fichas válidas
-        document.getElementById("btnReceber").disabled = true;
-        document.getElementById("btnDoar").disabled = true;
+  if (
+    verificacao.status !== "OK" ||
+    verificacao.idCarteira !== idCarteira
+  ) {
+    throw new Error(
+      verificacao.mensagem ||
+      "Não foi possível validar a sessão."
+    );
+  }
 
-        document.getElementById("mensagem").textContent =
-          "✅ Login de teste validado. " +
-          "Carteira demonstrativa: créditos e " +
-          "doações ainda não estão habilitados.";
+  // Guardar o token temporário
+  sessionStorage.setItem(
+    QC_CHAVE_SESSAO,
+    resultado.tokenSessao
+  );
 
-      } else {
+  // Limpar o campo da senha
+  campoSenha.value = "";
+
+  // Mostrar a carteira demonstrativa
+  QC_exibirTelaCarteira();
+
+  // Manter operações financeiras desabilitadas
+  document.getElementById("btnReceber").disabled = true;
+  document.getElementById("btnDoar").disabled = true;
+
+  document.getElementById("mensagem").textContent =
+    "✅ Login e sessão validados! " +
+    "Carteira de demonstração. " +
+    "Recebimentos e doações ainda não habilitados.";
+
+} else {
+
 
         QC_mostrarMensagemAcesso(
           resultado.mensagem ||
