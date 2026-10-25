@@ -287,33 +287,6 @@ async function QC_testarConexaoServidor() {
   }
 }
 
-
-// Verificar comunicação ao abrir a carteira
-
-QC_testarConexaoPost().then(function(resultado) {
-
-  if (resultado.status === "OK") {
-
-    QC_mostrarMensagemAcesso(
-      "Comunicação POST funcionando! " +
-      resultado.mensagem,
-      "sucesso"
-    );
-
-  } else {
-
-    QC_mostrarMensagemAcesso(
-      "Falha na comunicação POST: " +
-      resultado.mensagem,
-      "erro"
-    );
-
-  }
-
-});
-
-
-
 async function QC_testarConexaoPost() {
 
   const URL_APPS_SCRIPT =
