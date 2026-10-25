@@ -7,8 +7,23 @@
 
   <title>QuintosCoin - Carteira</title>
 
-  <link rel="stylesheet" href="style.css">
+ 
+<link rel="stylesheet" href="style.css">
+
+<script>
+  if (
+    sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") &&
+    !new URLSearchParams(window.location.search)
+      .has("testeRecuperacao")
+  ) {
+    document.documentElement.classList.add(
+      "qc-restaurando"
+    );
+  }
+</script>
+
 </head>
+
 
 <body>
 
