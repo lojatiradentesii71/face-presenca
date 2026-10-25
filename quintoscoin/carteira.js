@@ -700,4 +700,98 @@ if (
 }
 
 
+// QUINTOSCOIN - ENCERRAR SESSÃO
+
+async function QC_enviarLogoutTeste(tokenSessao) {
+
+  const URL_APPS_SCRIPT =
+    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+  const resposta = await fetch(URL_APPS_SCRIPT, {
+    method: "POST",
+    redirect: "follow",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify({
+      acao: "qc_logout_teste",
+      tokenSessao: tokenSessao
+    })
+  });
+
+  if (!resposta.ok) {
+    throw new Error("Erro HTTP: " + resposta.status);
+  }
+
+  return await resposta.json();
+}
+
+
+document.getElementById("btnSairCarteira")
+  .addEventListener("click", async function() {
+
+    const botao = document.getElementById(
+      "btnSairCarteira"
+    );
+
+    const token = sessionStorage.getItem(
+      QC_CHAVE_SESSAO
+    );
+
+    botao.disabled = true;
+    botao.textContent = "Encerrando sessão...";
+
+    try {
+
+      if (token) {
+
+        const resultado = await QC_enviarLogoutTeste(
+          token
+        );
+
+        if (
+          resultado.status !== "OK" &&
+          resultado.status !== "SESSAO_INVALIDA"
+        ) {
+          throw new Error(
+            resultado.mensagem ||
+            "Não foi possível encerrar a sessão."
+          );
+        }
+      }
+
+      // Remover somente o token de sessão.
+      sessionStorage.removeItem(QC_CHAVE_SESSAO);
+
+      // Ocultar a carteira e mostrar o login.
+      QC_exibirTelaAcesso();
+      QC_mostrarLogin();
+
+      document.getElementById(
+        "qcSenhaLogin"
+      ).value = "";
+
+      QC_mostrarMensagemAcesso(
+        "Sessão encerrada! Digite sua senha para entrar novamente.",
+        "sucesso"
+      );
+
+    } catch (erro) {
+
+      // Em caso de falha, não afirmar que o servidor
+      // encerrou a sessão. Permitir nova tentativa.
+      document.getElementById("mensagem").textContent =
+        "⚠️ Não foi possível confirmar o encerramento: " +
+        erro.message +
+        ". Tente novamente.";
+
+    } finally {
+
+      botao.disabled = false;
+      botao.textContent = "🚪 Sair da carteira";
+
+    }
+
+  });
+
 
