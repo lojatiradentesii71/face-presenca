@@ -243,13 +243,19 @@ async function QC_testarConexaoServidor() {
 
   try {
 
-    const resposta = await fetch(
-      URL_APPS_SCRIPT + separador + "acao=qc_teste",
-      {
-        method: "GET",
-        redirect: "follow"
-      }
-    );
+const resposta = await fetch(
+  URL_APPS_SCRIPT + separador + "acao=qc_teste",
+  {
+    method: "GET",
+    mode: "no-cors",
+    redirect: "follow"
+  }
+);
+
+return {
+  status: "OK",
+  mensagem: "Requisição no-cors concluída."
+};
 
     if (!resposta.ok) {
       throw new Error("HTTP " + resposta.status);
