@@ -272,7 +272,7 @@ async function QC_testarConexaoServidor() {
   }
 }
 
-alet("Teste 23: JavaScript carregado!");
+alert("Teste 23: JavaScript carregado!");
 
 QC_testarConexaoServidor().then(function(resultado) {
 
