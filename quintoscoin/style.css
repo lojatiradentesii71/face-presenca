@@ -360,3 +360,51 @@ html.qc-restaurando body::before {
   border: 2px solid #4ade80;
 }
 
+
+/* QUINTOSCOIN - OLHINHO DAS SENHAS */
+
+.qc-campo-com-olho {
+  position: relative;
+  width: 100%;
+}
+
+.qc-campo-com-olho input {
+  width: 100%;
+  padding-right: 55px !important;
+}
+
+.painel-acesso .qc-botao-olho,
+#qcPainelTrocaSenha .qc-botao-olho {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+
+  width: 42px;
+  height: 42px;
+  margin: 0;
+  padding: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+
+  font-size: 22px;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.qc-botao-olho.visivel {
+  background: rgba(233, 196, 106, 0.15);
+}
+
+.qc-botao-olho:focus-visible {
+  outline: 2px solid #e9c46a;
+  outline-offset: 2px;
+}
+
