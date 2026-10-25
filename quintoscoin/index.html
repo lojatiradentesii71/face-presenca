@@ -192,6 +192,57 @@ style="display:nome;">
    
 <p id="mensagem"></p>
 
+
+<!-- QUINTOSCOIN - ALTERAÇÃO DE SENHA -->
+
+<button id="btnAbrirTrocaSenha" type="button">
+  🔑 Alterar minha senha
+</button>
+
+<div id="qcPainelTrocaSenha" style="display:none;">
+
+  <h3>Alterar senha</h3>
+
+  <p>Informe sua senha atual e escolha uma nova.</p>
+
+  <input
+    type="password"
+    id="qcSenhaAtual"
+    placeholder="Senha atual"
+    autocomplete="current-password"
+  >
+
+  <input
+    type="password"
+    id="qcSenhaNova"
+    placeholder="Nova senha (6 a 8 caracteres)"
+    autocomplete="new-password"
+    minlength="6"
+    maxlength="8"
+  >
+
+  <input
+    type="password"
+    id="qcSenhaNovaConfirmar"
+    placeholder="Confirmar nova senha"
+    autocomplete="new-password"
+    minlength="6"
+    maxlength="8"
+  >
+
+  <p id="qcMensagemTrocaSenha" role="status"></p>
+
+  <button id="btnConfirmarTrocaSenha" type="button">
+    Salvar nova senha
+  </button>
+
+  <button id="btnCancelarTrocaSenha" type="button">
+    Cancelar
+  </button>
+
+</div>
+
+
 <button id="btnSairCarteira" type="button">
   🚪 Sair da carteira
 </button>
@@ -203,7 +254,7 @@ style="display:nome;">
 
   
   <script
-    src="carteira.js?v=26">
+    src="carteira.js?v=27">
     
   </script>
 
