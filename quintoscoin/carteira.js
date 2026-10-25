@@ -809,9 +809,14 @@ async function QC_restaurarSessaoTeste() {
 
   // Sem token ou sem carteira identificada:
   // manter a tela de acesso.
-  if (!token || !idCarteira) {
-    return;
-  }
+ 
+if (!token || !idCarteira) {
+  document.documentElement.classList.remove(
+    "qc-restaurando"
+  );
+  return;
+}
+
 
   // Não interferir na tela temporária de teste
   // do código de recuperação.
@@ -872,14 +877,25 @@ async function QC_restaurarSessaoTeste() {
     QC_exibirTelaAcesso();
     QC_mostrarLogin();
 
-    QC_mostrarMensagemAcesso(
-      "Não foi possível verificar sua sessão. " +
-      "Confira a conexão ou faça login novamente.",
-      "erro"
-    );
+   
+QC_mostrarMensagemAcesso(
+  "Não foi possível verificar sua sessão. " +
+  "Confira a conexão ou faça login novamente.",
+  "erro"
+);
 
-  }
+} finally {
+
+  // Remover a tela de verificação,
+  // independentemente do resultado.
+  document.documentElement.classList.remove(
+    "qc-restaurando"
+  );
+
 }
+
+}
+
 
 
 // Verificar a sessão ao abrir a página.
