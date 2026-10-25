@@ -902,6 +902,37 @@ QC_mostrarMensagemAcesso(
 QC_restaurarSessaoTeste();
 
 
+async function QC_enviarAlteracaoSenha(
+  tokenSessao,
+  senhaAtual,
+  novaSenha
+) {
+
+  const URL_APPS_SCRIPT =
+    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+  const resposta = await fetch(URL_APPS_SCRIPT, {
+    method: "POST",
+    redirect: "follow",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify({
+      acao: "qc_alterar_senha_teste",
+      tokenSessao: tokenSessao,
+      senhaAtual: senhaAtual,
+      novaSenha: novaSenha
+    })
+  });
+
+  if (!resposta.ok) {
+    throw new Error("Erro HTTP: " + resposta.status);
+  }
+
+  return await resposta.json();
+}
+
+
 // QUINTOSCOIN - INTERFACE DE ALTERAÇÃO DE SENHA
 
 function QC_limparFormularioTrocaSenha() {
@@ -960,8 +991,9 @@ document.getElementById("btnCancelarTrocaSenha")
   });
 
 
+
 document.getElementById("btnConfirmarTrocaSenha")
-  .addEventListener("click", function() {
+  .addEventListener("click", async function() {
 
     const atual = document.getElementById(
       "qcSenhaAtual"
@@ -975,51 +1007,136 @@ document.getElementById("btnConfirmarTrocaSenha")
       "qcSenhaNovaConfirmar"
     ).value;
 
-    if (!atual) {
+    const token = sessionStorage.getItem(
+      QC_CHAVE_SESSAO
+    );
 
+    const botao = document.getElementById(
+      "btnConfirmarTrocaSenha"
+    );
+
+    // Validar formulário
+
+    if (!atual) {
       QC_mostrarMensagemTrocaSenha(
         "Informe sua senha atual.",
         "erro"
       );
-
       return;
     }
 
     if (nova.length < 6 || nova.length > 8) {
-
       QC_mostrarMensagemTrocaSenha(
         "A nova senha deve ter entre 6 e 8 caracteres.",
         "erro"
       );
-
       return;
     }
 
     if (nova === atual) {
-
       QC_mostrarMensagemTrocaSenha(
         "A nova senha deve ser diferente da atual.",
         "erro"
       );
-
       return;
     }
 
     if (nova !== confirmar) {
-
       QC_mostrarMensagemTrocaSenha(
-        "A confirmação não corresponde à nova senha.",
+        "As senhas não conferem.",
         "erro"
       );
-
       return;
     }
 
-    QC_mostrarMensagemTrocaSenha(
-      "Formulário validado! A alteração será conectada ao servidor no próximo passo.",
-      "sucesso"
-    );
+    if (!token) {
+      QC_mostrarMensagemTrocaSenha(
+        "Sessão não encontrada. Faça login novamente.",
+        "erro"
+      );
+      return;
+    }
+
+    // Enviar alteração ao servidor
+
+    botao.disabled = true;
+    botao.textContent = "Alterando senha...";
+
+    try {
+
+      const resultado = await QC_enviarAlteracaoSenha(
+        token,
+        atual,
+        nova
+      );
+
+      if (resultado.status === "OK") {
+
+        // Remover token da sessão anterior
+        sessionStorage.removeItem(QC_CHAVE_SESSAO);
+
+        // Limpar dados do formulário
+        QC_limparFormularioTrocaSenha();
+
+        document.getElementById("qcPainelTrocaSenha")
+          .style.display = "none";
+
+        document.getElementById("btnAbrirTrocaSenha")
+          .style.display = "block";
+
+        // Voltar ao login
+        QC_exibirTelaAcesso();
+        QC_mostrarLogin();
+
+        document.getElementById("qcSenhaLogin")
+          .value = "";
+
+        QC_mostrarMensagemAcesso(
+          "Senha alterada com sucesso! " +
+          "Entre novamente utilizando sua nova senha.",
+          "sucesso"
+        );
+
+      } else {
+
+        if (resultado.status === "SESSAO_INVALIDA") {
+          sessionStorage.removeItem(QC_CHAVE_SESSAO);
+
+          QC_exibirTelaAcesso();
+          QC_mostrarLogin();
+
+          QC_mostrarMensagemAcesso(
+            "Sessão expirada. Faça login novamente.",
+            "erro"
+          );
+
+        } else {
+
+          QC_mostrarMensagemTrocaSenha(
+            resultado.mensagem ||
+            "Não foi possível alterar a senha.",
+            "erro"
+          );
+
+        }
+      }
+
+    } catch (erro) {
+
+      QC_mostrarMensagemTrocaSenha(
+        "Falha na comunicação: " + erro.message +
+        ". Verifique se a senha foi alterada antes de tentar novamente.",
+        "erro"
+      );
+
+    } finally {
+
+      botao.disabled = false;
+      botao.textContent = "Salvar nova senha";
+
+    }
 
   });
+
 
 
