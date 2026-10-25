@@ -795,3 +795,94 @@ document.getElementById("btnSairCarteira")
   });
 
 
+/* QUINTOSCOIN - RESTAURAR SESSÃO AO ABRIR */
+
+async function QC_restaurarSessaoTeste() {
+
+  const token = sessionStorage.getItem(
+    QC_CHAVE_SESSAO
+  );
+
+  const idCarteira = localStorage.getItem(
+    QC_ID_LOCAL
+  );
+
+  // Sem token ou sem carteira identificada:
+  // manter a tela de acesso.
+  if (!token || !idCarteira) {
+    return;
+  }
+
+  // Não interferir na tela temporária de teste
+  // do código de recuperação.
+  if (
+    new URLSearchParams(window.location.search)
+      .has("testeRecuperacao")
+  ) {
+    return;
+  }
+
+  try {
+
+    const resultado = await QC_validarSessaoServidor(
+      token
+    );
+
+    if (
+      resultado.status === "OK" &&
+      resultado.idCarteira === idCarteira
+    ) {
+
+      // Sessão confirmada pelo servidor.
+      QC_exibirTelaCarteira();
+
+      // Manter as operações desabilitadas.
+      document.getElementById("btnReceber")
+        .disabled = true;
+
+      document.getElementById("btnDoar")
+        .disabled = true;
+
+      document.getElementById("mensagem")
+        .textContent =
+        "✅ Sessão restaurada automaticamente! " +
+        "Carteira demonstrativa.";
+
+      return;
+    }
+
+    // Sessão expirada, inválida ou de outra carteira.
+    sessionStorage.removeItem(
+      QC_CHAVE_SESSAO
+    );
+
+    QC_exibirTelaAcesso();
+    QC_mostrarLogin();
+
+    QC_mostrarMensagemAcesso(
+      "Sua sessão expirou. Digite sua senha para entrar.",
+      "erro"
+    );
+
+  } catch (erro) {
+
+    // Se a comunicação falhar, manter a tela de login.
+    // Não apagar o token até termos uma resposta
+    // confirmando que ele é inválido.
+    QC_exibirTelaAcesso();
+    QC_mostrarLogin();
+
+    QC_mostrarMensagemAcesso(
+      "Não foi possível verificar sua sessão. " +
+      "Confira a conexão ou faça login novamente.",
+      "erro"
+    );
+
+  }
+}
+
+
+// Verificar a sessão ao abrir a página.
+QC_restaurarSessaoTeste();
+
+
