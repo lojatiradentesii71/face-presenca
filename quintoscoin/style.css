@@ -287,3 +287,76 @@ html.qc-restaurando body::before {
   font-weight: bold;
 }
 
+
+/* QUINTOSCOIN - ALTERAR SENHA */
+
+#btnAbrirTrocaSenha {
+  display: block;
+  width: 100%;
+  margin-top: 25px;
+  background: #293e60;
+  color: #e9c46a;
+  border: 1px solid #e9c46a;
+}
+
+#qcPainelTrocaSenha {
+  margin-top: 18px;
+  padding: 22px;
+  background: #1b2c48;
+  border-radius: 16px;
+}
+
+#qcPainelTrocaSenha h3 {
+  color: #e9c46a;
+  text-align: center;
+}
+
+#qcPainelTrocaSenha p {
+  text-align: center;
+  line-height: 1.5;
+}
+
+#qcPainelTrocaSenha input {
+  width: 100%;
+  padding: 15px;
+  margin: 10px 0;
+  border: 1px solid #405575;
+  border-radius: 10px;
+  background: #101b30;
+  color: white;
+  font-size: 16px;
+}
+
+#qcPainelTrocaSenha button {
+  width: 100%;
+  margin-top: 12px;
+}
+
+#btnCancelarTrocaSenha {
+  background: transparent;
+  color: #b9c5d8;
+  border: 1px solid #64748b;
+}
+
+#qcMensagemTrocaSenha {
+  display: none;
+  padding: 15px;
+  border-radius: 10px;
+  margin-top: 15px;
+  font-weight: bold;
+}
+
+#qcMensagemTrocaSenha.erro {
+  display: block;
+  background: #7f1d1d;
+  color: white;
+  border: 2px solid #ff5252;
+}
+
+#qcMensagemTrocaSenha.sucesso {
+  display: block;
+  background: #14532d;
+  color: white;
+  border: 2px solid #4ade80;
+}
+
