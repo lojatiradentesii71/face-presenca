@@ -1139,4 +1139,67 @@ document.getElementById("btnConfirmarTrocaSenha")
   });
 
 
+/* QUINTOSCOIN - MOSTRAR / OCULTAR SENHAS */
+
+function QC_adicionarOlhinhosSenhas() {
+
+  const campos = document.querySelectorAll(
+    'input[type="password"]'
+  );
+
+  campos.forEach(function(campo) {
+
+    // Evitar adicionar dois botões ao mesmo campo
+    if (campo.closest(".qc-campo-com-olho")) {
+      return;
+    }
+
+    // Criar estrutura que envolve o campo
+    const container = document.createElement("div");
+    container.className = "qc-campo-com-olho";
+
+    campo.parentNode.insertBefore(container, campo);
+    container.appendChild(campo);
+
+    // Criar botão do olhinho
+    const botao = document.createElement("button");
+
+    botao.type = "button";
+    botao.className = "qc-botao-olho";
+    botao.textContent = "👁️";
+    botao.setAttribute("aria-label", "Mostrar senha");
+    botao.setAttribute("aria-pressed", "false");
+
+    container.appendChild(botao);
+
+    // Alternar entre senha oculta e visível
+    botao.addEventListener("click", function() {
+
+      const mostrar = campo.type === "password";
+
+      campo.type = mostrar ? "text" : "password";
+
+      botao.textContent = mostrar ? "🙈" : "👁️";
+
+      botao.setAttribute(
+        "aria-label",
+        mostrar ? "Ocultar senha" : "Mostrar senha"
+      );
+
+      botao.setAttribute(
+        "aria-pressed",
+        String(mostrar)
+      );
+
+      botao.classList.toggle("visivel", mostrar);
+
+    });
+
+  });
+}
+
+
+// Adicionar os olhinhos aos campos existentes
+QC_adicionarOlhinhosSenhas();
+
 
