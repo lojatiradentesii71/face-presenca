@@ -234,70 +234,61 @@ function QC_exibirTelaCarteira() {
 // A carteira só será exibida após autenticação.
 QC_exibirTelaAcesso();
 
+
 async function QC_testarConexaoServidor() {
 
   const URL_APPS_SCRIPT =
     "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
 
-  const separador = URL_APPS_SCRIPT.includes("?") ? "&" : "?";
-
   try {
 
-const resposta = await fetch(
-  URL_APPS_SCRIPT + separador + "acao=qc_teste",
-  {
-    method: "GET",
-    mode: "no-cors",
-    redirect: "follow"
-  }
-);
-
-return {
-  status: "OK",
-  mensagem: "Requisição no-cors concluída."
-};
+    const resposta = await fetch(
+      URL_APPS_SCRIPT + "?acao=qc_teste",
+      {
+        method: "GET",
+        redirect: "follow"
+      }
+    );
 
     if (!resposta.ok) {
-      throw new Error("HTTP " + resposta.status);
+      throw new Error(
+        "Erro HTTP: " + resposta.status
+      );
     }
 
     const dados = await resposta.json();
 
-    console.log("QuintosCoin:", dados);
+    if (
+      dados.sistema !== "QuintosCoin" ||
+      dados.status !== "OK"
+    ) {
+      throw new Error(
+        dados.mensagem || "Resposta inesperada do servidor."
+      );
+    }
 
-    return dados;
+    return {
+      status: "OK",
+      mensagem: dados.mensagem
+    };
 
   } catch (erro) {
 
-    console.error("Falha na conexão QuintosCoin:", erro);
+    console.error(
+      "Erro de comunicação QuintosCoin:",
+      erro
+    );
 
     return {
       status: "ERRO",
-      mensagem: erro.message
+      mensagem: erro.message || "Erro desconhecido."
     };
+
   }
 }
 
 
-/*QC_testarConexaoServidor().then(function(resultado) {
-
-  const mensagem = document.getElementById("qcMensagemAcesso");
-
-  if (resultado.status === "OK") {
-
-    mensagem.textContent =
-      "✅ Conexão com QuintosCoin estabelecida!";
-
-    mensagem.className = "sucesso";
-
-  } else {
-
-    mensagem.textContent =
-      "⚠️ Falha na comunicação: " + resultado.mensagem;
-
-    mensagem.className = "erro";
-  }*/
-
+// Verificar comunicação ao abrir a carteira
 QC_testarConexaoServidor().then(function(resultado) {
 
   if (resultado.status === "OK") {
@@ -317,5 +308,6 @@ QC_testarConexaoServidor().then(function(resultado) {
   }
 
 });
+
 
 
