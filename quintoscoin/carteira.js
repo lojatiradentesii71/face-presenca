@@ -1203,3 +1203,119 @@ function QC_adicionarOlhinhosSenhas() {
 QC_adicionarOlhinhosSenhas();
 
 
+/* QUINTOSCOIN - FORMULÁRIO ESQUECI MINHA SENHA */
+
+function QC_abrirRecuperacaoSenha() {
+
+  document.getElementById("formAtivacao")
+    .style.display = "none";
+
+  document.getElementById("formLogin")
+    .style.display = "none";
+
+  document.getElementById("formRecuperarSenha")
+    .style.display = "block";
+
+  document.getElementById("qcCodigoRecuperar").value = "";
+  document.getElementById("qcSenhaRecuperar").value = "";
+  document.getElementById("qcConfirmarSenhaRecuperar").value = "";
+
+  document.getElementById("qcMensagemRecuperacao")
+    .textContent = "";
+
+  document.getElementById("qcMensagemRecuperacao")
+    .className = "";
+}
+
+
+function QC_mensagemRecuperacao(texto, tipo) {
+
+  const mensagem = document.getElementById(
+    "qcMensagemRecuperacao"
+  );
+
+  mensagem.textContent =
+    (tipo === "erro" ? "⚠️ " : "✅ ") + texto;
+
+  mensagem.className = tipo;
+}
+
+
+document.getElementById("linkEsqueciSenha")
+  .addEventListener("click", function(evento) {
+
+    evento.preventDefault();
+
+    QC_abrirRecuperacaoSenha();
+
+  });
+
+
+document.getElementById("linkVoltarLogin")
+  .addEventListener("click", function(evento) {
+
+    evento.preventDefault();
+
+    document.getElementById("formRecuperarSenha")
+      .style.display = "none";
+
+    QC_mostrarLogin();
+
+  });
+
+
+document.getElementById("btnRedefinirSenha")
+  .addEventListener("click", function() {
+
+    const codigo = document.getElementById(
+      "qcCodigoRecuperar"
+    ).value.trim().toUpperCase();
+
+    const senha = document.getElementById(
+      "qcSenhaRecuperar"
+    ).value;
+
+    const confirmar = document.getElementById(
+      "qcConfirmarSenhaRecuperar"
+    ).value;
+
+    const formatoCodigo =
+      /^[0-9A-F]{8}(?:-[0-9A-F]{8}){3}$/;
+
+    if (!formatoCodigo.test(codigo)) {
+
+      QC_mensagemRecuperacao(
+        "Informe um código de recuperação válido.",
+        "erro"
+      );
+
+      return;
+    }
+
+    if (senha.length < 6 || senha.length > 8) {
+
+      QC_mensagemRecuperacao(
+        "A nova senha deve ter entre 6 e 8 caracteres.",
+        "erro"
+      );
+
+      return;
+    }
+
+    if (senha !== confirmar) {
+
+      QC_mensagemRecuperacao(
+        "As senhas não conferem.",
+        "erro"
+      );
+
+      return;
+    }
+
+    QC_mensagemRecuperacao(
+      "Dados conferidos! A recuperação será conectada ao servidor no próximo passo.",
+      "sucesso"
+    );
+
+  });
+
