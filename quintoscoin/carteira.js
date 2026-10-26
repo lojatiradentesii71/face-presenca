@@ -132,6 +132,7 @@ function QC_mostrarMensagemAcesso(texto, tipo) {
 }
 
 let QC_ativacaoPendente = null;
+let QC_recuperacaoPendente = null;
 
 document.getElementById("btnAtivarCarteira")
   .addEventListener("click", function(evento) {
@@ -615,21 +616,115 @@ document.getElementById("qcConfirmouCodigo")
 
 
 
+
 document.getElementById("qcBtnContinuar")
   .addEventListener("click", async function() {
 
-    if (
-      !QC_ativacaoPendente ||
-      !document.getElementById("qcConfirmouCodigo").checked
-    ) {
+    const botao = document.getElementById(
+      "qcBtnContinuar"
+    );
+
+    const mensagem = document.getElementById(
+      "qcMensagemCopia"
+    );
+
+    const confirmou = document.getElementById(
+      "qcConfirmouCodigo"
+    ).checked;
+
+    if (!confirmou) {
       return;
     }
 
-    const botao = document.getElementById("qcBtnContinuar");
-    const mensagem = document.getElementById("qcMensagemCopia");
-
     botao.disabled = true;
-    mensagem.textContent = "Registrando carteira de teste...";
+
+    // =========================================
+    // RECUPERAÇÃO DE SENHA
+    // =========================================
+
+    if (QC_recuperacaoPendente) {
+
+      mensagem.textContent =
+        "Redefinindo senha de teste...";
+
+      try {
+
+        await QC_enviarRecuperacaoTeste(
+          QC_recuperacaoPendente
+        );
+
+        // Apagar o token local, caso exista.
+        sessionStorage.removeItem(
+          QC_CHAVE_SESSAO
+        );
+
+        // Limpar dados temporários.
+        QC_recuperacaoPendente = null;
+
+        document.getElementById(
+          "qcCodigoRecuperar"
+        ).value = "";
+
+        document.getElementById(
+          "qcSenhaRecuperar"
+        ).value = "";
+
+        document.getElementById(
+          "qcConfirmarSenhaRecuperar"
+        ).value = "";
+
+        // Fechar as telas de recuperação.
+        document.getElementById(
+          "telaRecuperacao"
+        ).style.display = "none";
+
+        document.getElementById(
+          "formRecuperarSenha"
+        ).style.display = "none";
+
+        // Retornar ao login.
+        QC_exibirTelaAcesso();
+        QC_mostrarLogin();
+
+        document.getElementById(
+          "qcSenhaLogin"
+        ).value = "";
+
+        QC_mostrarMensagemAcesso(
+          "Senha redefinida com sucesso! " +
+          "Entre utilizando sua nova senha.",
+          "sucesso"
+        );
+
+      } catch (erro) {
+
+        mensagem.style.color = "#ffcc80";
+
+        mensagem.textContent =
+          "⚠️ Não foi possível confirmar a redefinição: " +
+          erro.message +
+          ". Guarde o novo código apresentado.";
+
+      } finally {
+
+        botao.disabled = false;
+
+      }
+
+      return;
+    }
+
+    // =========================================
+    // PRIMEIRA ATIVAÇÃO
+    // =========================================
+
+    if (!QC_ativacaoPendente) {
+      botao.disabled = false;
+      return;
+    }
+
+    mensagem.textContent =
+      "Registrando carteira de teste...";
 
     try {
 
@@ -637,21 +732,28 @@ document.getElementById("qcBtnContinuar")
         QC_ativacaoPendente
       );
 
-      // Memorizar somente o identificador da carteira
       localStorage.setItem(
         QC_ID_LOCAL,
         resultado.idCarteira
       );
 
-      // Limpar senha e informações temporárias
       QC_ativacaoPendente = null;
 
-      document.getElementById("qcNovaSenha").value = "";
-      document.getElementById("qcConfirmarSenha").value = "";
-      document.getElementById("qcSenhaLogin").value = "";
+      document.getElementById(
+        "qcNovaSenha"
+      ).value = "";
 
-      document.getElementById("telaRecuperacao")
-        .style.display = "none";
+      document.getElementById(
+        "qcConfirmarSenha"
+      ).value = "";
+
+      document.getElementById(
+        "qcSenhaLogin"
+      ).value = "";
+
+      document.getElementById(
+        "telaRecuperacao"
+      ).style.display = "none";
 
       QC_exibirTelaAcesso();
       QC_mostrarLogin();
@@ -664,19 +766,21 @@ document.getElementById("qcBtnContinuar")
 
     } catch (erro) {
 
-      // Manter a tela e o código visíveis em caso de falha
+      mensagem.style.color = "#ffcc80";
+
       mensagem.textContent =
         "⚠️ Não foi possível confirmar a ativação: " +
         erro.message +
         ". Guarde o código apresentado.";
 
-      mensagem.style.color = "#ffcc80";
+    } finally {
 
       botao.disabled = false;
 
     }
 
   });
+
 
 
 
@@ -1264,14 +1368,21 @@ document.getElementById("linkVoltarLogin")
   });
 
 
-document.getElementById("btnRedefinirSenha")
-  .addEventListener("click", function() {
 
-    const codigo = document.getElementById(
+document.getElementById("btnRedefinirSenha")
+  .addEventListener("click", function(evento) {
+
+    evento.preventDefault();
+
+    const idCarteira = localStorage.getItem(
+      QC_ID_LOCAL
+    );
+
+    const codigoAtual = document.getElementById(
       "qcCodigoRecuperar"
     ).value.trim().toUpperCase();
 
-    const senha = document.getElementById(
+    const novaSenha = document.getElementById(
       "qcSenhaRecuperar"
     ).value;
 
@@ -1282,7 +1393,17 @@ document.getElementById("btnRedefinirSenha")
     const formatoCodigo =
       /^[0-9A-F]{8}(?:-[0-9A-F]{8}){3}$/;
 
-    if (!formatoCodigo.test(codigo)) {
+    if (!idCarteira) {
+
+      QC_mensagemRecuperacao(
+        "Carteira não identificada neste celular.",
+        "erro"
+      );
+
+      return;
+    }
+
+    if (!formatoCodigo.test(codigoAtual)) {
 
       QC_mensagemRecuperacao(
         "Informe um código de recuperação válido.",
@@ -1292,7 +1413,7 @@ document.getElementById("btnRedefinirSenha")
       return;
     }
 
-    if (senha.length < 6 || senha.length > 8) {
+    if (novaSenha.length < 6 || novaSenha.length > 8) {
 
       QC_mensagemRecuperacao(
         "A nova senha deve ter entre 6 e 8 caracteres.",
@@ -1302,7 +1423,7 @@ document.getElementById("btnRedefinirSenha")
       return;
     }
 
-    if (senha !== confirmar) {
+    if (novaSenha !== confirmar) {
 
       QC_mensagemRecuperacao(
         "As senhas não conferem.",
@@ -1312,10 +1433,67 @@ document.getElementById("btnRedefinirSenha")
       return;
     }
 
-    QC_mensagemRecuperacao(
-      "Dados conferidos! A recuperação será conectada ao servidor no próximo passo.",
-      "sucesso"
-    );
+    // Gerar novo código criptograficamente aleatório
+    const bytes = new Uint8Array(16);
+
+    window.crypto.getRandomValues(bytes);
+
+    const novoCodigo = Array.from(bytes)
+      .map(byte => byte.toString(16).padStart(2, "0"))
+      .join("")
+      .toUpperCase()
+      .match(/.{1,8}/g)
+      .join("-");
+
+    // Manter dados somente em memória
+    QC_recuperacaoPendente = {
+      idCarteira: idCarteira,
+      codigoAtual: codigoAtual,
+      novaSenha: novaSenha,
+      novoCodigo: novoCodigo
+    };
+
+    // Mostrar novo código antes de enviar
+    QC_exibirCodigoRecuperacao(novoCodigo);
 
   });
 
+
+
+async function QC_enviarRecuperacaoTeste(dados) {
+
+  const URL_APPS_SCRIPT =
+    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+  const resposta = await fetch(URL_APPS_SCRIPT, {
+    method: "POST",
+    redirect: "follow",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify({
+      acao: "qc_redefinir_senha_teste",
+      idCarteira: dados.idCarteira,
+      codigoAtual: dados.codigoAtual,
+      novaSenha: dados.novaSenha,
+      novoCodigo: dados.novoCodigo
+    })
+  });
+
+  if (!resposta.ok) {
+    throw new Error(
+      "Erro HTTP: " + resposta.status
+    );
+  }
+
+  const resultado = await resposta.json();
+
+  if (resultado.status !== "OK") {
+    throw new Error(
+      resultado.mensagem ||
+      "Não foi possível redefinir a senha."
+    );
+  }
+
+  return resultado;
+}
