@@ -99,19 +99,84 @@
 >
 
 
-    <button id="btnEntrarCarteira">
-      Entrar
-    </button>
+    
+<button id="btnEntrarCarteira">
+  Entrar
+</button>
 
-    <p>
-      <a href="#" id="linkPrimeiroAcesso">
-        Primeiro acesso
-      </a>
-    </p>
+<p>
+  <a href="#" id="linkEsqueciSenha">
+    🔑 Esqueci minha senha
+  </a>
+</p>
 
-  </div>
+<p>
+  <a href="#" id="linkPrimeiroAcesso">
+    Primeiro acesso
+  </a>
+</p>
 
-  <p id="qcMensagemAcesso"></p>
+
+ 
+</div>
+
+<!-- QUINTOSCOIN - ESQUECI MINHA SENHA -->
+<div id="formRecuperarSenha"
+     class="painel-acesso"
+     style="display:none;">
+
+  <h3>🔑 Recuperar acesso</h3>
+
+  <p>
+    Informe o código de recuperação que
+    você guardou ao ativar sua carteira.
+  </p>
+
+  <input
+    type="text"
+    id="qcCodigoRecuperar"
+    placeholder="Código de recuperação"
+    autocomplete="off"
+    autocapitalize="characters"
+    spellcheck="false"
+  >
+
+  <input
+    type="password"
+    id="qcSenhaRecuperar"
+    placeholder="Nova senha (6 a 8 caracteres)"
+    autocomplete="new-password"
+    minlength="6"
+    maxlength="8"
+  >
+
+  <input
+    type="password"
+    id="qcConfirmarSenhaRecuperar"
+    placeholder="Confirmar nova senha"
+    autocomplete="new-password"
+    minlength="6"
+    maxlength="8"
+  >
+
+  <p id="qcMensagemRecuperacao"
+     role="status"></p>
+
+  <button id="btnRedefinirSenha"
+          type="button">
+    Redefinir minha senha
+  </button>
+
+  <p>
+    <a href="#" id="linkVoltarLogin">
+      Voltar ao login
+    </a>
+  </p>
+
+</div>
+
+<p id="qcMensagemAcesso"></p>
+
 
 </section>
 
@@ -254,7 +319,7 @@ style="display:nome;">
 
   
   <script
-    src="carteira.js?v=29">
+    src="carteira.js?v=30">
     
   </script>
 
