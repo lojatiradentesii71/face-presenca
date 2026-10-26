@@ -782,28 +782,6 @@ document.getElementById("qcBtnContinuar")
   });
 
 
-
-
-// TESTE TEMPORÁRIO DA TELA DE RECUPERAÇÃO
-if (
-  new URLSearchParams(window.location.search)
-    .has("testeRecuperacao")
-) {
-
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-
-  const codigo = Array.from(bytes)
-    .map(b => b.toString(16).padStart(2, "0"))
-    .join("")
-    .toUpperCase()
-    .match(/.{1,8}/g)
-    .join("-");
-
-  QC_exibirCodigoRecuperacao(codigo);
-}
-
-
 // QUINTOSCOIN - ENCERRAR SESSÃO
 
 async function QC_enviarLogoutTeste(tokenSessao) {
