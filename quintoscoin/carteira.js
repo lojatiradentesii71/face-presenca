@@ -1574,3 +1574,94 @@ async function QC_enviarLoginAutomatico(idCarteira, senha) {
 }
 
 
+async function QC_enviarAlteracaoSenhaAutomatico(
+  tokenSessao,
+  senhaAtual,
+  novaSenha
+) {
+
+  const idCarteira = localStorage.getItem(
+    QC_ID_LOCAL
+  );
+
+  if (!idCarteira) {
+    throw new Error("Carteira não identificada.");
+  }
+
+  const parametros =
+    await QC_consultarParametrosLoginTeste(idCarteira);
+
+  if (parametros.status !== "OK") {
+    throw new Error(
+      parametros.mensagem ||
+      "Não foi possível consultar a carteira."
+    );
+  }
+
+  // CARTEIRAS COM ALGORITMO ANTIGO
+  if (parametros.algoritmo === "LEGADO_V1") {
+
+    return await QC_enviarAlteracaoSenhaAutomatico(
+      tokenSessao,
+      senhaAtual,
+      novaSenha
+    );
+
+  }
+
+  // CARTEIRAS COM PBKDF2
+  if (parametros.algoritmo === "PBKDF2_V2") {
+
+    if (
+      !/^[0-9a-f]{32}$/i.test(parametros.salt) ||
+      parametros.iteracoes !== 600000
+    ) {
+      throw new Error("Parâmetros PBKDF2 inválidos.");
+    }
+
+    // Confirmar senha atual.
+    const derivadoAtual = await QC_derivarSenhaV2(
+      senhaAtual,
+      parametros.salt
+    );
+
+    // Nova senha com salt exclusivo.
+    const saltNovo = QC_gerarSaltSenhaV2();
+
+    const derivadoNovo = await QC_derivarSenhaV2(
+      novaSenha,
+      saltNovo
+    );
+
+    const URL_SCRIPT =
+      "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+    const resposta = await fetch(URL_SCRIPT, {
+      method: "POST",
+      redirect: "follow",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify({
+        acao: "qc_alterar_senha_v2_teste",
+        tokenSessao: tokenSessao,
+        derivadoAtual: derivadoAtual,
+        derivadoNovo: derivadoNovo,
+        saltNovo: saltNovo
+      })
+    });
+
+    if (!resposta.ok) {
+      throw new Error(
+        "Erro de comunicação: " + resposta.status
+      );
+    }
+
+    return await resposta.json();
+  }
+
+  throw new Error(
+    "Algoritmo de senha não reconhecido."
+  );
+}
+
