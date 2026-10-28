@@ -160,10 +160,10 @@ document.getElementById("btnAtivarCarteira")
       return;
     }
 
-    if (senha.length < 6 || senha.length > 8) {
+    if (senha.length < 6) {
       campoSenha.classList.add("campo-erro");
       QC_mostrarMensagemAcesso(
-        "A senha deve ter entre 6 e 8 caracteres.",
+        ""A senha deve ter pelo menos 6 caracteres.",
         "erro"
       );
       return;
@@ -1107,9 +1107,9 @@ document.getElementById("btnConfirmarTrocaSenha")
       return;
     }
 
-    if (nova.length < 6 || nova.length > 8) {
+    if (nova.length < 6) {
       QC_mostrarMensagemTrocaSenha(
-        "A nova senha deve ter entre 6 e 8 caracteres.",
+        ""A senha deve ter pelo menos 6 caracteres.",
         "erro"
       );
       return;
@@ -1391,10 +1391,10 @@ document.getElementById("btnRedefinirSenha")
       return;
     }
 
-    if (novaSenha.length < 6 || novaSenha.length > 8) {
+    if (novaSenha.length < 6) {
 
       QC_mensagemRecuperacao(
-        "A nova senha deve ter entre 6 e 8 caracteres.",
+        "A senha deve ter pelo menos 6 caracteres.",
         "erro"
       );
 
