@@ -342,7 +342,7 @@ document.getElementById("btnEntrarCarteira")
 
     try {
 
-      const resultado = await QC_enviarLoginTeste(
+      const resultado = await QC_enviarLoginAutomatico(
         idCarteira,
         senha
       );
@@ -1503,5 +1503,74 @@ async function QC_consultarParametrosLoginTeste(idCarteira) {
   return await resposta.json();
 }
 
+
+async function QC_enviarLoginAutomatico(idCarteira, senha) {
+
+  // Identificar o algoritmo da carteira.
+  const parametros =
+    await QC_consultarParametrosLoginTeste(idCarteira);
+
+  if (parametros.status !== "OK") {
+    return parametros;
+  }
+
+  // LOGIN ANTIGO: manter o funcionamento existente.
+  if (parametros.algoritmo === "LEGADO_V1") {
+
+    return await QC_enviarLoginTeste(
+      idCarteira,
+      senha
+    );
+  }
+
+  // LOGIN NOVO: PBKDF2_V2.
+  if (parametros.algoritmo === "PBKDF2_V2") {
+
+    if (
+      !/^[0-9a-f]{32}$/i.test(parametros.salt) ||
+      parametros.iteracoes !== 600000
+    ) {
+      return {
+        status: "ERRO",
+        mensagem: "Parâmetros da senha V2 inválidos."
+      };
+    }
+
+    // Calcular a credencial no Android.
+    const derivadoHex = await QC_derivarSenhaV2(
+      senha,
+      parametros.salt
+    );
+
+    const URL_SCRIPT =
+      "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+    const resposta = await fetch(URL_SCRIPT, {
+      method: "POST",
+      redirect: "follow",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify({
+        acao: "qc_login_v2_teste",
+        idCarteira: idCarteira,
+        derivadoHex: derivadoHex
+      })
+    });
+
+    if (!resposta.ok) {
+      throw new Error(
+        "Erro de comunicação: " + resposta.status
+      );
+    }
+
+    return await resposta.json();
+  }
+
+  return {
+    status: "ERRO",
+    mensagem: "Algoritmo de senha desconhecido."
+  };
+}
 
 
