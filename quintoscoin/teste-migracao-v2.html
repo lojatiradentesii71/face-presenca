@@ -1,0 +1,218 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1">
+
+  <title>QuintosCoin - Migração V2</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #101827;
+      color: white;
+      padding: 25px;
+      text-align: center;
+    }
+
+    input {
+      box-sizing: border-box;
+      width: 100%;
+      max-width: 340px;
+      padding: 14px;
+      margin: 15px 0;
+      border-radius: 8px;
+      border: 1px solid #777;
+      font-size: 17px;
+    }
+
+    button {
+      padding: 15px 22px;
+      border: none;
+      border-radius: 10px;
+      background: #d6ac54;
+      color: #111;
+      font-weight: bold;
+      font-size: 16px;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+    }
+
+    #resultado {
+      margin-top: 25px;
+      line-height: 1.7;
+      white-space: pre-line;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h2>QuintosCoin</h2>
+  <h3>Preparação da senha V2</h3>
+
+  <p>
+    Teste de migração PBKDF2.
+    A senha atual será preservada.
+  </p>
+
+  <input
+    type="password"
+    id="senhaAtual"
+    placeholder="Senha atual da carteira"
+    minlength="6"
+    maxlength="8"
+    autocomplete="current-password"
+  >
+
+  <p>
+    <button id="btnPreparar"
+            onclick="prepararMigracao()">
+      Preparar migração
+    </button>
+  </p>
+
+  <div id="resultado">
+    Aguardando...
+  </div>
+
+  <script src="qc-criptografia.js?v=1"></script>
+
+  <script>
+
+    const URL_SCRIPT =
+      "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+    async function prepararMigracao() {
+
+      const botao = document.getElementById(
+        "btnPreparar"
+      );
+
+      const campoSenha = document.getElementById(
+        "senhaAtual"
+      );
+
+      const saida = document.getElementById(
+        "resultado"
+      );
+
+      const senha = campoSenha.value;
+
+      const idCarteira = localStorage.getItem(
+        "QC_ID_CARTEIRA"
+      );
+
+      const token = sessionStorage.getItem(
+        "QC_TOKEN_SESSAO_TESTE"
+      );
+
+      if (!idCarteira || !token) {
+
+        saida.textContent =
+          "⚠️ Entre na carteira primeiro e " +
+          "abra este teste na mesma aba.";
+
+        return;
+      }
+
+      if (senha.length < 6 || senha.length > 8) {
+
+        saida.textContent =
+          "⚠️ Informe sua senha atual de 6 a 8 caracteres.";
+
+        return;
+      }
+
+      botao.disabled = true;
+
+      saida.textContent =
+        "Gerando credencial PBKDF2...";
+
+      try {
+
+        // Gerar salt exclusivo para esta credencial.
+        const saltHex = QC_gerarSaltSenhaV2();
+
+        // Calcular PBKDF2 no próprio Android.
+        const derivadoHex = await QC_derivarSenhaV2(
+          senha,
+          saltHex
+        );
+
+        saida.textContent =
+          "Enviando preparação ao Apps Script...";
+
+        const resposta = await fetch(URL_SCRIPT, {
+
+          method: "POST",
+
+          redirect: "follow",
+
+          headers: {
+            "Content-Type": "text/plain;charset=utf-8"
+          },
+
+          body: JSON.stringify({
+            acao: "qc_preparar_migracao_v2_teste",
+            tokenSessao: token,
+            senhaAtual: senha,
+            derivadoHex: derivadoHex,
+            saltHex: saltHex
+          })
+
+        });
+
+        if (!resposta.ok) {
+          throw new Error(
+            "Erro HTTP: " + resposta.status
+          );
+        }
+
+        const resultado = await resposta.json();
+
+        if (resultado.status !== "OK") {
+
+          throw new Error(
+            resultado.mensagem ||
+            "Preparação não autorizada."
+          );
+
+        }
+
+        saida.textContent =
+          "✅ Preparação V2 concluída!\n\n" +
+          "A senha antiga continua funcionando.\n" +
+          "O novo verificador foi registrado " +
+          "nas colunas temporárias Q e R.";
+
+        // Impedir uma segunda preparação nesta página.
+        botao.textContent = "Preparação concluída";
+
+      } catch (erro) {
+
+        saida.textContent =
+          "⚠️ " + erro.message +
+          "\n\nSe houve erro de comunicação, " +
+          "confira as colunas Q e R antes de tentar novamente.";
+
+        botao.disabled = false;
+
+      } finally {
+
+        // Não manter a senha no formulário.
+        campoSenha.value = "";
+
+      }
+    }
+
+  </script>
+
+</body>
+</html>
