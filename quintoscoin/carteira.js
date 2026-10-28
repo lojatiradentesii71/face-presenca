@@ -163,7 +163,7 @@ document.getElementById("btnAtivarCarteira")
     if (senha.length < 6) {
       campoSenha.classList.add("campo-erro");
       QC_mostrarMensagemAcesso(
-        ""A senha deve ter pelo menos 6 caracteres.",
+        "A senha deve ter pelo menos 6 caracteres.",
         "erro"
       );
       return;
@@ -1109,7 +1109,7 @@ document.getElementById("btnConfirmarTrocaSenha")
 
     if (nova.length < 6) {
       QC_mostrarMensagemTrocaSenha(
-        ""A senha deve ter pelo menos 6 caracteres.",
+        "A senha deve ter pelo menos 6 caracteres.",
         "erro"
       );
       return;
