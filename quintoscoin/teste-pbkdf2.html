@@ -59,78 +59,81 @@
     Aguardando teste...
   </div>
 
-  <script>
-    async function testar() {
+  
+<script src="qc-criptografia.js?v=1"></script>
 
-      const botao = document.getElementById("btnTeste");
-      const saida = document.getElementById("resultado");
+<script>
+  async function testar() {
 
-      botao.disabled = true;
-      saida.textContent = "Executando PBKDF2...";
+    const botao = document.getElementById("btnTeste");
+    const saida = document.getElementById("resultado");
 
-      try {
+    botao.disabled = true;
+    saida.textContent = "Testando criptografia V2...";
 
-        if (!window.crypto || !crypto.subtle) {
-          throw new Error(
-            "Criptografia nativa indisponível neste navegador."
-          );
-        }
+    try {
 
-        const senhaFicticia = "QcTeste123";
+      const senhaFicticia = "Teste123";
 
-        const bytes = new TextEncoder().encode(
-          senhaFicticia
-        );
+      const salt1 = QC_gerarSaltSenhaV2();
+      const salt2 = QC_gerarSaltSenhaV2();
 
-        const salt = crypto.getRandomValues(
-          new Uint8Array(16)
-        );
+      const inicio = performance.now();
 
-        const chave = await crypto.subtle.importKey(
-          "raw",
-          bytes,
-          "PBKDF2",
-          false,
-          ["deriveBits"]
-        );
+      const resultado1 = await QC_derivarSenhaV2(
+        senhaFicticia,
+        salt1
+      );
 
-        const inicio = performance.now();
+      const tempo = (
+        (performance.now() - inicio) / 1000
+      ).toFixed(2);
 
-        const resultado = await crypto.subtle.deriveBits(
-          {
-            name: "PBKDF2",
-            salt: salt,
-            iterations: 600000,
-            hash: "SHA-256"
-          },
-          chave,
-          256
-        );
+      const resultado2 = await QC_derivarSenhaV2(
+        senhaFicticia,
+        salt1
+      );
 
-        const tempo = performance.now() - inicio;
+      const resultado3 = await QC_derivarSenhaV2(
+        senhaFicticia,
+        salt2
+      );
 
-        saida.textContent =
-          "✅ Teste concluído!" +
-          "\n\nTempo: " +
-          (tempo / 1000).toFixed(2) +
-          " segundos" +
-          "\n\nIterações: 600.000" +
-          "\nResultado: " +
-          (resultado.byteLength * 8) +
-          " bits";
+      const mesmoSalt =
+        resultado1 === resultado2;
 
-      } catch (erro) {
+      const saltDiferente =
+        resultado1 !== resultado3;
 
-        saida.textContent =
-          "❌ Erro: " + erro.message;
+      const tamanhoCorreto =
+        resultado1.length === 64;
 
-      } finally {
+      saida.textContent =
+        "Tempo da primeira derivação: " +
+        tempo + " segundo(s)\n\n" +
 
-        botao.disabled = false;
+        "Mesmo salt e mesma senha: " +
+        (mesmoSalt ? "OK" : "ERRO") + "\n" +
 
-      }
+        "Salt diferente: " +
+        (saltDiferente ? "OK" : "ERRO") + "\n" +
+
+        "Resultado de 256 bits: " +
+        (tamanhoCorreto ? "OK" : "ERRO");
+
+    } catch (erro) {
+
+      saida.textContent =
+        "ERRO: " + erro.message;
+
+    } finally {
+
+      botao.disabled = false;
+
     }
-  </script>
+  }
+</script>
+
 
 </body>
 </html>
