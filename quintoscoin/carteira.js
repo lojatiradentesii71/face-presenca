@@ -1475,3 +1475,86 @@ async function QC_enviarRecuperacaoTeste(dados) {
 
   return resultado;
 }
+
+
+async function QC_consultarParametrosLoginTeste(idCarteira) {
+
+  const URL_APPS_SCRIPT =
+    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+  const resposta = await fetch(URL_APPS_SCRIPT, {
+    method: "POST",
+    redirect: "follow",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify({
+      acao: "qc_parametros_login_teste",
+      idCarteira: idCarteira
+    })
+  });
+
+  if (!resposta.ok) {
+    throw new Error(
+      "Erro de comunicação: " + resposta.status
+    );
+  }
+
+  return await resposta.json();
+}
+
+
+// TESTE TEMPORÁRIO - CONSULTA DO ALGORITMO
+if (
+  new URLSearchParams(window.location.search)
+    .get("testeParametros") === "1"
+) {
+
+  document.addEventListener(
+    "DOMContentLoaded",
+    async function() {
+
+      const idCarteira = localStorage.getItem(
+        QC_ID_LOCAL
+      );
+
+      if (!idCarteira) {
+        alert(
+          "TESTE V2: Carteira não encontrada neste celular."
+        );
+        return;
+      }
+
+      try {
+
+        const resultado =
+          await QC_consultarParametrosLoginTeste(
+            idCarteira
+          );
+
+        if (resultado.status !== "OK") {
+          alert(
+            "TESTE V2: " +
+            (resultado.mensagem || resultado.status)
+          );
+          return;
+        }
+
+        alert(
+          "TESTE V2\n\n" +
+          "Status: " + resultado.status + "\n" +
+          "Algoritmo: " + resultado.algoritmo + "\n" +
+          "Iterações: " + resultado.iteracoes
+        );
+
+      } catch (erro) {
+
+        alert(
+          "TESTE V2 - Erro: " + erro.message
+        );
+
+      }
+    }
+  );
+}
+
