@@ -1,0 +1,217 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1">
+
+  <title>QuintosCoin - Validação V2</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #101827;
+      color: white;
+      padding: 25px;
+      text-align: center;
+    }
+
+    input {
+      display: block;
+      box-sizing: border-box;
+      width: 100%;
+      max-width: 360px;
+      padding: 14px;
+      margin: 14px auto;
+      border-radius: 8px;
+      border: 1px solid #777;
+      font-size: 16px;
+    }
+
+    button {
+      padding: 15px 22px;
+      border: none;
+      border-radius: 10px;
+      background: #d6ac54;
+      color: #111;
+      font-size: 16px;
+      font-weight: bold;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+    }
+
+    #resultado {
+      margin-top: 25px;
+      white-space: pre-line;
+      line-height: 1.7;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h2>QuintosCoin</h2>
+  <h3>Validação PBKDF2 V2</h3>
+
+  <p>
+    Testar a credencial V2 pendente
+    sem substituir a senha atual.
+  </p>
+
+  <input
+    type="text"
+    id="saltPendente"
+    placeholder="Salt da coluna R (32 caracteres)"
+    maxlength="32"
+    autocomplete="off"
+    autocapitalize="none"
+    spellcheck="false"
+  >
+
+  <input
+    type="password"
+    id="senha"
+    placeholder="Senha atual da carteira"
+    minlength="6"
+    maxlength="8"
+    autocomplete="current-password"
+  >
+
+  <button id="btnValidar" onclick="validarV2()">
+    Validar senha V2
+  </button>
+
+  <div id="resultado">
+    Aguardando validação...
+  </div>
+
+  <script src="qc-criptografia.js?v=1"></script>
+
+  <script>
+
+    const URL_SCRIPT =
+      "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+    async function validarV2() {
+
+      const botao =
+        document.getElementById("btnValidar");
+
+      const campoSenha =
+        document.getElementById("senha");
+
+      const saida =
+        document.getElementById("resultado");
+
+      const senha = campoSenha.value;
+
+      const salt = document.getElementById(
+        "saltPendente"
+      ).value.trim().toLowerCase();
+
+      const token = sessionStorage.getItem(
+        "QC_TOKEN_SESSAO_TESTE"
+      );
+
+      if (!token) {
+        saida.textContent =
+          "⚠️ Entre primeiro na carteira " +
+          "e abra esta página na mesma aba.";
+        return;
+      }
+
+      if (!/^[0-9a-f]{32}$/.test(salt)) {
+        saida.textContent =
+          "⚠️ Salt inválido. Copie os 32 " +
+          "caracteres da coluna R.";
+        return;
+      }
+
+      if (senha.length < 6 || senha.length > 8) {
+        saida.textContent =
+          "⚠️ Informe a senha atual.";
+        return;
+      }
+
+      botao.disabled = true;
+
+      saida.textContent =
+        "Calculando PBKDF2 no Android...";
+
+      try {
+
+        const derivado = await QC_derivarSenhaV2(
+          senha,
+          salt
+        );
+
+        saida.textContent =
+          "Verificando credencial no servidor...";
+
+        const resposta = await fetch(URL_SCRIPT, {
+          method: "POST",
+          redirect: "follow",
+          headers: {
+            "Content-Type": "text/plain;charset=utf-8"
+          },
+          body: JSON.stringify({
+            acao: "qc_validar_pendente_v2_teste",
+            tokenSessao: token,
+            derivadoHex: derivado
+          })
+        });
+
+        if (!resposta.ok) {
+          throw new Error(
+            "Erro HTTP: " + resposta.status
+          );
+        }
+
+        const resultado = await resposta.json();
+
+        if (resultado.status === "OK") {
+
+          saida.textContent =
+            "✅ CREDENCIAL V2 VALIDADA!\n\n" +
+            "O PBKDF2 calculado no Android " +
+            "corresponde ao verificador da planilha.\n\n" +
+            "A senha antiga permanece ativa.";
+
+        } else if (
+          resultado.status === "CREDENCIAL_INVALIDA"
+        ) {
+
+          saida.textContent =
+            "⚠️ CREDENCIAL V2 INCORRETA.\n\n" +
+            "A senha informada não corresponde " +
+            "ao verificador pendente.";
+
+        } else {
+
+          saida.textContent =
+            "⚠️ " +
+            (resultado.mensagem || resultado.status);
+
+        }
+
+      } catch (erro) {
+
+        saida.textContent =
+          "⚠️ Erro: " + erro.message;
+
+      } finally {
+
+        campoSenha.value = "";
+        botao.disabled = false;
+
+      }
+    }
+
+  </script>
+
+</body>
+</html>
