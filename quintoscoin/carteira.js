@@ -1146,7 +1146,7 @@ document.getElementById("btnConfirmarTrocaSenha")
 
     try {
 
-      const resultado = await QC_enviarAlteracaoSenha(
+      const resultado = await QC_enviarAlteracaoSenhaAutomatico(
         token,
         atual,
         nova
@@ -1598,16 +1598,18 @@ async function QC_enviarAlteracaoSenhaAutomatico(
     );
   }
 
+  
   // CARTEIRAS COM ALGORITMO ANTIGO
   if (parametros.algoritmo === "LEGADO_V1") {
 
-    return await QC_enviarAlteracaoSenhaAutomatico(
+    return await QC_enviarAlteracaoSenha(
       tokenSessao,
       senhaAtual,
       novaSenha
     );
 
   }
+
 
   // CARTEIRAS COM PBKDF2
   if (parametros.algoritmo === "PBKDF2_V2") {
