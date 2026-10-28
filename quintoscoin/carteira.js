@@ -649,7 +649,7 @@ document.getElementById("qcBtnContinuar")
 
       try {
 
-        await QC_enviarRecuperacaoTeste(
+        await QC_enviarRecuperacaoAutomatico(
           QC_recuperacaoPendente
         );
 
@@ -1665,3 +1665,87 @@ async function QC_enviarAlteracaoSenhaAutomatico(
   );
 }
 
+
+async function QC_enviarRecuperacaoAutomatico(dados) {
+
+  const parametros =
+    await QC_consultarParametrosLoginTeste(
+      dados.idCarteira
+    );
+
+  if (parametros.status !== "OK") {
+    throw new Error(
+      parametros.mensagem ||
+      "Não foi possível consultar a carteira."
+    );
+  }
+
+  // RECUPERAÇÃO PELO ALGORITMO ANTIGO
+  if (parametros.algoritmo === "LEGADO_V1") {
+
+    return await QC_enviarRecuperacaoTeste(dados);
+
+  }
+
+  // RECUPERAÇÃO PELO NOVO ALGORITMO
+  if (parametros.algoritmo === "PBKDF2_V2") {
+
+    if (
+      !/^[0-9a-f]{32}$/i.test(parametros.salt) ||
+      parametros.iteracoes !== 600000
+    ) {
+      throw new Error(
+        "Parâmetros PBKDF2 inválidos."
+      );
+    }
+
+    // Criar um salt novo para a nova senha.
+    const saltNovo = QC_gerarSaltSenhaV2();
+
+    // Calcular a nova credencial no Android.
+    const derivadoNovo = await QC_derivarSenhaV2(
+      dados.novaSenha,
+      saltNovo
+    );
+
+    const URL_SCRIPT =
+      "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+    const resposta = await fetch(URL_SCRIPT, {
+      method: "POST",
+      redirect: "follow",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify({
+        acao: "qc_redefinir_senha_v2_teste",
+        idCarteira: dados.idCarteira,
+        codigoAtual: dados.codigoAtual,
+        derivadoNovo: derivadoNovo,
+        saltNovo: saltNovo,
+        novoCodigo: dados.novoCodigo
+      })
+    });
+
+    if (!resposta.ok) {
+      throw new Error(
+        "Erro de comunicação: " + resposta.status
+      );
+    }
+
+    const resultado = await resposta.json();
+
+    if (resultado.status !== "OK") {
+      throw new Error(
+        resultado.mensagem ||
+        "Não foi possível recuperar a senha."
+      );
+    }
+
+    return resultado;
+  }
+
+  throw new Error(
+    "Algoritmo de senha não reconhecido."
+  );
+}
