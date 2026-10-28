@@ -113,11 +113,15 @@
         "saltPendente"
       ).value.trim().toLowerCase();
 
-      const token = sessionStorage.getItem(
-        "QC_TOKEN_SESSAO_TESTE"
-      );
+     const token = sessionStorage.getItem(
+  "QC_TOKEN_SESSAO_TESTE"
+);
 
-      if (!token) {
+const idCarteira = localStorage.getItem(
+  "QC_ID_CARTEIRA"
+);
+
+      if (!token || !idCarteira) {
         saida.textContent =
           "⚠️ Entre primeiro na carteira " +
           "e abra esta página na mesma aba.";
@@ -159,10 +163,10 @@
             "Content-Type": "text/plain;charset=utf-8"
           },
           body: JSON.stringify({
-            acao: "qc_validar_pendente_v2_teste",
-            tokenSessao: token,
-            derivadoHex: derivado
-          })
+  acao: "qc_login_v2_teste",
+  idCarteira: idCarteira,
+  derivadoHex: derivado
+})
         });
 
         if (!resposta.ok) {
@@ -173,13 +177,16 @@
 
         const resultado = await resposta.json();
 
-        if (resultado.status === "OK") {
+        if (
+  resultado.status === "OK" &&
+  resultado.tokenSessao
+) {
 
           saida.textContent =
-            "✅ CREDENCIAL V2 VALIDADA!\n\n" +
-            "O PBKDF2 calculado no Android " +
-            "corresponde ao verificador da planilha.\n\n" +
-            "A senha antiga permanece ativa.";
+  "✅ LOGIN PBKDF2 V2 APROVADO!\n\n" +
+  "Credencial validada pelo servidor.\n" +
+  "Token de sessão criado com sucesso.\n\n" +
+  "A senha antiga continua funcionando.";
 
         } else if (
           resultado.status === "CREDENCIAL_INVALIDA"
