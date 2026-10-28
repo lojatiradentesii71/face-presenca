@@ -1,0 +1,136 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1">
+  <title>Teste PBKDF2 - QuintosCoin</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #101827;
+      color: white;
+      padding: 25px;
+      text-align: center;
+    }
+
+    button {
+      padding: 16px 22px;
+      border: 0;
+      border-radius: 10px;
+      background: #d6ac54;
+      color: #111;
+      font-weight: bold;
+      font-size: 16px;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+    }
+
+    #resultado {
+      margin-top: 25px;
+      line-height: 1.8;
+      white-space: pre-line;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h2>QuintosCoin</h2>
+  <h3>Teste de velocidade PBKDF2</h3>
+
+  <p>
+    600.000 iterações HMAC-SHA256
+  </p>
+
+  <p>
+    Este teste usa uma senha fictícia.
+  </p>
+
+  <button id="btnTeste" onclick="testar()">
+    Iniciar teste
+  </button>
+
+  <div id="resultado">
+    Aguardando teste...
+  </div>
+
+  <script>
+    async function testar() {
+
+      const botao = document.getElementById("btnTeste");
+      const saida = document.getElementById("resultado");
+
+      botao.disabled = true;
+      saida.textContent = "Executando PBKDF2...";
+
+      try {
+
+        if (!window.crypto || !crypto.subtle) {
+          throw new Error(
+            "Criptografia nativa indisponível neste navegador."
+          );
+        }
+
+        const senhaFicticia = "QcTeste123";
+
+        const bytes = new TextEncoder().encode(
+          senhaFicticia
+        );
+
+        const salt = crypto.getRandomValues(
+          new Uint8Array(16)
+        );
+
+        const chave = await crypto.subtle.importKey(
+          "raw",
+          bytes,
+          "PBKDF2",
+          false,
+          ["deriveBits"]
+        );
+
+        const inicio = performance.now();
+
+        const resultado = await crypto.subtle.deriveBits(
+          {
+            name: "PBKDF2",
+            salt: salt,
+            iterations: 600000,
+            hash: "SHA-256"
+          },
+          chave,
+          256
+        );
+
+        const tempo = performance.now() - inicio;
+
+        saida.textContent =
+          "✅ Teste concluído!" +
+          "\n\nTempo: " +
+          (tempo / 1000).toFixed(2) +
+          " segundos" +
+          "\n\nIterações: 600.000" +
+          "\nResultado: " +
+          (resultado.byteLength * 8) +
+          " bits";
+
+      } catch (erro) {
+
+        saida.textContent =
+          "❌ Erro: " + erro.message;
+
+      } finally {
+
+        botao.disabled = false;
+
+      }
+    }
+  </script>
+
+</body>
+</html>
