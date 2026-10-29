@@ -2105,12 +2105,100 @@ membro.style.color = "#ffffff";
           data.textContent =
             "Data: " + pedido.dataSolicitacao;
 
-          const situacao = document.createElement("p");
-          situacao.textContent =
-            "⏳ Aguardando confirmação de pagamento";
+          
+const situacao = document.createElement("p");
+situacao.textContent =
+  "⏳ Aguardando confirmação de pagamento";
 
-          item.append(titulo, membro, data, situacao);
-          lista.appendChild(item);
+// Botão de autorização.
+const botaoAprovar = document.createElement("button");
+
+botaoAprovar.type = "button";
+botaoAprovar.className = "qc-btn-aprovar-pedido";
+botaoAprovar.textContent =
+  "Confirmar pagamento e autorizar";
+
+botaoAprovar.addEventListener("click", async function() {
+
+  const nome = pedido.nome || "Solicitante";
+
+  const confirmado = window.confirm(
+    "CONFIRMAÇÃO DE PAGAMENTO\n\n" +
+    "Solicitante: " + nome + "\n" +
+    "Quantidade: " + pedido.valor + " QC\n\n" +
+    "Você confirma que o pagamento Pix " +
+    "já foi recebido e conferido?\n\n" +
+    "OK = Autorizar solicitação\n" +
+    "Cancelar = Não autorizar"
+  );
+
+  if (!confirmado) {
+    return;
+  }
+
+  const token = sessionStorage.getItem(
+    QC_CHAVE_SESSAO
+  );
+
+  if (!token) {
+    mensagem.textContent =
+      "⚠️ Sessão expirada. Entre novamente.";
+    return;
+  }
+
+  botaoAprovar.disabled = true;
+  botaoAprovar.textContent = "Autorizando...";
+  mensagem.textContent = "";
+
+  try {
+
+    const resultado = await QC_enviarAutorizacaoPedido(
+      token,
+      pedido.idAutorizacao
+    );
+
+    if (resultado.status !== "AUTORIZADA") {
+      throw new Error(
+        resultado.mensagem ||
+        "Não foi possível autorizar o pedido."
+      );
+    }
+
+    // Atualizar a lista e o indicador.
+    await QC_atualizarAreaTesoureiro(true);
+
+    mensagem.textContent =
+      "✅ Solicitação de " + nome +
+      " autorizada com sucesso! " +
+      "A emissão dos QCs ainda está pendente.";
+
+  } catch (erro) {
+
+    mensagem.textContent =
+      "⚠️ " + erro.message +
+      " Confira a situação do pedido antes " +
+      "de tentar novamente.";
+
+  } finally {
+
+    botaoAprovar.disabled = false;
+    botaoAprovar.textContent =
+      "Confirmar pagamento e autorizar";
+
+  }
+
+});
+
+item.append(
+  titulo,
+  membro,
+  data,
+  situacao,
+  botaoAprovar
+);
+
+lista.appendChild(item);
+
 
         });
 
@@ -2150,3 +2238,35 @@ document.getElementById("qcBtnPedidosTesoureiro")
     await QC_atualizarAreaTesoureiro(true);
 
   });
+
+
+async function QC_enviarAutorizacaoPedido(
+  tokenSessao,
+  idAutorizacao
+) {
+
+  const URL_APPS_SCRIPT =
+    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+  const resposta = await fetch(URL_APPS_SCRIPT, {
+    method: "POST",
+    redirect: "follow",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify({
+      acao: "qc_autorizar_pedido",
+      tokenSessao: tokenSessao,
+      idAutorizacao: idAutorizacao
+    })
+  });
+
+  if (!resposta.ok) {
+    throw new Error(
+      "Falha na comunicação: HTTP " + resposta.status
+    );
+  }
+
+  return await resposta.json();
+}
+
