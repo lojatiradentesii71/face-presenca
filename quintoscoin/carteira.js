@@ -266,31 +266,6 @@ async function QC_enviarAtivacaoV2(dados) {
 
 
 
-async function QC_enviarLoginTeste(idCarteira, senha) {
-
-  const URL_APPS_SCRIPT =
-    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-
-  const resposta = await fetch(URL_APPS_SCRIPT, {
-    method: "POST",
-    redirect: "follow",
-    headers: {
-      "Content-Type": "text/plain;charset=utf-8"
-    },
-    body: JSON.stringify({
-      acao: "qc_login_teste",
-      idCarteira: idCarteira,
-      senha: senha
-    })
-  });
-
-  if (!resposta.ok) {
-    throw new Error("Erro HTTP: " + resposta.status);
-  }
-
-  return await resposta.json();
-}
-
 
 const QC_CHAVE_SESSAO = "QC_TOKEN_SESSAO_TESTE";
 
@@ -1007,36 +982,6 @@ QC_mostrarMensagemAcesso(
 QC_restaurarSessaoTeste();
 
 
-async function QC_enviarAlteracaoSenha(
-  tokenSessao,
-  senhaAtual,
-  novaSenha
-) {
-
-  const URL_APPS_SCRIPT =
-    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-
-  const resposta = await fetch(URL_APPS_SCRIPT, {
-    method: "POST",
-    redirect: "follow",
-    headers: {
-      "Content-Type": "text/plain;charset=utf-8"
-    },
-    body: JSON.stringify({
-      acao: "qc_alterar_senha_teste",
-      tokenSessao: tokenSessao,
-      senhaAtual: senhaAtual,
-      novaSenha: novaSenha
-    })
-  });
-
-  if (!resposta.ok) {
-    throw new Error("Erro HTTP: " + resposta.status);
-  }
-
-  return await resposta.json();
-}
-
 
 // QUINTOSCOIN - INTERFACE DE ALTERAÇÃO DE SENHA
 
@@ -1460,44 +1405,6 @@ document.getElementById("btnRedefinirSenha")
   });
 
 
-
-async function QC_enviarRecuperacaoTeste(dados) {
-
-  const URL_APPS_SCRIPT =
-    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-
-  const resposta = await fetch(URL_APPS_SCRIPT, {
-    method: "POST",
-    redirect: "follow",
-    headers: {
-      "Content-Type": "text/plain;charset=utf-8"
-    },
-    body: JSON.stringify({
-      acao: "qc_redefinir_senha_teste",
-      idCarteira: dados.idCarteira,
-      codigoAtual: dados.codigoAtual,
-      novaSenha: dados.novaSenha,
-      novoCodigo: dados.novoCodigo
-    })
-  });
-
-  if (!resposta.ok) {
-    throw new Error(
-      "Erro HTTP: " + resposta.status
-    );
-  }
-
-  const resultado = await resposta.json();
-
-  if (resultado.status !== "OK") {
-    throw new Error(
-      resultado.mensagem ||
-      "Não foi possível redefinir a senha."
-    );
-  }
-
-  return resultado;
-}
 
 
 async function QC_consultarParametrosLoginTeste(idCarteira) {
