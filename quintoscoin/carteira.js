@@ -2094,8 +2094,12 @@ async function QC_atualizarAreaTesoureiro(abrirLista = false) {
             pedido.valor + " QC solicitados";
 
           const membro = document.createElement("p");
-          membro.textContent =
-            "IdCadastro: " + pedido.idCadastro;
+membro.textContent =
+  "Solicitante: " + pedido.nome;
+
+membro.style.fontWeight = "600";
+membro.style.fontSize = "15px";
+membro.style.color = "#ffffff";
 
           const data = document.createElement("p");
           data.textContent =
