@@ -553,3 +553,57 @@ html.qc-restaurando body::before {
   line-height: 1.4;
   color: #ffffff;
 }
+
+
+/* QUINTOSCOIN - CONFIRMAÇÃO DE SOLICITAÇÃO */
+
+.qc-aviso-solicitacao {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0 0 18px 0;
+  padding: 20px 16px;
+  border: 2px solid #e1bf63;
+  border-radius: 16px;
+  background: #1b304c;
+  color: #ffffff;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+
+.qc-aviso-solicitacao strong {
+  display: block;
+  color: #e1bf63;
+  font-size: 19px;
+  margin-bottom: 12px;
+}
+
+.qc-aviso-valor {
+  font-size: 25px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.qc-aviso-situacao {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f0cf77;
+}
+
+.qc-aviso-solicitacao p {
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 14px 0;
+}
+
+.qc-aviso-fechar {
+  margin-top: 8px;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 10px;
+  background: #e1bf63;
+  color: #11284a;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
