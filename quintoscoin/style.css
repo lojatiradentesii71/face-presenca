@@ -703,3 +703,28 @@ html.qc-restaurando body::before {
   color: #ffca76;
   font-size: 13px;
 }
+
+
+/* QUINTOSCOIN - BOTÃO DE AUTORIZAÇÃO */
+
+.qc-btn-aprovar-pedido {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 14px;
+  padding: 13px 10px;
+  background: #e7c76a;
+  color: #142237;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.qc-btn-aprovar-pedido:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
