@@ -2122,19 +2122,14 @@ botaoAprovar.addEventListener("click", async function() {
 
   const nome = pedido.nome || "Solicitante";
 
-  const confirmado = window.confirm(
-    "CONFIRMAÇÃO DE PAGAMENTO\n\n" +
-    "Solicitante: " + nome + "\n" +
-    "Quantidade: " + pedido.valor + " QC\n\n" +
-    "Você confirma que o pagamento Pix " +
-    "já foi recebido e conferido?\n\n" +
-    "OK = Autorizar solicitação\n" +
-    "Cancelar = Não autorizar"
-  );
+ const confirmado = await QC_confirmarPagamentoPedido(
+  nome,
+  pedido.valor
+);
 
-  if (!confirmado) {
-    return;
-  }
+if (!confirmado) {
+  return;
+}
 
   const token = sessionStorage.getItem(
     QC_CHAVE_SESSAO
@@ -2270,3 +2265,188 @@ async function QC_enviarAutorizacaoPedido(
   return await resposta.json();
 }
 
+
+function QC_confirmarPagamentoPedido(nome, valor) {
+
+  return new Promise(function(resolve) {
+
+    // Evitar duas janelas abertas ao mesmo tempo.
+    if (document.getElementById("qcModalAutorizarPedido")) {
+      resolve(false);
+      return;
+    }
+
+    const overlay = document.createElement("div");
+
+    overlay.id = "qcModalAutorizarPedido";
+    overlay.className = "qc-modal-autorizacao";
+
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute(
+      "aria-labelledby",
+      "qcTituloAutorizar"
+    );
+
+    overlay.innerHTML = `
+      <div class="qc-card-autorizacao">
+
+        <h3 id="qcTituloAutorizar">
+          🛡️ Confirmar pagamento
+        </h3>
+
+        <p class="qc-texto-autorizacao">
+          Confira os dados da solicitação
+          antes de autorizar.
+        </p>
+
+        <div class="qc-dados-autorizacao">
+
+          <span class="qc-rotulo-autorizacao">
+            SOLICITANTE
+          </span>
+
+          <strong id="qcNomeAutorizar"></strong>
+
+          <div class="qc-linha-autorizacao"></div>
+
+          <span class="qc-rotulo-autorizacao">
+            QUANTIDADE SOLICITADA
+          </span>
+
+          <strong
+            id="qcValorAutorizar"
+            class="qc-valor-autorizacao"
+          ></strong>
+
+        </div>
+
+        <p class="qc-alerta-autorizacao">
+          ⚠️ Confirme somente se o pagamento
+          Pix já foi recebido e conferido.
+        </p>
+
+        <button
+          type="button"
+          id="qcConfirmarAutorizacao"
+          class="qc-confirmar-autorizacao"
+        >
+          ✅ Confirmar e autorizar
+        </button>
+
+        <button
+          type="button"
+          id="qcCancelarAutorizacao"
+          class="qc-cancelar-autorizacao"
+        >
+          Cancelar
+        </button>
+
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    // Preencher os dados sem inserir texto do usuário
+    // diretamente no HTML.
+    document.getElementById("qcNomeAutorizar")
+      .textContent = nome;
+
+    document.getElementById("qcValorAutorizar")
+      .textContent = valor + " QC";
+
+    const confirmar = document.getElementById(
+      "qcConfirmarAutorizacao"
+    );
+
+    const cancelar = document.getElementById(
+      "qcCancelarAutorizacao"
+    );
+
+    const focoAnterior = document.activeElement;
+    const overflowAnterior = document.body.style.overflow;
+
+    document.body.style.overflow = "hidden";
+
+    let encerrado = false;
+
+    function encerrar(resultado) {
+
+      if (encerrado) {
+        return;
+      }
+
+      encerrado = true;
+
+      document.removeEventListener(
+        "keydown",
+        aoPressionarTecla
+      );
+
+      document.body.style.overflow = overflowAnterior;
+      overlay.remove();
+
+      if (
+        focoAnterior &&
+        focoAnterior.isConnected &&
+        typeof focoAnterior.focus === "function"
+      ) {
+        focoAnterior.focus();
+      }
+
+      resolve(resultado);
+    }
+
+    function aoPressionarTecla(evento) {
+
+      if (evento.key === "Escape") {
+        evento.preventDefault();
+        encerrar(false);
+      }
+
+      // Manter o foco dentro da janela.
+      if (evento.key === "Tab") {
+
+        const primeiro = confirmar;
+        const ultimo = cancelar;
+
+        if (evento.shiftKey &&
+            document.activeElement === primeiro) {
+          evento.preventDefault();
+          ultimo.focus();
+
+        } else if (
+          !evento.shiftKey &&
+          document.activeElement === ultimo
+        ) {
+          evento.preventDefault();
+          primeiro.focus();
+        }
+      }
+    }
+
+    confirmar.addEventListener("click", function() {
+      encerrar(true);
+    });
+
+    cancelar.addEventListener("click", function() {
+      encerrar(false);
+    });
+
+    overlay.addEventListener("click", function(evento) {
+      if (evento.target === overlay) {
+        encerrar(false);
+      }
+    });
+
+    document.addEventListener(
+      "keydown",
+      aoPressionarTecla
+    );
+
+    // Foco inicial no botão Cancelar, por segurança.
+    cancelar.focus();
+
+  });
+
+}
