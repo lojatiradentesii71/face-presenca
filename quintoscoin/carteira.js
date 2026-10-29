@@ -125,6 +125,70 @@ function QC_fecharModalReceber() {
   document.getElementById("qcMensagemReceber").textContent = "";
 }
 
+
+function QC_exibirConfirmacaoReceber(quantidade) {
+
+  const telaCarteira = document.getElementById(
+    "telaCarteira"
+  );
+
+  // Reutilizar o aviso, caso já exista.
+  let aviso = document.getElementById(
+    "qcAvisoSolicitacao"
+  );
+
+  if (!aviso) {
+
+    aviso = document.createElement("div");
+    aviso.id = "qcAvisoSolicitacao";
+    aviso.className = "qc-aviso-solicitacao";
+    aviso.setAttribute("role", "status");
+    aviso.setAttribute("tabindex", "-1");
+
+    telaCarteira.prepend(aviso);
+  }
+
+  // Montar a confirmação sem alterar o saldo.
+  aviso.replaceChildren();
+
+  const titulo = document.createElement("strong");
+  titulo.textContent = "✅ Solicitação registrada!";
+
+  const valor = document.createElement("div");
+  valor.className = "qc-aviso-valor";
+  valor.textContent = quantidade + " QC solicitados";
+
+  const situacao = document.createElement("div");
+  situacao.className = "qc-aviso-situacao";
+  situacao.textContent = "⏳ Status: PENDENTE";
+
+  const descricao = document.createElement("p");
+  descricao.textContent =
+    "Aguardando confirmação do pagamento e " +
+    "autorização do tesoureiro. " +
+    "Os QCs ainda não foram creditados.";
+
+  const fechar = document.createElement("button");
+  fechar.type = "button";
+  fechar.className = "qc-aviso-fechar";
+  fechar.textContent = "Entendi";
+
+  fechar.addEventListener("click", function() {
+    aviso.remove();
+  });
+
+  aviso.append(
+    titulo,
+    valor,
+    situacao,
+    descricao,
+    fechar
+  );
+
+  aviso.focus();
+}
+
+
 qcBtnReceber.addEventListener("click", function() {
   QC_abrirModalReceber();
 });
@@ -191,11 +255,15 @@ document.getElementById("qcConfirmarReceber")
         );
       }
 
-      mensagem.textContent =
-        "✅ Solicitação de " + quantidade +
-        " QC registrada com sucesso!";
+      
+campo.value = "";
 
-      campo.value = "";
+// Fechar automaticamente o formulário.
+QC_fecharModalReceber();
+
+// Mostrar confirmação destacada na carteira.
+QC_exibirConfirmacaoReceber(quantidade);
+
 
     } catch (erro) {
 
