@@ -58,74 +58,100 @@ function QC_atualizarTela() {
 
 const qcBtnReceber = document.getElementById("btnReceber");
 
-// Criar o formulário abaixo do botão existente.
-const qcPainelReceber = document.createElement("div");
+const qcModalReceber = document.createElement("div");
 
-qcPainelReceber.id = "qcPainelReceber";
-qcPainelReceber.style.display = "none";
-qcPainelReceber.style.marginTop = "15px";
-qcPainelReceber.style.padding = "15px";
-qcPainelReceber.style.border = "1px solid #888";
-qcPainelReceber.style.borderRadius = "10px";
+qcModalReceber.id = "qcModalReceber";
+qcModalReceber.className = "qc-modal-overlay";
 
-qcPainelReceber.innerHTML = `
-  <label for="qcValorReceber">
-    <strong>Quantidade de QuintosCoin</strong>
-  </label>
+qcModalReceber.innerHTML = `
+  <div class="qc-modal-card">
+    <div class="qc-modal-topo">
+      <h3>Receber QuintosCoin</h3>
+      <button
+        type="button"
+        id="qcFecharReceber"
+        class="qc-modal-fechar"
+      >×</button>
+    </div>
 
-  <input
-    id="qcValorReceber"
-    type="number"
-    min="1"
-    step="1"
-    inputmode="numeric"
-    placeholder="Exemplo: 50"
-    style="width:100%;padding:10px;margin:10px 0;
-           box-sizing:border-box;"
-  >
+    <p class="qc-modal-texto">
+      Informe a quantidade de QuintosCoin que deseja solicitar ao tesoureiro.
+    </p>
 
-  <button type="button" id="qcConfirmarReceber">
-    Solicitar QuintosCoin
-  </button>
+    <label for="qcValorReceber" class="qc-label-modal">
+      Quantidade de QuintosCoin
+    </label>
 
-  <button type="button" id="qcCancelarReceber">
-    Cancelar
-  </button>
+    <input
+      id="qcValorReceber"
+      type="number"
+      min="1"
+      step="1"
+      inputmode="numeric"
+      placeholder="Exemplo: 50"
+      class="qc-input-modal"
+    >
 
-  <p id="qcMensagemReceber" role="status"></p>
+    <div class="qc-modal-botoes">
+      <button
+        type="button"
+        id="qcConfirmarReceber"
+        class="qc-btn-modal-principal"
+      >
+        Solicitar QuintosCoin
+      </button>
+
+      <button
+        type="button"
+        id="qcCancelarReceber"
+        class="qc-btn-modal-secundario"
+      >
+        Cancelar
+      </button>
+    </div>
+
+    <p id="qcMensagemReceber" class="qc-modal-mensagem"></p>
+  </div>
 `;
 
-qcBtnReceber.insertAdjacentElement(
-  "afterend",
-  qcPainelReceber
-);
+document.body.appendChild(qcModalReceber);
 
-// Abrir e fechar o formulário.
+function QC_abrirModalReceber() {
+  qcModalReceber.style.display = "flex";
+}
+
+function QC_fecharModalReceber() {
+  qcModalReceber.style.display = "none";
+  document.getElementById("qcMensagemReceber").textContent = "";
+}
+
 qcBtnReceber.addEventListener("click", function() {
-  qcPainelReceber.style.display =
-    qcPainelReceber.style.display === "none"
-      ? "block"
-      : "none";
+  QC_abrirModalReceber();
 });
+
+document.getElementById("qcFecharReceber")
+  .addEventListener("click", function() {
+    QC_fecharModalReceber();
+  });
 
 document.getElementById("qcCancelarReceber")
   .addEventListener("click", function() {
-    qcPainelReceber.style.display = "none";
+    QC_fecharModalReceber();
   });
 
-// Confirmar a solicitação.
+qcModalReceber.addEventListener("click", function(e) {
+  if (e.target === qcModalReceber) {
+    QC_fecharModalReceber();
+  }
+});
+
 document.getElementById("qcConfirmarReceber")
   .addEventListener("click", async function() {
 
     const botao = this;
 
-    const campo = document.getElementById(
-      "qcValorReceber"
-    );
-
-    const mensagem = document.getElementById(
-      "qcMensagemReceber"
-    );
+    const campo = document.getElementById("qcValorReceber");
+    const mensagem = document.getElementById("qcMensagemReceber");
 
     const quantidade = Number(campo.value);
 
@@ -139,9 +165,7 @@ document.getElementById("qcConfirmarReceber")
       return;
     }
 
-    const token = sessionStorage.getItem(
-      QC_CHAVE_SESSAO
-    );
+    const token = sessionStorage.getItem(QC_CHAVE_SESSAO);
 
     if (!token) {
       mensagem.textContent =
@@ -169,8 +193,7 @@ document.getElementById("qcConfirmarReceber")
 
       mensagem.textContent =
         "✅ Solicitação de " + quantidade +
-        " QC registrada! Aguardando autorização " +
-        "do tesoureiro.";
+        " QC registrada com sucesso!";
 
       campo.value = "";
 
@@ -178,8 +201,7 @@ document.getElementById("qcConfirmarReceber")
 
       mensagem.textContent =
         "⚠️ " + erro.message +
-        " Se houve falha de comunicação, consulte " +
-        "o tesoureiro antes de solicitar novamente.";
+        " Se houve falha de comunicação, consulte o tesoureiro antes de solicitar novamente.";
 
     } finally {
 
