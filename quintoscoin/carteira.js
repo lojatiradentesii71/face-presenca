@@ -648,6 +648,14 @@ function QC_exibirTelaAcesso() {
 
   document.getElementById("telaCarteira")
     .style.display = "none";
+
+    const areaTesoureiro = document.getElementById(
+    "qcAreaTesoureiro"
+  );
+
+  if (areaTesoureiro) {
+    areaTesoureiro.style.display = "none";
+  }
 }
 
 function QC_exibirTelaCarteira() {
@@ -658,8 +666,12 @@ function QC_exibirTelaCarteira() {
   document.getElementById("telaCarteira")
     .style.display = "block";
 
-  QC_atualizarTela();
+    QC_atualizarTela();
+
+  // Consultar se esta carteira pertence ao tesoureiro.
+  QC_atualizarAreaTesoureiro();
 }
+
 
 // Por segurança, sempre iniciar na tela de acesso.
 // A carteira só será exibida após autenticação.
@@ -1902,3 +1914,235 @@ async function QC_enviarSolicitacaoCreditos(
   return await resposta.json();
 }
 
+
+/* QUINTOSCOIN - ÁREA DO TESOUREIRO */
+
+const qcAreaTesoureiro = document.createElement("section");
+
+qcAreaTesoureiro.id = "qcAreaTesoureiro";
+qcAreaTesoureiro.className = "qc-area-tesoureiro";
+qcAreaTesoureiro.style.display = "none";
+
+qcAreaTesoureiro.innerHTML = `
+  <h3>ÁREA DO TESOUREIRO</h3>
+
+  <button
+    type="button"
+    id="qcBtnPedidosTesoureiro"
+    class="qc-botao-pedidos"
+  >
+    <span>📋 Pedidos pendentes</span>
+
+    <span class="qc-indicador-pedidos">
+      <span
+        id="qcEsferaPedidos"
+        class="qc-esfera-pedidos"
+      ></span>
+
+      <span id="qcQuantidadePedidos">
+        Consultando...
+      </span>
+    </span>
+  </button>
+
+  <p id="qcMensagemTesoureiro"></p>
+
+  <div
+    id="qcListaPedidosTesoureiro"
+    class="qc-lista-pedidos"
+    hidden
+  ></div>
+`;
+
+document.getElementById("telaCarteira")
+  .appendChild(qcAreaTesoureiro);
+
+
+// Consultar autorização e pedidos no Apps Script.
+async function QC_atualizarAreaTesoureiro(abrirLista = false) {
+
+  const token = sessionStorage.getItem(
+    QC_CHAVE_SESSAO
+  );
+
+  const area = document.getElementById(
+    "qcAreaTesoureiro"
+  );
+
+  const lista = document.getElementById(
+    "qcListaPedidosTesoureiro"
+  );
+
+  const mensagem = document.getElementById(
+    "qcMensagemTesoureiro"
+  );
+
+  if (!token) {
+    area.style.display = "none";
+    return;
+  }
+
+  try {
+
+    const URL_SCRIPT =
+      "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+    const resposta = await fetch(URL_SCRIPT, {
+      method: "POST",
+      redirect: "follow",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify({
+        acao: "qc_pedidos_tesoureiro",
+        tokenSessao: token
+      })
+    });
+
+    if (!resposta.ok) {
+      throw new Error("Falha na consulta.");
+    }
+
+    const resultado = await resposta.json();
+
+    // Ignorar resposta de uma sessão já encerrada.
+    if (
+      sessionStorage.getItem(QC_CHAVE_SESSAO) !== token
+    ) {
+      return;
+    }
+
+    // Somente o tesoureiro poderá visualizar.
+    if (
+      resultado.status === "NAO_AUTORIZADO" ||
+      resultado.tesoureiro === false
+    ) {
+      area.style.display = "none";
+      return;
+    }
+
+    if (
+      resultado.status !== "OK" ||
+      resultado.tesoureiro !== true
+    ) {
+      throw new Error(
+        resultado.mensagem ||
+        "Não foi possível consultar os pedidos."
+      );
+    }
+
+    const pedidos = Array.isArray(resultado.pedidos)
+      ? resultado.pedidos
+      : [];
+
+    const quantidade = pedidos.length;
+
+    // Mostrar área administrativa.
+    area.style.display = "block";
+    mensagem.textContent = "";
+
+    const esfera = document.getElementById(
+      "qcEsferaPedidos"
+    );
+
+    const contador = document.getElementById(
+      "qcQuantidadePedidos"
+    );
+
+    if (quantidade > 0) {
+
+      esfera.className =
+        "qc-esfera-pedidos qc-esfera-laranja";
+
+      contador.textContent =
+        quantidade +
+        (quantidade === 1
+          ? " pendente"
+          : " pendentes");
+
+    } else {
+
+      esfera.className =
+        "qc-esfera-pedidos qc-esfera-verde";
+
+      contador.textContent = "Nenhum pedido";
+
+    }
+
+    // Preencher lista ao abrir ou atualizar.
+    if (abrirLista || !lista.hidden) {
+
+      lista.replaceChildren();
+
+      if (quantidade === 0) {
+
+        const vazio = document.createElement("p");
+        vazio.textContent =
+          "✅ Não existem solicitações pendentes.";
+
+        lista.appendChild(vazio);
+
+      } else {
+
+        pedidos.forEach(pedido => {
+
+          const item = document.createElement("div");
+          item.className = "qc-item-pedido";
+
+          const titulo = document.createElement("strong");
+          titulo.textContent =
+            pedido.valor + " QC solicitados";
+
+          const membro = document.createElement("p");
+          membro.textContent =
+            "IdCadastro: " + pedido.idCadastro;
+
+          const data = document.createElement("p");
+          data.textContent =
+            "Data: " + pedido.dataSolicitacao;
+
+          const situacao = document.createElement("p");
+          situacao.textContent =
+            "⏳ Aguardando confirmação de pagamento";
+
+          item.append(titulo, membro, data, situacao);
+          lista.appendChild(item);
+
+        });
+
+      }
+
+      lista.hidden = false;
+    }
+
+  } catch (erro) {
+
+    if (area.style.display === "block") {
+      mensagem.textContent =
+        "⚠️ Não foi possível atualizar os pedidos.";
+    }
+
+    console.error(
+      "Erro na Área do Tesoureiro:",
+      erro
+    );
+  }
+}
+
+
+// Botão para abrir ou fechar os pedidos.
+document.getElementById("qcBtnPedidosTesoureiro")
+  .addEventListener("click", async function() {
+
+    const lista = document.getElementById(
+      "qcListaPedidosTesoureiro"
+    );
+
+    if (!lista.hidden) {
+      lista.hidden = true;
+      return;
+    }
+
+    await QC_atualizarAreaTesoureiro(true);
+
+  });
