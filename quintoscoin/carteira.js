@@ -1537,16 +1537,7 @@ async function QC_enviarLoginAutomatico(idCarteira, senha) {
     return parametros;
   }
 
-  // LOGIN ANTIGO: manter o funcionamento existente.
-  if (parametros.algoritmo === "LEGADO_V1") {
-
-    return await QC_enviarLoginTeste(
-      idCarteira,
-      senha
-    );
-  }
-
-  // LOGIN NOVO: PBKDF2_V2.
+    // LOGIN NOVO: PBKDF2_V2.
   if (parametros.algoritmo === "PBKDF2_V2") {
 
     if (
@@ -1622,19 +1613,7 @@ async function QC_enviarAlteracaoSenhaAutomatico(
   }
 
   
-  // CARTEIRAS COM ALGORITMO ANTIGO
-  if (parametros.algoritmo === "LEGADO_V1") {
-
-    return await QC_enviarAlteracaoSenha(
-      tokenSessao,
-      senhaAtual,
-      novaSenha
-    );
-
-  }
-
-
-  // CARTEIRAS COM PBKDF2
+    // CARTEIRAS COM PBKDF2
   if (parametros.algoritmo === "PBKDF2_V2") {
 
     if (
@@ -1705,14 +1684,7 @@ async function QC_enviarRecuperacaoAutomatico(dados) {
     );
   }
 
-  // RECUPERAÇÃO PELO ALGORITMO ANTIGO
-  if (parametros.algoritmo === "LEGADO_V1") {
-
-    return await QC_enviarRecuperacaoTeste(dados);
-
-  }
-
-  // RECUPERAÇÃO PELO NOVO ALGORITMO
+   // RECUPERAÇÃO PELO NOVO ALGORITMO
   if (parametros.algoritmo === "PBKDF2_V2") {
 
     if (
