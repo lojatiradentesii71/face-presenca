@@ -55,14 +55,141 @@ function QC_atualizarTela() {
   });
 }
 
-document.getElementById("btnReceber")
-  .addEventListener("click", function() {
 
-    document.getElementById("mensagem")
-      .textContent =
-      "Emissão de QuintosCoin ainda não habilitada.";
+const qcBtnReceber = document.getElementById("btnReceber");
+
+// Criar o formulário abaixo do botão existente.
+const qcPainelReceber = document.createElement("div");
+
+qcPainelReceber.id = "qcPainelReceber";
+qcPainelReceber.style.display = "none";
+qcPainelReceber.style.marginTop = "15px";
+qcPainelReceber.style.padding = "15px";
+qcPainelReceber.style.border = "1px solid #888";
+qcPainelReceber.style.borderRadius = "10px";
+
+qcPainelReceber.innerHTML = `
+  <label for="qcValorReceber">
+    <strong>Quantidade de QuintosCoin</strong>
+  </label>
+
+  <input
+    id="qcValorReceber"
+    type="number"
+    min="1"
+    step="1"
+    inputmode="numeric"
+    placeholder="Exemplo: 50"
+    style="width:100%;padding:10px;margin:10px 0;
+           box-sizing:border-box;"
+  >
+
+  <button type="button" id="qcConfirmarReceber">
+    Solicitar QuintosCoin
+  </button>
+
+  <button type="button" id="qcCancelarReceber">
+    Cancelar
+  </button>
+
+  <p id="qcMensagemReceber" role="status"></p>
+`;
+
+qcBtnReceber.insertAdjacentElement(
+  "afterend",
+  qcPainelReceber
+);
+
+// Abrir e fechar o formulário.
+qcBtnReceber.addEventListener("click", function() {
+  qcPainelReceber.style.display =
+    qcPainelReceber.style.display === "none"
+      ? "block"
+      : "none";
+});
+
+document.getElementById("qcCancelarReceber")
+  .addEventListener("click", function() {
+    qcPainelReceber.style.display = "none";
+  });
+
+// Confirmar a solicitação.
+document.getElementById("qcConfirmarReceber")
+  .addEventListener("click", async function() {
+
+    const botao = this;
+
+    const campo = document.getElementById(
+      "qcValorReceber"
+    );
+
+    const mensagem = document.getElementById(
+      "qcMensagemReceber"
+    );
+
+    const quantidade = Number(campo.value);
+
+    if (
+      !campo.value.trim() ||
+      !Number.isSafeInteger(quantidade) ||
+      quantidade <= 0
+    ) {
+      mensagem.textContent =
+        "⚠️ Informe uma quantidade inteira e positiva.";
+      return;
+    }
+
+    const token = sessionStorage.getItem(
+      QC_CHAVE_SESSAO
+    );
+
+    if (!token) {
+      mensagem.textContent =
+        "⚠️ Sessão expirada. Entre novamente.";
+      return;
+    }
+
+    botao.disabled = true;
+    botao.textContent = "Enviando solicitação...";
+    mensagem.textContent = "";
+
+    try {
+
+      const resultado = await QC_enviarSolicitacaoCreditos(
+        token,
+        quantidade
+      );
+
+      if (resultado.status !== "PENDENTE") {
+        throw new Error(
+          resultado.mensagem ||
+          "Não foi possível registrar a solicitação."
+        );
+      }
+
+      mensagem.textContent =
+        "✅ Solicitação de " + quantidade +
+        " QC registrada! Aguardando autorização " +
+        "do tesoureiro.";
+
+      campo.value = "";
+
+    } catch (erro) {
+
+      mensagem.textContent =
+        "⚠️ " + erro.message +
+        " Se houve falha de comunicação, consulte " +
+        "o tesoureiro antes de solicitar novamente.";
+
+    } finally {
+
+      botao.disabled = false;
+      botao.textContent = "Solicitar QuintosCoin";
+
+    }
 
   });
+
 
 document.getElementById("btnDoar")
   .addEventListener("click", function() {
@@ -382,7 +509,7 @@ if (resultado.status === "OK") {
   QC_exibirTelaCarteira();
 
   // Manter operações financeiras desabilitadas
-  document.getElementById("btnReceber").disabled = true;
+  document.getElementById("btnReceber").disabled = false;
   document.getElementById("btnDoar").disabled = true;
 
   document.getElementById("mensagem").textContent =
@@ -923,7 +1050,7 @@ if (!token || !idCarteira) {
 
       // Manter as operações desabilitadas.
       document.getElementById("btnReceber")
-        .disabled = true;
+        .disabled = false;
 
       document.getElementById("btnDoar")
         .disabled = true;
@@ -1653,3 +1780,35 @@ async function QC_enviarRecuperacaoAutomatico(dados) {
     "Algoritmo de senha não reconhecido."
   );
 }
+
+
+async function QC_enviarSolicitacaoCreditos(
+  tokenSessao,
+  valor
+) {
+
+  const URL_APPS_SCRIPT =
+    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+  const resposta = await fetch(URL_APPS_SCRIPT, {
+    method: "POST",
+    redirect: "follow",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify({
+      acao: "qc_solicitar_creditos",
+      tokenSessao: tokenSessao,
+      valor: valor
+    })
+  });
+
+  if (!resposta.ok) {
+    throw new Error(
+      "Erro de comunicação: " + resposta.status
+    );
+  }
+
+  return await resposta.json();
+}
+
