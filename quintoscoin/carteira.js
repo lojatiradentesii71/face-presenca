@@ -202,11 +202,32 @@ document.getElementById("btnAtivarCarteira")
   });
 
 
-async function QC_enviarAtivacaoTeste(dados) {
+
+async function QC_enviarAtivacaoV2(dados) {
 
   const URL_APPS_SCRIPT =
     "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
 
+  // Validar os dados recebidos do formulário.
+  if (
+    typeof dados.senha !== "string" ||
+    dados.senha.length < 6
+  ) {
+    throw new Error(
+      "A senha deve ter pelo menos 6 caracteres."
+    );
+  }
+
+  // Criar um salt exclusivo para a nova carteira.
+  const saltHex = QC_gerarSaltSenhaV2();
+
+  // Calcular PBKDF2 no próprio Android.
+  const derivadoHex = await QC_derivarSenhaV2(
+    dados.senha,
+    saltHex
+  );
+
+  // Enviar a credencial derivada, não a senha original.
   const resposta = await fetch(URL_APPS_SCRIPT, {
     method: "POST",
     redirect: "follow",
@@ -214,16 +235,17 @@ async function QC_enviarAtivacaoTeste(dados) {
       "Content-Type": "text/plain;charset=utf-8"
     },
     body: JSON.stringify({
-      acao: "qc_ativar_teste",
+      acao: "qc_ativar",
       idCadastro: dados.idCadastro,
-      senha: dados.senha,
+      derivadoHex: derivadoHex,
+      saltHex: saltHex,
       codigoRecuperacao: dados.codigoRecuperacao
     })
   });
 
   if (!resposta.ok) {
     throw new Error(
-      "Erro HTTP: " + resposta.status
+      "Erro de comunicação: " + resposta.status
     );
   }
 
@@ -241,6 +263,7 @@ async function QC_enviarAtivacaoTeste(dados) {
 
   return resultado;
 }
+
 
 
 async function QC_enviarLoginTeste(idCarteira, senha) {
@@ -724,11 +747,11 @@ document.getElementById("qcBtnContinuar")
     }
 
     mensagem.textContent =
-      "Registrando carteira de teste...";
+      "Registrando sua carteira QuintosCoin...";
 
     try {
 
-      const resultado = await QC_enviarAtivacaoTeste(
+      const resultado = await QC_enviarAtivacaoV2(
         QC_ativacaoPendente
       );
 
@@ -759,7 +782,7 @@ document.getElementById("qcBtnContinuar")
       QC_mostrarLogin();
 
       QC_mostrarMensagemAcesso(
-        "Carteira de teste ativada! " +
+        "Carteira QuintosCoin ativada com sucesso! " +
         "Agora você poderá utilizar a tela de login.",
         "sucesso"
       );
