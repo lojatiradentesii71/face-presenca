@@ -440,3 +440,116 @@ html.qc-restaurando body::before {
   background: #14532d;
   border: 2px solid #4ade80;
 }
+
+.qc-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 9999;
+}
+
+.qc-modal-card {
+  width: 100%;
+  max-width: 420px;
+  background: #11284a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  padding: 22px 18px 18px 18px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
+  color: #ffffff;
+}
+
+.qc-modal-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.qc-modal-topo h3 {
+  margin: 0;
+  font-size: 22px;
+  color: #e7c76a;
+}
+
+.qc-modal-fechar {
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.qc-modal-texto {
+  margin: 0 0 16px 0;
+  color: #d7dfef;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.qc-label-modal {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.qc-input-modal {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 14px 12px;
+  border-radius: 12px;
+  border: 1px solid #4d648a;
+  background: #0d1d36;
+  color: #ffffff;
+  font-size: 16px;
+  margin-bottom: 16px;
+}
+
+.qc-input-modal::placeholder {
+  color: #9aa8c0;
+}
+
+.qc-modal-botoes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.qc-btn-modal-principal {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 12px;
+  background: #e1bf63;
+  color: #0d1d36;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.qc-btn-modal-secundario {
+  width: 100%;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #6f86ab;
+  background: transparent;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.qc-modal-mensagem {
+  margin-top: 14px;
+  min-height: 22px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #ffffff;
+}
