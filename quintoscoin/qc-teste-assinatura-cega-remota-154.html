@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>QuintosCoin — Passo 154 · Assinatura cega remota</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#101c30;color:#edf2fa}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;padding:24px 16px;display:flex;justify-content:center;align-items:flex-start}
+main{width:min(100%,680px);background:#192c49;border:1px solid #405477;border-radius:20px;padding:24px;box-shadow:0 12px 45px #0005}
+h1{font-size:1.45rem;color:#ead084;margin:0 0 8px}p{line-height:1.55;color:#d5dfed;font-size:.95rem}
+label{display:block;margin:18px 0 7px;font-weight:600;font-size:.9rem}
+input{display:block;width:100%;background:#10213a;border:1px solid #5a6f90;border-radius:10px;color:#fff;padding:12px;font-size:.92rem}
+input:focus,button:focus-visible{outline:2px solid #e7c76a;outline-offset:3px}
+button{width:100%;margin-top:18px;background:#e7c76a;color:#11223c;border:0;border-radius:11px;padding:14px;font-size:1rem;font-weight:700;cursor:pointer}
+button:disabled{opacity:.55;cursor:wait}.note{font-size:.84rem;color:#bdcbe0}
+#resultado{margin-top:20px;padding:14px;min-height:180px;background:#0e1b30;border:1px solid #354968;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.8rem;line-height:1.75}
+.sucesso{border-color:#39b779!important;color:#9ef3be}.falha{border-color:#df6c69!important;color:#ffd2d2}
+footer{color:#b4c4d9;font-size:.8rem;margin-top:19px;line-height:1.55}
+</style>
+</head>
+<body>
+<main>
+<h1>🔐 QuintosCoin — Passo 154</h1>
+<p><strong>Assinatura cega remota completa, com chave demonstrativa da RFC 9474.</strong> O Chrome prepara a mensagem, aplica RSA-PSS SHA-384 e o cegamento. O Apps Script recebe apenas o número cegado, assina e devolve a assinatura, que é finalizada e verificada no Chrome.</p>
+<p class="note">Demonstração técnica: não utiliza carteira, saldo, autorização financeira ou chaves do QuintosCoin. O módulo e a chave privada demonstrativa da RFC são públicos. O teste acessa duas rotas já publicadas nos passos anteriores.</p>
+<label for="endpoint">Endereço da implantação Apps Script (/exec)</label>
+<input id="endpoint" type="url" spellcheck="false" autocomplete="off" value="https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec">
+<label for="codigo">Código temporário do teste RSA (Passo 153)</label>
+<input id="codigo" type="password" autocomplete="off" spellcheck="false" placeholder="Cole o mesmo código temporário do Passo 153">
+<p class="note">Não insira senhas de carteiras. O código temporário não é gravado no armazenamento do navegador nem incluído no HTML do GitHub.</p>
+<button id="executar" type="button">Executar assinatura cega remota</button>
+<div id="resultado" role="status" aria-live="polite">Pronto para testar.</div>
+<footer>Este teste valida o ciclo integrado, não a segurança de uma implementação financeira. Não habilita emissão ou doações. Após os testes, desative a rota de assinatura demonstrativa e apague o código temporário do Apps Script.</footer>
+</main>
+<script>
+'use strict';
+const botao=document.getElementById('executar');
+const painel=document.getElementById('resultado');
+const endpoint=document.getElementById('endpoint');
+const codigo=document.getElementById('codigo');
+const ZERO=BigInt(0),UM=BigInt(1),DOIS=BigInt(2);
+function log(m){painel.textContent+=m+'\n';}
+function garantir(c,m){if(!c)throw Error(m);}
+function juntar(...partes){const n=partes.reduce((s,p)=>s+p.length,0);const b=new Uint8Array(n);let i=0;for(const p of partes){b.set(p,i);i+=p.length;}return b;}
+function hex(bytes){return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');}
+function inteiro(bytes){const h=hex(bytes);return BigInt('0x'+(h||'0'));}
+function inteiroBytes(n,k){let h=n.toString(16);garantir(h.length<=k*2,'Inteiro maior que o módulo');return Uint8Array.from(h.padStart(k*2,'0').match(/../g),x=>parseInt(x,16));}
+function b64url(bytes){let s='';for(const b of bytes)s+=String.fromCharCode(b);return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+function modPow(a,e,n){let r=UM;a%=n;while(e>ZERO){if(e%DOIS===UM)r=r*a%n;a=a*a%n;e/=DOIS;}return r;}
+function mdc(a,b){while(b!==ZERO){const t=b;b=a%b;a=t;}return a;}
+function inversoModular(a,n){let t=ZERO,novoT=UM,r=n,novoR=a%n;while(novoR!==ZERO){const q=r/novoR;[t,novoT]=[novoT,t-q*novoT];[r,novoR]=[novoR,r-q*novoR];}garantir(r===UM,'Fator de cegamento não invertível');return(t%n+n)%n;}
+function fatorAleatorio(n){const bits=n.toString(2).length;const k=Math.ceil(bits/8),excesso=8*k-bits;for(let i=0;i<10000;i++){const b=crypto.getRandomValues(new Uint8Array(k));if(excesso)b[0]&=255>>>excesso;const r=inteiro(b);if(r>ZERO&&r<n&&mdc(r,n)===UM)return r;}throw Error('Não foi possível obter fator aleatório');}
+async function hash384(bytes){return new Uint8Array(await crypto.subtle.digest('SHA-384',bytes));}
+async function mgf1(seed,tamanho){const saida=new Uint8Array(tamanho);for(let contador=0,indice=0;indice<tamanho;contador++){const c=new Uint8Array([contador>>>24&255,contador>>>16&255,contador>>>8&255,contador&255]);const h=await hash384(juntar(seed,c));const tamanhoBloco=Math.min(h.length,tamanho-indice);saida.set(h.slice(0,tamanhoBloco),indice);indice+=tamanhoBloco;}return saida;}
+async function emsaPss(mensagem,emBits){
+  const hLen=48,sLen=48,emLen=Math.ceil(emBits/8);
+  garantir(emLen>=hLen+sLen+2,'Módulo RSA insuficiente');
+  const resumoMensagem=await hash384(mensagem);
+  const salt=crypto.getRandomValues(new Uint8Array(sLen));
+  const H=await hash384(juntar(new Uint8Array(8),resumoMensagem,salt));
+  const db=juntar(new Uint8Array(emLen-hLen-sLen-2),new Uint8Array([1]),salt);
+  const mascara=await mgf1(H,emLen-hLen-1);
+  const masked=new Uint8Array(db.length);
+  for(let i=0;i<db.length;i++)masked[i]=db[i]^mascara[i];
+  masked[0]&=255>>>(8*emLen-emBits);
+  return juntar(masked,H,new Uint8Array([0xbc]));
+}
+async function post(url,dados){
+  const resposta=await fetch(url,{method:'POST',redirect:'follow',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(dados)});
+  garantir(resposta.ok,'HTTP '+resposta.status);
+  let json;
+  try{json=await resposta.json();}catch(_){throw Error('Servidor não retornou JSON. Confira a implantação.');}
+  garantir(json.status==='TESTE_OK',json.mensagem||'Resposta inesperada do Apps Script');
+  garantir(json.tipoChave==='RFC9474_PUBLICA_TESTE','Chave incorreta no retorno');
+  return json;
+}
+function conferirChave(d){
+  garantir(typeof d.moduloHex==='string'&&/^[0-9a-f]{1024}$/i.test(d.moduloHex),'Módulo RSA inválido');
+  garantir(typeof d.expoenteHex==='string'&&/^[0-9a-f]+$/i.test(d.expoenteHex),'Expoente RSA inválido');
+  const n=BigInt('0x'+d.moduloHex),e=BigInt('0x'+d.expoenteHex);
+  garantir(n.toString(2).length===4096&&e>UM&&e%DOIS===UM,'Parâmetros públicos RSA inesperados');
+  return{n,e,k:512};
+}
+async function executar(){
+  botao.disabled=true;painel.className='';painel.textContent='Iniciando teste completo remoto...\n';
+  try{
+    garantir(!!globalThis.crypto?.subtle&&!!globalThis.crypto?.getRandomValues,'Web Crypto indisponível. Use o Chrome via HTTPS no GitHub Pages.');
+    const url=endpoint.value.trim();
+    garantir(/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec(?:\?.*)?$/.test(url),'Informe o endereço /exec do Apps Script.');
+    const senha=codigo.value.trim();
+    garantir(/^[0-9a-f-]{36}$/i.test(senha),'Informe o código temporário gerado no Passo 153.');
+
+    log('Consultando chave pública demonstrativa no Apps Script...');
+    const info=await post(url,{acao:'qc_assinar_vetor_rfc_teste'});
+    const {n,e,k}=conferirChave(info);
+    log('CHAVE PÚBLICA DEMONSTRATIVA RSA-4096: OK');
+
+    // A mensagem original e o prefixo de 32 bytes ficam apenas no navegador.
+    const mensagem=juntar(new TextEncoder().encode('QUINTOSCOIN-TESTE-154:'),crypto.getRandomValues(new Uint8Array(32)));
+    const preparada=juntar(crypto.getRandomValues(new Uint8Array(32)),mensagem);
+    log('PREPARAÇÃO ALEATÓRIA NA CARTEIRA: OK');
+
+    // EMSA-PSS com SHA-384, MGF1-SHA384, salt=48; emBits=4095 para WebCrypto RSA-PSS.
+    const em=await emsaPss(preparada,n.toString(2).length-1);
+    const m=inteiro(em);
+    garantir(m>ZERO&&m<n&&mdc(m,n)===UM,'EMSA-PSS fora do domínio RSA');
+    log('EMSA-PSS SHA-384 CRIADO PELO CHROME: OK');
+
+    const r=fatorAleatorio(n),inv=inversoModular(r,n);
+    const cego=m*modPow(r,e,n)%n;
+    garantir(cego>ZERO&&cego<n&&cego!==m,'Cegamento inválido');
+    const blocoHex=hex(inteiroBytes(cego,k));
+    log('BLOCO CEGO DE 512 BYTES: OK');
+    log('Enviando somente o bloco cegado ao Apps Script...');
+
+    const inicioRemoto=performance.now();
+    const assinado=await post(url,{acao:'qc_assinar_bloco_variavel_rfc_teste',blocoHex:blocoHex,codigoTeste:senha});
+    const tempoRemoto=Math.round(performance.now()-inicioRemoto);
+    const chaveRetornada=conferirChave(assinado);
+    garantir(chaveRetornada.n===n&&chaveRetornada.e===e,'A chave mudou durante o teste');
+    garantir(assinado.blocoCegoHex===blocoHex,'O servidor devolveu bloco diferente do enviado');
+    garantir(/^[0-9a-f]{1024}$/i.test(assinado.assinaturaCegaHex),'Assinatura cega com tamanho inválido');
+    const assinaturaCega=BigInt('0x'+assinado.assinaturaCegaHex);
+    garantir(assinaturaCega>ZERO&&assinaturaCega<n&&modPow(assinaturaCega,e,n)===cego,'Assinatura cega inválida');
+    log('ASSINATURA CEGA REMOTA: OK');
+
+    const assinaturaFinal=assinaturaCega*inv%n;
+    garantir(modPow(assinaturaFinal,e,n)===m,'Falha ao remover cegamento');
+    const bytesAssinatura=inteiroBytes(assinaturaFinal,k);
+    log('REMOÇÃO DO CEGAMENTO NO CHROME: OK');
+
+    // Verificação independente por WebCrypto: apenas a chave pública é importada.
+    const jwk={kty:'RSA',n:b64url(inteiroBytes(n,k)),e:b64url(inteiroBytes(e,Math.ceil(e.toString(2).length/8))),ext:true,key_ops:['verify']};
+    const chavePublica=await crypto.subtle.importKey('jwk',jwk,{name:'RSA-PSS',hash:'SHA-384'},false,['verify']);
+    garantir(await crypto.subtle.verify({name:'RSA-PSS',saltLength:48},chavePublica,bytesAssinatura,preparada),'Verificação RSA-PSS falhou');
+    log('VERIFICAÇÃO WEB CRYPTO RSA-PSS: OK');
+    const adulterada=new Uint8Array(preparada);adulterada[adulterada.length-1]^=1;
+    garantir(!(await crypto.subtle.verify({name:'RSA-PSS',saltLength:48},chavePublica,bytesAssinatura,adulterada)),'Mensagem adulterada foi aceita');
+    log('MENSAGEM ADULTERADA: REJEITADA');
+    log('TEMPO DA ASSINATURA NO SERVIDOR: '+assinado.tempoRSAms+' ms');
+    log('TEMPO DA COMUNICAÇÃO DE ASSINATURA: '+tempoRemoto+' ms');
+    log('NENHUMA FICHA FOI EMITIDA');
+    log('TESTE DE ASSINATURA CEGA REMOTA COMPLETA: OK');
+    painel.className='sucesso';
+  }catch(erro){painel.className='falha';log('ERRO: '+(erro?.message||String(erro)));}
+  finally{botao.disabled=false;}
+}
+botao.addEventListener('click',executar);
+</script>
+</body>
+</html>
