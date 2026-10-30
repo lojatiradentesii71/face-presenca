@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>QuintosCoin — Passo 153 · Bloco RSA variável remoto</title>
+  <style>
+    :root{color-scheme:dark;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#101c30;color:#edf2fa}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;padding:24px 16px;display:flex;justify-content:center;align-items:flex-start}
+    main{width:min(100%,650px);background:#192c49;border:1px solid #405477;border-radius:20px;padding:24px;box-shadow:0 12px 45px #0005}
+    h1{font-size:1.45rem;color:#ead084;margin:0 0 8px}
+    p{line-height:1.55;color:#d5dfed;font-size:.95rem}
+    label{display:block;margin:18px 0 7px;font-weight:600;font-size:.9rem}
+    input{display:block;width:100%;background:#10213a;border:1px solid #5a6f90;border-radius:10px;color:#fff;padding:12px;font-size:.92rem}
+    input:focus,button:focus-visible{outline:2px solid #e7c76a;outline-offset:3px}
+    button{width:100%;margin-top:18px;background:#e7c76a;color:#11223c;border:0;border-radius:11px;padding:14px;font-size:1rem;font-weight:700;cursor:pointer}
+    button:disabled{opacity:.55;cursor:wait}
+    .note{font-size:.84rem;color:#bdcbe0}
+    #resultado{margin-top:20px;padding:14px;min-height:160px;background:#0e1b30;border:1px solid #354968;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.8rem;line-height:1.75}
+    .sucesso{border-color:#39b779!important;color:#9ef3be}
+    .falha{border-color:#df6c69!important;color:#ffd2d2}
+    footer{color:#b4c4d9;font-size:.8rem;margin-top:19px;line-height:1.55}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>🔐 QuintosCoin — Passo 153</h1>
+    <p><strong>Teste de bloco RSA variável entre Chrome e Apps Script.</strong> O navegador gera 512 bytes de teste e o servidor os assina usando somente a chave pública de demonstração da RFC 9474. A assinatura é verificada no Chrome.</p>
+    <p class="note">Este passo <strong>não</strong> cria uma ficha EMSA-PSS cegada. O objetivo é comprovar a assinatura remota de um bloco variável, antes do teste completo de cegamento.</p>
+    <label for="endpoint">Endereço da implantação Apps Script (/exec)</label>
+    <input id="endpoint" type="url" spellcheck="false" autocomplete="off" value="https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec">
+    <label for="codigo">Código temporário gerado pelo Apps Script</label>
+    <input id="codigo" type="password" autocomplete="off" spellcheck="false" placeholder="Cole aqui o código do registro de execução">
+    <p class="note">O código não é salvo pelo navegador nem incluído no HTML publicado. Nunca o coloque no repositório.</p>
+    <button id="executar" type="button">Executar teste de bloco variável</button>
+    <div id="resultado" role="status" aria-live="polite">Pronto para testar.</div>
+    <footer>Teste com chave demonstrativa conhecida publicamente, sem vinculação a carteiras ou autorizações, sem fichas digitais ou alterações de saldo. Desative a rota temporária quando terminar os testes.</footer>
+  </main>
+<script>
+'use strict';
+const botao=document.getElementById('executar');
+const painel=document.getElementById('resultado');
+const endpoint=document.getElementById('endpoint');
+const codigo=document.getElementById('codigo');
+const ZERO=BigInt(0),UM=BigInt(1),DOIS=BigInt(2);
+function escrever(mensagem){painel.textContent+=mensagem+'\n';}
+function garantir(teste,mensagem){if(!teste)throw new Error(mensagem);}
+function hex(bytes){return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');}
+function potenciaModular(base,expoente,modulo){let r=UM;base%=modulo;while(expoente>ZERO){if(expoente%DOIS===UM)r=r*base%modulo;base=base*base%modulo;expoente/=DOIS;}return r;}
+function gerarBloco(){
+  // 0x00 seguido de 511 bytes aleatórios: o valor fica abaixo de qualquer módulo RSA de 4096 bits.
+  // É apenas um inteiro de teste, NÃO uma ficha RSA-PSS cegada.
+  for(let tentativas=0;tentativas<5;tentativas++){
+    const bytes=crypto.getRandomValues(new Uint8Array(511));
+    const bloco='00'+hex(bytes);
+    if(BigInt('0x'+bloco)>ZERO)return bloco;
+  }
+  throw new Error('Não foi possível gerar bloco de teste válido.');
+}
+async function executar(){
+  botao.disabled=true; painel.className=''; painel.textContent='Iniciando teste de bloco RSA variável...\n';
+  try{
+    garantir(!!globalThis.crypto?.getRandomValues,'Gerador seguro de números aleatórios indisponível.');
+    const url=endpoint.value.trim();
+    garantir(/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec(?:\?.*)?$/.test(url),'Informe o endereço /exec do Apps Script.');
+    const senha=codigo.value.trim();
+    garantir(/^[0-9a-f-]{36}$/i.test(senha),'Cole o código temporário de teste gerado pelo Apps Script.');
+    const blocoHex=gerarBloco();
+    garantir(blocoHex.length===1024,'Tamanho de bloco inesperado.');
+    escrever('BLOCO VARIÁVEL DE 512 BYTES: OK');
+    escrever('Enviando bloco ao Apps Script...');
+    const inicio=performance.now();
+    const resposta=await fetch(url,{
+      method:'POST',redirect:'follow',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({acao:'qc_assinar_bloco_variavel_rfc_teste',blocoHex:blocoHex,codigoTeste:senha})
+    });
+    const duracao=Math.round(performance.now()-inicio);
+    garantir(resposta.ok,'HTTP '+resposta.status);
+    const texto=await resposta.text();
+    let dados;
+    try{dados=JSON.parse(texto);}catch(_){throw new Error('O servidor não retornou JSON: '+texto.slice(0,100));}
+    garantir(dados.status==='TESTE_OK',dados.mensagem||'Resposta de teste inesperada.');
+    garantir(dados.tipoChave==='RFC9474_PUBLICA_TESTE','Tipo de chave inesperado.');
+    for(const campo of ['moduloHex','expoenteHex','blocoCegoHex','assinaturaCegaHex']){
+      garantir(typeof dados[campo]==='string'&&/^[0-9a-f]+$/i.test(dados[campo]),'Campo inválido: '+campo);
+    }
+    garantir(dados.moduloHex.length===1024&&dados.blocoCegoHex.length===1024&&dados.assinaturaCegaHex.length===1024,'Tamanho de chave/bloco/assinatura inválido.');
+    garantir(dados.blocoCegoHex.toLowerCase()===blocoHex,'Servidor devolveu bloco diferente do enviado.');
+    escrever('RESPOSTA DO APPS SCRIPT: TESTE_OK');
+    escrever('BLOCO DEVOLVIDO: IDÊNTICO');
+    const n=BigInt('0x'+dados.moduloHex),e=BigInt('0x'+dados.expoenteHex),c=BigInt('0x'+blocoHex),s=BigInt('0x'+dados.assinaturaCegaHex);
+    garantir(n.toString(2).length===4096&&e>=BigInt(3)&&c>ZERO&&c<n&&s>ZERO&&s<n,'Parâmetros RSA fora do intervalo esperado.');
+    garantir(potenciaModular(s,e,n)===c,'Assinatura remota não corresponde ao bloco enviado.');
+    escrever('ASSINATURA DO BLOCO VARIÁVEL: OK');
+    escrever('VERIFICAÇÃO RSA NO CHROME: OK');
+    const alterada=(s+UM)%n;
+    garantir(potenciaModular(alterada,e,n)!==c,'Uma assinatura adulterada foi aceita.');
+    escrever('ASSINATURA ADULTERADA: REJEITADA');
+    garantir(Number.isFinite(Number(dados.tempoRSAms)),'Tempo RSA inválido no retorno.');
+    escrever('TEMPO DA OPERAÇÃO NO SERVIDOR: '+dados.tempoRSAms+' ms');
+    escrever('TEMPO TOTAL DA COMUNICAÇÃO: '+duracao+' ms');
+    escrever('NENHUMA FICHA FOI EMITIDA');
+    escrever('TESTE DE BLOCO VARIÁVEL REMOTO: OK');
+    painel.className='sucesso';
+  }catch(erro){painel.className='falha';escrever('ERRO: '+(erro?.message||String(erro)));}
+  finally{botao.disabled=false;}
+}
+botao.addEventListener('click',executar);
+</script>
+</body>
+</html>
