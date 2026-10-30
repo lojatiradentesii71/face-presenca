@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>QuintosCoin — Passo 150 · Teste de Transporte</title>
+  <style>
+    :root { color-scheme:dark; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#101c30; color:#edf2fa; }
+    * {box-sizing:border-box}
+    body {margin:0; min-height:100vh; padding:24px 16px; display:flex; justify-content:center; align-items:flex-start}
+    main {width:min(100%,620px); background:#192c49; border:1px solid #405477; border-radius:20px; padding:24px; box-shadow:0 12px 45px #0005}
+    h1 {font-size:1.4rem; color:#ead084; margin:0 0 8px}
+    p {line-height:1.5; color:#d5dfed; font-size:.95rem}
+    label {display:block; margin:20px 0 7px; font-weight:600; font-size:.9rem}
+    input {display:block; width:100%; background:#10213a; border:1px solid #5a6f90; border-radius:10px; color:white; padding:12px; font-size:.92rem}
+    input:focus, button:focus-visible {outline:2px solid #e7c76a; outline-offset:3px}
+    button {width:100%; margin-top:17px; background:#e7c76a; color:#11223c; border:0; border-radius:11px; padding:14px; font-size:1rem; font-weight:700; cursor:pointer}
+    button:disabled {opacity:.55; cursor:wait}
+    .note {font-size:.84rem;color:#bdcbe0}
+    #resultado {margin-top:20px; padding:14px; min-height:120px; background:#0e1b30; border:1px solid #354968; border-radius:12px; white-space:pre-wrap; overflow-wrap:anywhere; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:.8rem; line-height:1.7}
+    .sucesso {border-color:#39b779 !important;color:#9ef3be}
+    .falha {border-color:#df6c69 !important;color:#ffd2d2}
+    footer {color:#b4c4d9; font-size:.77rem; margin-top:19px; line-height:1.5}
+  </style>
+</head>
+<body>
+<main>
+  <h1>🔐 QuintosCoin — Passo 150</h1>
+  <p><strong>Teste de transporte de bloco cego</strong><br>Esta ferramenta envia um bloco aleatório de 512 bytes ao Apps Script e compara os resumos SHA-256 calculados pelos dois lados.</p>
+  <label for="endpoint">Endereço atual do Apps Script (/exec)</label>
+  <input id="endpoint" type="url" autocomplete="off" spellcheck="false" value="https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec">
+  <p class="note">Se sua implantação utiliza outro endereço, atualize o campo acima. Use esta página hospedada no GitHub Pages (HTTPS).</p>
+  <button id="executar" type="button">Executar teste de transporte</button>
+  <div id="resultado" role="status" aria-live="polite">Pronto para testar.</div>
+  <footer>Não usa sessões, dados de membros, chaves privadas nem fichas reais. A rota de teste não realiza assinaturas e deve ser desativada quando os testes terminarem.</footer>
+</main>
+<script>
+'use strict';
+const botao=document.getElementById('executar');
+const painel=document.getElementById('resultado');
+const endpoint=document.getElementById('endpoint');
+function escrever(msg){painel.textContent+=msg+'\n';}
+function bytesParaHex(bytes){return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');}
+async function testar(){
+  botao.disabled=true;
+  painel.className='';
+  painel.textContent='Iniciando teste de transporte...\n';
+  try {
+    if(!window.isSecureContext||!crypto.subtle){throw new Error('Abra o arquivo pelo GitHub Pages (HTTPS): Web Crypto indisponível neste contexto.');}
+    const url=endpoint.value.trim();
+    if(!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec(?:\?.*)?$/.test(url)){
+      throw new Error('Informe uma URL válida do Apps Script terminada em /exec.');
+    }
+    const bloco=crypto.getRandomValues(new Uint8Array(512));
+    const blocoHex=bytesParaHex(bloco);
+    const hashLocal=bytesParaHex(new Uint8Array(await crypto.subtle.digest('SHA-256',bloco)));
+    escrever('BLOCO ALEATÓRIO DE 512 BYTES: OK');
+    escrever('SHA-256 NO NAVEGADOR: OK');
+    escrever('Enviando bloco ao Apps Script...');
+    const inicio=performance.now();
+    const resposta=await fetch(url,{
+      method:'POST',redirect:'follow',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({acao:'qc_receber_bloco_teste',blocoHex})
+    });
+    const duracao=Math.round(performance.now()-inicio);
+    if(!resposta.ok){throw new Error('Resposta HTTP '+resposta.status);}
+    const texto=await resposta.text();
+    let dados;
+    try { dados=JSON.parse(texto); }
+    catch(_) {throw new Error('Resposta do servidor não é JSON. Início: '+texto.slice(0,120));}
+    if(dados.status!=='TESTE_OK'){
+      throw new Error('O Apps Script retornou: '+JSON.stringify(dados));
+    }
+    if(dados.tamanhoBytes!==512){throw new Error('Tamanho retornado inválido: '+dados.tamanhoBytes);}
+    if(!/^[0-9a-f]{64}$/i.test(String(dados.hashRecebido||''))){throw new Error('SHA-256 retornado tem formato inválido.');}
+    escrever('RESPOSTA DO APPS SCRIPT: TESTE_OK');
+    escrever('TAMANHO RECEBIDO: 512 BYTES');
+    escrever('SHA-256 DO APPS SCRIPT: OK');
+    if(hashLocal!==dados.hashRecebido.toLowerCase()){
+      throw new Error('HASH DIFERENTE! O conteúdo recebido não corresponde ao conteúdo enviado.');
+    }
+    escrever('COMPARAÇÃO DOS DOIS HASHES: IGUAIS');
+    escrever('TEMPO TOTAL DA COMUNICAÇÃO: '+duracao+' ms');
+    escrever('NENHUMA FICHA FOI EMITIDA');
+    escrever('TESTE DE TRANSPORTE: OK');
+    painel.className='sucesso';
+  }catch(erro){
+    painel.className='falha';
+    escrever('ERRO: '+(erro && erro.message ? erro.message : String(erro)));
+    escrever('Verifique a implantação /exec. Se aparecer "Failed to fetch", confira também o endereço e as permissões do Apps Script.');
+  }finally{botao.disabled=false;}
+}
+botao.addEventListener('click',testar);
+</script>
+</body>
+</html>
