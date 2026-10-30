@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>QuintosCoin — Passo 151 · Assinatura remota RFC</title>
+  <style>
+    :root {color-scheme:dark; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#101c30;color:#edf2fa}
+    * {box-sizing:border-box}
+    body {margin:0;min-height:100vh;padding:24px 16px;display:flex;justify-content:center;align-items:flex-start}
+    main {width:min(100%,620px);background:#192c49;border:1px solid #405477;border-radius:20px;padding:24px;box-shadow:0 12px 45px #0005}
+    h1 {font-size:1.4rem;color:#ead084;margin:0 0 8px}
+    p {line-height:1.5;color:#d5dfed;font-size:.95rem}
+    label {display:block;margin:20px 0 7px;font-weight:600;font-size:.9rem}
+    input {display:block;width:100%;background:#10213a;border:1px solid #5a6f90;border-radius:10px;color:white;padding:12px;font-size:.92rem}
+    input:focus,button:focus-visible {outline:2px solid #e7c76a;outline-offset:3px}
+    button {width:100%;margin-top:17px;background:#e7c76a;color:#11223c;border:0;border-radius:11px;padding:14px;font-size:1rem;font-weight:700;cursor:pointer}
+    button:disabled {opacity:.55;cursor:wait}
+    .note {font-size:.84rem;color:#bdcbe0}
+    #resultado {margin-top:20px;padding:14px;min-height:120px;background:#0e1b30;border:1px solid #354968;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.8rem;line-height:1.7}
+    .sucesso {border-color:#39b779!important;color:#9ef3be}
+    .falha {border-color:#df6c69!important;color:#ffd2d2}
+    footer {color:#b4c4d9;font-size:.77rem;margin-top:19px;line-height:1.5}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>🔐 QuintosCoin — Passo 151</h1>
+    <p><strong>Teste de assinatura cega remota com vetor público</strong><br>O Apps Script assina exclusivamente o bloco fixo da RFC 9474. O Chrome verifica a resposta RSA com os valores públicos retornados.</p>
+    <label for="endpoint">Endereço atual do Apps Script (/exec)</label>
+    <input id="endpoint" type="url" autocomplete="off" spellcheck="false" value="https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec">
+    <p class="note">Use esta página hospedada no GitHub Pages. Se o endereço de implantação mudou, substitua acima.</p>
+    <button id="executar" type="button">Executar teste de assinatura remota</button>
+    <div id="resultado" role="status" aria-live="polite">Pronto para testar.</div>
+    <footer>Usa exclusivamente a chave de demonstração publicada na RFC 9474, nunca as chaves reais do QuintosCoin. Não solicita dados de membros, não emite fichas e não modifica saldos. Remova a rota de teste após a integração.</footer>
+  </main>
+  <script>
+  'use strict';
+  const botao = document.getElementById('executar');
+  const painel = document.getElementById('resultado');
+  const endpoint = document.getElementById('endpoint');
+  function escrever(msg) {painel.textContent += msg + '\n';}
+  function potenciaModular(base, expoente, modulo) {
+    if (modulo <= BigInt(1)) throw new Error('Módulo inválido');
+    let resultado = BigInt(1);
+    base %= modulo;
+    while (expoente > BigInt(0)) {
+      if (expoente % BigInt(2) === BigInt(1)) resultado = resultado * base % modulo;
+      base = base * base % modulo;
+      expoente = expoente / BigInt(2);
+    }
+    return resultado;
+  }
+  async function testar() {
+    botao.disabled = true;
+    painel.className = '';
+    painel.textContent = 'Iniciando assinatura remota de demonstração...\n';
+    try {
+      if (typeof BigInt !== 'function') throw new Error('Seu navegador não suporta BigInt.');
+      const url = endpoint.value.trim();
+      if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec(?:\?.*)?$/.test(url)) {
+        throw new Error('Informe uma URL /exec válida do Google Apps Script.');
+      }
+      escrever('Enviando solicitação ao Apps Script...');
+      const inicio = performance.now();
+      const resposta = await fetch(url, {
+        method: 'POST', redirect: 'follow',
+        headers: {'Content-Type': 'text/plain;charset=utf-8'},
+        body: JSON.stringify({acao:'qc_assinar_vetor_rfc_teste'})
+      });
+      const duracao = Math.round(performance.now() - inicio);
+      if (!resposta.ok) throw new Error('Resposta HTTP: ' + resposta.status);
+      const texto = await resposta.text();
+      let dados;
+      try {dados = JSON.parse(texto);} catch(_) {throw new Error('Resposta não é JSON: ' + texto.slice(0,100));}
+      if (dados.status !== 'TESTE_OK' || dados.vetorRFC !== 'OK' || dados.tipoChave !== 'RFC9474_PUBLICA_TESTE') {
+        throw new Error('Resposta inesperada do Apps Script: ' + JSON.stringify(dados));
+      }
+      for (const campo of ['moduloHex','expoenteHex','blocoCegoHex','assinaturaCegaHex']) {
+        if (typeof dados[campo] !== 'string' || !/^[0-9a-f]+$/i.test(dados[campo])) throw new Error('Campo inválido: ' + campo);
+      }
+      if (dados.moduloHex.length !== 1024 || dados.blocoCegoHex.length !== 1024 || dados.assinaturaCegaHex.length !== 1024) {
+        throw new Error('Tamanho RSA-4096 inválido na resposta.');
+      }
+      const n = BigInt('0x' + dados.moduloHex);
+      const e = BigInt('0x' + dados.expoenteHex);
+      const c = BigInt('0x' + dados.blocoCegoHex);
+      const s = BigInt('0x' + dados.assinaturaCegaHex);
+      if (n.toString(2).length !== 4096 || e < BigInt(3) || c <= BigInt(0) || c >= n || s <= BigInt(0) || s >= n) {
+        throw new Error('Parâmetros RSA fora do intervalo esperado.');
+      }
+      escrever('CHAVE PÚBLICA DE DEMONSTRAÇÃO RSA-4096: OK');
+      escrever('RESPOSTA DO APPS SCRIPT: TESTE_OK');
+      escrever('ASSINATURA REMOTA CORRESPONDE À RFC: OK');
+      if (potenciaModular(s,e,n) !== c) throw new Error('A verificação RSA independente falhou!');
+      escrever('VERIFICAÇÃO RSA NO CHROME: OK');
+      escrever('TEMPO DA OPERAÇÃO NO SERVIDOR: ' + dados.tempoRSAms + ' ms');
+      escrever('TEMPO TOTAL DA COMUNICAÇÃO: ' + duracao + ' ms');
+      escrever('NENHUMA FICHA FOI EMITIDA');
+      escrever('TESTE DE ASSINATURA REMOTA: OK');
+      painel.className = 'sucesso';
+    } catch(erro) {
+      painel.className = 'falha';
+      escrever('ERRO: ' + (erro && erro.message || String(erro)));
+      escrever('Se a rota ainda não aparecer, publique uma nova versão da implantação /exec.');
+    } finally {botao.disabled = false;}
+  }
+  botao.addEventListener('click', testar);
+  </script>
+</body>
+</html>
