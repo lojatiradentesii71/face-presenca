@@ -610,7 +610,7 @@ if (resultado.status === "OK") {
 
   // Manter operações financeiras desabilitadas
   document.getElementById("btnReceber").disabled = false;
-  document.getElementById("btnDoar").disabled = true;
+  document.getElementById("btnDoar").disabled = false;
 
   document.getElementById("mensagem").textContent =
     "✅ Login e sessão validados! " +
@@ -1168,7 +1168,7 @@ if (!token || !idCarteira) {
         .disabled = false;
 
       document.getElementById("btnDoar")
-        .disabled = true;
+        .disabled = false;
 
       document.getElementById("mensagem")
         .textContent =
