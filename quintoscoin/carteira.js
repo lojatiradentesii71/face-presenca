@@ -2647,6 +2647,10 @@ async function QC_carregarSolicitacoes191() {
   QC_inserirBackup197(item, pedido);
 }
 
+      if (typeof QC_inserirRecebimento198 === "function") {
+  QC_inserirRecebimento198(item, pedido);
+}
+
       qcLista191.appendChild(item);
 
     }
