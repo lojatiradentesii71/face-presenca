@@ -303,8 +303,6 @@ else if (situacao === "GASTA") {
 
 }
 
-
-           fichas.push({valor:10, idChave:"QC-10-V1"});
          }
        }
 
