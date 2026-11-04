@@ -4,7 +4,10 @@ function QC_lerCarteira() {
 
   try {
     const dados = JSON.parse(
-      localStorage.getItem(QC_CHAVE_CARTEIRA) || "[]"
+      localStorage.getItem(
+  QC_CHAVE_CARTEIRA + "_" +
+  (localStorage.getItem("QC_ID_CARTEIRA") || "SEM_CARTEIRA")
+) || "[]"
     );
 
     return Array.isArray(dados) ? dados : [];
@@ -310,6 +313,8 @@ function QC_mostrarLogin() {
 
   document.getElementById("formLogin")
     .style.display = "block";
+
+    QC_atualizarBoasVindas192();
 }
 
 document.getElementById("linkJaTenhoCarteira")
@@ -2657,3 +2662,190 @@ qcBotao191.addEventListener(
   "click",
   QC_carregarSolicitacoes191
 );
+
+
+// PASSO 192 - TROCA DE IRMÃO E BOAS-VINDAS
+
+function QC_atualizarBoasVindas192() {
+
+  const aviso = document.getElementById("qcBoasVindas");
+  if (!aviso) return;
+
+  const idCarteira = localStorage.getItem(QC_ID_LOCAL);
+
+  if (!idCarteira) {
+    aviso.textContent =
+      "Bem-vindo! Informe sua carteira para entrar.";
+    return;
+  }
+
+  const chaveNome = "QC_NOME_CARTEIRA_" + idCarteira;
+  const nomeGuardado = localStorage.getItem(chaveNome);
+
+  if (nomeGuardado) {
+    aviso.textContent =
+      "Bem-vindo, Ir.'. " + nomeGuardado +
+      ". Digite sua senha para entrar na carteira.";
+    return;
+  }
+
+  aviso.textContent =
+    "Bem-vindo! Digite sua senha para entrar na carteira.";
+
+  QC_localizarCarteiraServidor192({ idCarteira })
+    .then(dados => {
+
+      if (dados.status !== "OK" || !dados.nome) return;
+
+      localStorage.setItem(chaveNome, dados.nome);
+
+      if (localStorage.getItem(QC_ID_LOCAL) === idCarteira) {
+        aviso.textContent =
+          "Bem-vindo, Ir.'. " + dados.nome +
+          ". Digite sua senha para entrar na carteira.";
+      }
+
+    })
+    .catch(() => {});
+}
+
+
+async function QC_localizarCarteiraServidor192(consulta) {
+
+  const url =
+    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+  const resposta = await fetch(url, {
+    method: "POST",
+    redirect: "follow",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify({
+      acao: "qc_localizar_carteira",
+      ...consulta
+    })
+  });
+
+  if (!resposta.ok) {
+    throw new Error(
+      "Falha de comunicação: HTTP " + resposta.status
+    );
+  }
+
+  return await resposta.json();
+}
+
+
+document.getElementById("qcLinkTrocarCarteira")
+  .addEventListener("click", function(evento) {
+
+    evento.preventDefault();
+
+    document.getElementById("qcPainelTrocaCarteira")
+      .style.display = "block";
+
+    document.getElementById("qcMensagemTrocaCarteira")
+      .textContent = "";
+
+    document.getElementById("qcSenhaLogin").value = "";
+    document.getElementById("qcOutroIdCadastro").focus();
+  });
+
+
+document.getElementById("qcCancelarTrocaCarteira")
+  .addEventListener("click", function() {
+
+    document.getElementById("qcPainelTrocaCarteira")
+      .style.display = "none";
+  });
+
+
+document.getElementById("qcSelecionarOutraCarteira")
+  .addEventListener("click", async function() {
+
+    const botao = this;
+    const idCadastro = document
+      .getElementById("qcOutroIdCadastro")
+      .value.trim();
+
+    const mensagem = document
+      .getElementById("qcMensagemTrocaCarteira");
+
+    if (!idCadastro) {
+      mensagem.textContent = "Informe o IdCadastro do irmão.";
+      return;
+    }
+
+    botao.disabled = true;
+    mensagem.textContent = "Localizando carteira existente...";
+
+    try {
+
+      const dados = await QC_localizarCarteiraServidor192({
+        idCadastro
+      });
+
+      if (dados.status !== "OK" || !dados.idCarteira) {
+        throw new Error(
+          dados.mensagem || "Carteira não encontrada."
+        );
+      }
+
+      // Encerrar a sessão anterior antes da troca.
+      const tokenAnterior = sessionStorage.getItem(
+        QC_CHAVE_SESSAO
+      );
+
+      if (tokenAnterior) {
+        const saida = await QC_enviarLogoutTeste(tokenAnterior);
+
+        if (!["OK", "SESSAO_INVALIDA"].includes(saida.status)) {
+          throw new Error(
+            "Não foi possível encerrar a sessão anterior."
+          );
+        }
+      }
+
+      sessionStorage.removeItem(QC_CHAVE_SESSAO);
+
+      // Selecionar a carteira já existente.
+      localStorage.setItem(
+        QC_ID_LOCAL,
+        dados.idCarteira
+      );
+
+      localStorage.setItem(
+        "QC_NOME_CARTEIRA_" + dados.idCarteira,
+        dados.nome || ""
+      );
+
+      document.getElementById("qcSenhaLogin").value = "";
+      document.getElementById("qcOutroIdCadastro").value = "";
+
+      document.getElementById("qcPainelTrocaCarteira")
+        .style.display = "none";
+
+      QC_mostrarLogin();
+      QC_atualizarBoasVindas192();
+      QC_atualizarTela();
+
+      document.getElementById("qcSenhaLogin").focus();
+
+      QC_mostrarMensagemAcesso(
+        "Carteira selecionada. Digite a senha do irmão para entrar.",
+        "sucesso"
+      );
+
+    } catch (erro) {
+
+      mensagem.textContent = "⚠️ " + erro.message;
+
+    } finally {
+
+      botao.disabled = false;
+
+    }
+  });
+
+QC_atualizarBoasVindas192();
