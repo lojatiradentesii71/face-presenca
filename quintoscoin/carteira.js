@@ -2639,6 +2639,10 @@ async function QC_carregarSolicitacoes191() {
         item.appendChild(botao);
       }
 
+      if (typeof QC_inserirAcao195 === "function") {
+  QC_inserirAcao195(item, pedido);
+}
+
       qcLista191.appendChild(item);
 
     }
