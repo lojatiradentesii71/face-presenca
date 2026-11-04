@@ -279,5 +279,245 @@
      }
    });
 
+  
+// PASSO 203 - RESTAURAR BACKUP DE FICHAS ASSINADAS
+
+const arquivo203 = document.createElement("input");
+arquivo203.type = "file";
+arquivo203.accept = ".json,application/json";
+arquivo203.style.marginTop = "12px";
+arquivo203.style.width = "100%";
+
+const restaurar203 = document.createElement("button");
+restaurar203.type = "button";
+restaurar203.textContent = "Restaurar backup das fichas";
+restaurar203.style.marginTop = "10px";
+
+painel.insertBefore(arquivo203, aviso);
+painel.insertBefore(restaurar203, aviso);
+
+restaurar203.addEventListener("click", async () => {
+
+  const arquivo = arquivo203.files[0];
+  const segredo = senha.value;
+  const sessaoInicial = dadosDaSessao();
+
+  if (!sessaoInicial.id || !sessaoInicial.token) {
+    aviso.textContent = "Entre na carteira primeiro.";
+    return;
+  }
+
+  if (!arquivo) {
+    aviso.textContent = "Selecione o arquivo de backup.";
+    return;
+  }
+
+  if (!segredo) {
+    aviso.textContent =
+      "Informe a senha usada para proteger as fichas.";
+    return;
+  }
+
+  restaurar203.disabled = true;
+  aviso.textContent = "Conferindo backup e assinaturas...";
+
+  try {
+
+    if (arquivo.size > 2000000) {
+      throw Error("Arquivo de backup muito grande.");
+    }
+
+    const backup203 = JSON.parse(await arquivo.text());
+
+    if (
+      backup203.formato !==
+        "QUINTOSCOIN_BACKUP_ASSINADAS_V1" ||
+      !Array.isArray(backup203.registrosCifrados) ||
+      backup203.registrosCifrados.length < 1 ||
+      backup203.registrosCifrados.length > 200
+    ) {
+      throw Error("Formato de backup inválido.");
+    }
+
+    const resposta = await QC_post191(
+      "qc_chave_publica_10"
+    );
+
+    const nHex = String(
+      resposta.moduloHex || ""
+    ).toLowerCase();
+
+    const eHex = String(
+      resposta.expoenteHex || ""
+    ).toLowerCase();
+
+    if (
+      resposta.status !== "OK" ||
+      resposta.idChave !== "QC-10-V1" ||
+      !/^[89a-f][0-9a-f]{1023}$/.test(nHex) ||
+      !/^0*10001$/.test(eHex)
+    ) {
+      throw Error("Chave pública inválida.");
+    }
+
+    const eNormal =
+      eHex.length % 2 ? "0" + eHex : eHex;
+
+    const chavePublica203 =
+      await crypto.subtle.importKey(
+        "jwk",
+        {
+          kty: "RSA",
+          n: base64url(deHex(nHex)),
+          e: base64url(deHex(eNormal)),
+          ext: true,
+          key_ops: ["verify"]
+        },
+        { name: "RSA-PSS", hash: "SHA-384" },
+        false,
+        ["verify"]
+      );
+
+    async function validarFicha203(cifrado) {
+
+      const ficha = await abrir(cifrado, segredo);
+
+      if (
+        !ficha ||
+        ficha.formato !== "QC_FICHA_ASSINADA_V1" ||
+        ficha.idChave !== "QC-10-V1" ||
+        ficha.valor !== 10 ||
+        !/^[0-9a-f]{1024}$/i.test(
+          ficha.assinaturaHex || ""
+        )
+      ) {
+        throw Error("Ficha inválida no backup.");
+      }
+
+      const msg = deHex(ficha.mensagemHex || "");
+      const conteudo = dec.decode(msg.slice(32));
+
+      if (
+        msg.length < 80 ||
+        !/^QUINTOSCOIN\|V1\|10\|QC-10-V1\|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i
+          .test(conteudo)
+      ) {
+        throw Error("Conteúdo da ficha inválido.");
+      }
+
+      const valida = await crypto.subtle.verify(
+        { name: "RSA-PSS", saltLength: 48 },
+        chavePublica203,
+        deHex(ficha.assinaturaHex),
+        msg
+      );
+
+      if (!valida) {
+        throw Error("Assinatura não reconhecida.");
+      }
+
+      return ficha.mensagemHex.toLowerCase();
+    }
+
+    const atuais = lerRegistros();
+    const novosRegistros = { ...atuais };
+    const identificadores = new Set();
+
+    // Identificar fichas que já existem.
+    for (const registro of Object.values(atuais)) {
+
+      const identificador =
+        await validarFicha203(registro);
+
+      if (identificadores.has(identificador)) {
+        throw Error(
+          "Existem fichas duplicadas na carteira atual."
+        );
+      }
+
+      identificadores.add(identificador);
+    }
+
+    let importadas = 0;
+    let repetidas = 0;
+
+    for (const registro of backup203.registrosCifrados) {
+
+      const identificador =
+        await validarFicha203(registro);
+
+      // Não importar duas vezes a mesma ficha.
+      if (identificadores.has(identificador)) {
+        repetidas++;
+        continue;
+      }
+
+      const digest = new Uint8Array(
+        await crypto.subtle.digest(
+          "SHA-256",
+          deHex(identificador)
+        )
+      );
+
+      const hash = Array.from(digest, b =>
+        b.toString(16).padStart(2, "0")
+      ).join("");
+
+      const chaveRegistro = "RECUP_" + hash;
+
+      if (Object.prototype.hasOwnProperty.call(
+        novosRegistros, chaveRegistro
+      )) {
+        throw Error("Conflito no armazenamento.");
+      }
+
+      novosRegistros[chaveRegistro] = registro;
+      identificadores.add(identificador);
+      importadas++;
+    }
+
+    const sessaoAtual = dadosDaSessao();
+
+    if (
+      sessaoAtual.id !== sessaoInicial.id ||
+      sessaoAtual.token !== sessaoInicial.token
+    ) {
+      throw Error("A sessão mudou durante a restauração.");
+    }
+
+    // Gravar somente depois de validar tudo.
+    if (importadas > 0) {
+      localStorage.setItem(
+        chaveLocal(),
+        JSON.stringify(novosRegistros)
+      );
+    }
+
+    memoria = null;
+    renderizar();
+
+    aviso.textContent =
+      "✅ Backup conferido. " +
+      importadas + " ficha(s) restaurada(s). " +
+      repetidas + " já existente(s). " +
+      "Use Verificar meu saldo para atualizar.";
+
+  } catch (erro) {
+
+    aviso.textContent =
+      "⚠️ Não foi possível restaurar: " +
+      erro.message;
+
+  } finally {
+
+    restaurar203.disabled = false;
+    arquivo203.value = "";
+    senha.value = "";
+
+  }
+
+});
+
+
    renderizar();
  })();
