@@ -88,7 +88,9 @@
 
     <h3>Entrar na carteira</h3>
 
-    <p>Digite sua senha para continuar.</p>
+    <p id="qcBoasVindas">
+  Bem-vindo! Digite sua senha para entrar na carteira.
+</p>
   
 <input
   type="password"
@@ -103,6 +105,37 @@
 <button id="btnEntrarCarteira">
   Entrar
 </button>
+
+
+<p>
+  <a href="#" id="qcLinkTrocarCarteira">
+    🔄 Trocar de irmão / carteira
+  </a>
+</p>
+
+<div id="qcPainelTrocaCarteira" style="display:none;">
+
+  <p>Informe o IdCadastro de uma carteira já ativada.</p>
+
+  <input
+    type="text"
+    id="qcOutroIdCadastro"
+    placeholder="IdCadastro do irmão"
+    autocomplete="off"
+  >
+
+  <button type="button" id="qcSelecionarOutraCarteira">
+    Selecionar carteira
+  </button>
+
+  <button type="button" id="qcCancelarTrocaCarteira">
+    Cancelar
+  </button>
+
+  <p id="qcMensagemTrocaCarteira" role="status"></p>
+
+</div>
+
 
 <p>
   <a href="#" id="linkEsqueciSenha">
