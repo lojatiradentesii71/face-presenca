@@ -20,6 +20,11 @@ function QC_lerCarteira() {
 
 function QC_atualizarTela() {
 
+    if (typeof QC_atualizarSaldoReal202 === "function") {
+    QC_atualizarSaldoReal202();
+    return;
+  }
+
   const fichas = QC_lerCarteira();
 
   const saldo = fichas.reduce(
