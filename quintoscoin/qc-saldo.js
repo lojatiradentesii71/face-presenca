@@ -146,8 +146,10 @@
      for (const ficha of memoria.fichas) {
        const div = document.createElement("div");
        div.className = "ficha";
-       div.textContent = ficha.valor + " QC — " + ficha.idChave +
-         " — assinatura verificada";
+       div.textContent =
+  ficha.valor + " QC — " +
+  ficha.origem + " — Ref. " +
+  ficha.referencia;
        lista.appendChild(div);
      }
 
@@ -210,7 +212,7 @@
 
      try {
        if (!crypto.subtle) throw Error("Criptografia indisponível.");
-       const registros = Object.values(lerRegistros());
+       const registros = Object.entries(lerRegistros());
        const fichas = [];
        const mensagens = new Set();
        let quantidadeGastas = 0;
@@ -235,7 +237,7 @@
            {name:"RSA-PSS", hash:"SHA-384"}, false, ["verify"]
          );
 
-         for (const registro of registros) {
+         for (const [chaveRegistro, registro] of registros) {
            const ficha = await abrir(registro, segredo);
 
            if (!ficha || ficha.formato !== "QC_FICHA_ASSINADA_V1" ||
@@ -269,14 +271,33 @@ if (!valida) {
 // Consultar o registro global de fichas gastas.
 const situacao = await QC_consultarGastoServidor205(ficha);
 
+
 if (situacao === "DISPONIVEL") {
+
+  const origem = chaveRegistro.startsWith("RECUP_")
+    ? "Backup restaurado"
+    : chaveRegistro.startsWith("QC-EM-")
+      ? "Registro de emissão"
+      : "Outro registro local";
+
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", msg)
+  );
+
+  const referencia = Array.from(
+    digest.slice(0, 6),
+    b => b.toString(16).padStart(2, "0")
+  ).join("");
 
   fichas.push({
     valor: 10,
-    idChave: "QC-10-V1"
+    idChave: "QC-10-V1",
+    origem: origem,
+    referencia: referencia
   });
 
-} else if (situacao === "GASTA") {
+}
+else if (situacao === "GASTA") {
 
   quantidadeGastas++;
 
