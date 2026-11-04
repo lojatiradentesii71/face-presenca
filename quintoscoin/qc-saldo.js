@@ -707,10 +707,16 @@ if (botaoDoar209) {
 
 }
 
+  // PASSO 211 - Ficha conferida, aguardando confirmação.
+let fichaApta211 = null;
+
 conferirDoar209.addEventListener("click", async function() {
 
   const segredo = senhaDoar209.value;
-  senhaDoar209.value = "";
+senhaDoar209.value = "";
+
+fichaApta211 = null;
+confirmarDoar209.disabled = true;;
 
   const sessaoInicial = dadosDaSessao();
 
@@ -812,9 +818,17 @@ conferirDoar209.addEventListener("click", async function() {
       throw Error("A sessão mudou durante a conferência.");
     }
 
-    mensagemDoar209.textContent =
-      "✅ Ficha de 10 QC válida e disponível. " +
-      "Confirmação da doação ainda desativada.";
+    fichaApta211 = {
+  ficha: ficha,
+  id: sessaoInicial.id,
+  token: sessaoInicial.token
+};
+
+confirmarDoar209.disabled = false;
+
+mensagemDoar209.textContent =
+  "✅ Ficha de 10 QC válida e disponível. " +
+  "Pronta para confirmação.";
 
   } catch (erro) {
 
@@ -823,6 +837,127 @@ conferirDoar209.addEventListener("click", async function() {
 
   } finally {
 
+    conferirDoar209.disabled = false;
+
+  }
+
+});
+
+  
+ // PASSO 211 - CONFIRMAR DOACAO ANONIMA
+
+confirmarDoar209.addEventListener("click", async function() {
+
+  const preparada = fichaApta211;
+  const sessao = dadosDaSessao();
+
+  if (
+    !preparada ||
+    !sessao.id ||
+    !sessao.token ||
+    preparada.id !== sessao.id ||
+    preparada.token !== sessao.token
+  ) {
+    mensagemDoar209.textContent =
+      "⚠️ Verifique novamente sua ficha.";
+    confirmarDoar209.disabled = true;
+    return;
+  }
+
+  const confirmou = window.confirm(
+    "Confirma a doação de 10 QuintosCoin? " +
+    "Depois de registrada, a ficha não poderá ser reutilizada."
+  );
+
+  if (!confirmou) return;
+
+  confirmarDoar209.disabled = true;
+  conferirDoar209.disabled = true;
+
+  mensagemDoar209.textContent =
+    "Conferindo e registrando a doação...";
+
+  try {
+
+    // Nova consulta antes da confirmação.
+    const situacao = await QC_consultarGastoServidor205(
+      preparada.ficha
+    );
+
+    if (situacao !== "DISPONIVEL") {
+      throw Error("Esta ficha já foi utilizada.");
+    }
+
+    const URL_APPS_SCRIPT =
+      "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+    // Somente a ficha anônima é enviada.
+    const resposta = await fetch(URL_APPS_SCRIPT, {
+      method: "POST",
+      redirect: "follow",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify({
+        acao: "qc_doar_ficha_anonima",
+        mensagemHex: preparada.ficha.mensagemHex,
+        assinaturaHex: preparada.ficha.assinaturaHex
+      })
+    });
+
+    if (!resposta.ok) {
+      throw Error("Falha HTTP: " + resposta.status);
+    }
+
+    const resultado = await resposta.json();
+
+    if (resultado.status === "DOACOES_BLOQUEADAS") {
+
+      mensagemDoar209.textContent =
+        "✅ Comunicação com o Apps Script confirmada. " +
+        "Doações continuam bloqueadas. " +
+        "Nenhum QC foi gasto.";
+
+    } else if (resultado.status === "DOACAO_REGISTRADA") {
+
+      fichaApta211 = null;
+      memoria = null;
+      renderizar();
+
+      mensagemDoar209.textContent =
+        "✅ Doação de 10 QC registrada! " +
+        "Clique em Verificar meu saldo para atualizar.";
+
+    } else if (resultado.status === "JA_GASTA") {
+
+      memoria = null;
+      renderizar();
+
+      mensagemDoar209.textContent =
+        "⚠️ Esta ficha já consta como gasta no servidor. " +
+        "Verifique seu saldo.";
+
+    } else {
+
+      throw Error(
+        resultado.mensagem ||
+        resultado.status ||
+        "Resposta de doação não reconhecida."
+      );
+
+    }
+
+  } catch (erro) {
+
+    mensagemDoar209.textContent =
+      "⚠️ " + erro.message +
+      ". Não repita a doação sem verificar o saldo.";
+
+  } finally {
+
+    // Exigir uma nova verificação para qualquer tentativa.
+    fichaApta211 = null;
+    confirmarDoar209.disabled = true;
     conferirDoar209.disabled = false;
 
   }
