@@ -2643,6 +2643,10 @@ async function QC_carregarSolicitacoes191() {
   QC_inserirAcao195(item, pedido);
 }
 
+      if (typeof QC_inserirBackup197 === "function") {
+  QC_inserirBackup197(item, pedido);
+}
+
       qcLista191.appendChild(item);
 
     }
