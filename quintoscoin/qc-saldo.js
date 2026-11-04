@@ -215,6 +215,7 @@
        const registros = Object.entries(lerRegistros());
        const fichas = [];
        const mensagens = new Set();
+       let chavePublica209 = null;
        let quantidadeGastas = 0;
 
        if (registros.length) {
@@ -236,6 +237,7 @@
             e:base64url(deHex(eNormal)), ext:true, key_ops:["verify"]},
            {name:"RSA-PSS", hash:"SHA-384"}, false, ["verify"]
          );
+        chavePublica209 = chave;
 
          for (const [chaveRegistro, registro] of registros) {
            const ficha = await abrir(registro, segredo);
@@ -290,11 +292,12 @@ if (situacao === "DISPONIVEL") {
   ).join("");
 
   fichas.push({
-    valor: 10,
-    idChave: "QC-10-V1",
-    origem: origem,
-    referencia: referencia
-  });
+  valor: 10,
+  idChave: "QC-10-V1",
+  origem: origem,
+  referencia: referencia,
+  chaveRegistro: chaveRegistro
+});
 
 }
 else if (situacao === "GASTA") {
@@ -311,12 +314,13 @@ else if (situacao === "GASTA") {
          throw Error("A sessão mudou durante a conferência.");
        }
 
-       memoria = {
+      memoria = {
   id,
   token,
   fichas,
   total: fichas.length * 10,
-  gastas: quantidadeGastas
+  gastas: quantidadeGastas,
+  chavePublica209: chavePublica209
 };
        renderizar();
 
@@ -611,6 +615,220 @@ restaurar203.addEventListener("click", async () => {
   }
 
 });
+
+  
+// PASSO 209 - PREPARACAO DE DOACAO DE 10 QC
+
+const botaoDoar209 = document.getElementById("btnDoar");
+
+const painelDoar209 = document.createElement("section");
+painelDoar209.style.marginTop = "20px";
+painelDoar209.style.padding = "16px";
+painelDoar209.style.border = "1px solid #ffffff33";
+painelDoar209.style.borderRadius = "12px";
+painelDoar209.style.display = "none";
+
+const tituloDoar209 = document.createElement("h3");
+tituloDoar209.textContent = "Doar QuintosCoin";
+
+const valorDoar209 = document.createElement("p");
+valorDoar209.textContent = "Doação de 10 QC";
+
+const senhaDoar209 = document.createElement("input");
+senhaDoar209.type = "password";
+senhaDoar209.placeholder = "Senha da ficha";
+senhaDoar209.autocomplete = "off";
+senhaDoar209.style.width = "100%";
+
+const conferirDoar209 = document.createElement("button");
+conferirDoar209.type = "button";
+conferirDoar209.textContent = "Conferir ficha para doação";
+
+const confirmarDoar209 = document.createElement("button");
+confirmarDoar209.type = "button";
+confirmarDoar209.textContent = "Confirmar doação de 10 QC";
+confirmarDoar209.disabled = true;
+confirmarDoar209.style.marginTop = "10px";
+
+const mensagemDoar209 = document.createElement("p");
+mensagemDoar209.setAttribute("role", "status");
+mensagemDoar209.textContent =
+  "A confirmação da doação ainda não está habilitada.";
+
+painelDoar209.append(
+  tituloDoar209,
+  valorDoar209,
+  senhaDoar209,
+  conferirDoar209,
+  confirmarDoar209,
+  mensagemDoar209
+);
+
+if (botaoDoar209) {
+
+  painel.after(painelDoar209);
+
+  // Captura o clique antes do antigo aviso demonstrativo.
+  botaoDoar209.addEventListener("click", function(evento) {
+
+    evento.preventDefault();
+    evento.stopImmediatePropagation();
+
+    painelDoar209.style.display = "block";
+
+    const atual = dadosDaSessao();
+
+    if (
+      !memoria ||
+      memoria.id !== atual.id ||
+      memoria.token !== atual.token ||
+      !memoria.chavePublica209
+    ) {
+      mensagemDoar209.textContent =
+        "Primeiro clique em Verificar meu saldo.";
+      return;
+    }
+
+    if (!memoria.fichas.length) {
+      mensagemDoar209.textContent =
+        "Nenhuma ficha disponível para doar.";
+      return;
+    }
+
+    mensagemDoar209.textContent =
+      "Informe a senha para conferir sua ficha de 10 QC.";
+
+    painelDoar209.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest"
+    });
+
+  }, true);
+
+}
+
+conferirDoar209.addEventListener("click", async function() {
+
+  const segredo = senhaDoar209.value;
+  senhaDoar209.value = "";
+
+  const sessaoInicial = dadosDaSessao();
+
+  if (!segredo) {
+    mensagemDoar209.textContent = "Informe a senha da ficha.";
+    return;
+  }
+
+  if (
+    !memoria ||
+    memoria.id !== sessaoInicial.id ||
+    memoria.token !== sessaoInicial.token ||
+    !memoria.chavePublica209 ||
+    !memoria.fichas.length
+  ) {
+    mensagemDoar209.textContent =
+      "Verifique novamente seu saldo.";
+    return;
+  }
+
+  conferirDoar209.disabled = true;
+  confirmarDoar209.disabled = true;
+
+  mensagemDoar209.textContent =
+    "Conferindo assinatura e disponibilidade...";
+
+  try {
+
+    const referencia = memoria.fichas[0];
+
+    if (
+      !referencia ||
+      !referencia.chaveRegistro ||
+      referencia.valor !== 10
+    ) {
+      throw Error("Referência da ficha inválida.");
+    }
+
+    const registro =
+      lerRegistros()[referencia.chaveRegistro];
+
+    if (!registro) {
+      throw Error("Ficha não encontrada no celular.");
+    }
+
+    const ficha = await abrir(registro, segredo);
+
+    if (
+      !ficha ||
+      ficha.formato !== "QC_FICHA_ASSINADA_V1" ||
+      ficha.idChave !== "QC-10-V1" ||
+      ficha.valor !== 10 ||
+      !/^[0-9a-f]{1024}$/i.test(
+        ficha.assinaturaHex || ""
+      )
+    ) {
+      throw Error("Estrutura da ficha inválida.");
+    }
+
+    const mensagemBytes = deHex(ficha.mensagemHex);
+
+    const conteudo = dec.decode(
+      mensagemBytes.slice(32)
+    );
+
+    if (
+      mensagemBytes.length < 80 ||
+      !/^QUINTOSCOIN\|V1\|10\|QC-10-V1\|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i
+        .test(conteudo)
+    ) {
+      throw Error("Conteúdo da ficha inválido.");
+    }
+
+    const assinaturaValida =
+      await crypto.subtle.verify(
+        { name: "RSA-PSS", saltLength: 48 },
+        memoria.chavePublica209,
+        deHex(ficha.assinaturaHex),
+        mensagemBytes
+      );
+
+    if (!assinaturaValida) {
+      throw Error("Assinatura da ficha inválida.");
+    }
+
+    const situacao =
+      await QC_consultarGastoServidor205(ficha);
+
+    if (situacao !== "DISPONIVEL") {
+      throw Error("Esta ficha já foi utilizada.");
+    }
+
+    const sessaoAtual = dadosDaSessao();
+
+    if (
+      sessaoAtual.id !== sessaoInicial.id ||
+      sessaoAtual.token !== sessaoInicial.token
+    ) {
+      throw Error("A sessão mudou durante a conferência.");
+    }
+
+    mensagemDoar209.textContent =
+      "✅ Ficha de 10 QC válida e disponível. " +
+      "Confirmação da doação ainda desativada.";
+
+  } catch (erro) {
+
+    mensagemDoar209.textContent =
+      "⚠️ " + erro.message;
+
+  } finally {
+
+    conferirDoar209.disabled = false;
+
+  }
+
+});
+
 
 
    renderizar();
