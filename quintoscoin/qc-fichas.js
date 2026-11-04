@@ -665,8 +665,8 @@ window.QC_inserirRecebimento198 = function(item, pedido) {
   botao.type = "button";
   botao.textContent = "Assinar e receber 10 QC";
 
-  // Permanece bloqueado nesta etapa.
-  botao.disabled = true;
+// A autorização definitiva é conferida no servidor.
+botao.disabled = false;
 
   mensagem.textContent =
     "Ficha pronta. Assinatura aguardando liberação.";
