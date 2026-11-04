@@ -459,4 +459,84 @@
 
   };
 
+ 
+// PASSO 197 - BACKUP DA FICHA CEGA PENDENTE
+
+window.QC_inserirBackup197 = function(item, pedido) {
+
+  if (
+    pedido.status !== "AUTORIZADA" ||
+    Number(pedido.valor) !== 10 ||
+    !pedido.idEmissao
+  ) {
+    return;
+  }
+
+  const registros = pendencias();
+  const registro = registros[pedido.idEmissao];
+
+  if (!registro) {
+    return;
+  }
+
+  const botao = document.createElement("button");
+  botao.type = "button";
+  botao.textContent = "Salvar backup protegido";
+  botao.style.marginTop = "10px";
+
+  const mensagem = document.createElement("p");
+  mensagem.setAttribute("role", "status");
+
+  botao.addEventListener("click", function() {
+
+    try {
+
+      const atual = pendencias()[pedido.idEmissao];
+
+      if (!atual) {
+        throw new Error("Ficha pendente não encontrada.");
+      }
+
+      // Somente dados criptografados são exportados.
+      const backup = {
+        formato: "QUINTOSCOIN_BACKUP_PENDENTE_V1",
+        criadoEm: new Date().toISOString(),
+        registroCifrado: atual
+      };
+
+      const blob = new Blob(
+        [JSON.stringify(backup, null, 2)],
+        { type: "application/json" }
+      );
+
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "QuintosCoin_backup_pendente.json";
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      setTimeout(function() {
+        URL.revokeObjectURL(url);
+      }, 3000);
+
+      mensagem.textContent =
+        "Backup solicitado. Confira se o arquivo foi salvo.";
+
+    } catch (erro) {
+
+      mensagem.textContent =
+        "Não foi possível salvar: " + erro.message;
+
+    }
+
+  });
+
+  item.append(botao, mensagem);
+};
+
+
 })();
