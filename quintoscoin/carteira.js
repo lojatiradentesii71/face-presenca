@@ -670,6 +670,9 @@ function QC_exibirTelaCarteira() {
 
   // Consultar se esta carteira pertence ao tesoureiro.
   QC_atualizarAreaTesoureiro();
+
+  // Consultar solicitações do próprio irmão.
+  QC_carregarSolicitacoes191();
 }
 
 
@@ -2450,3 +2453,207 @@ function QC_confirmarPagamentoPedido(nome, valor) {
   });
 
 }
+
+
+// QUINTOSCOIN - MINHAS SOLICITAÇÕES (PASSO 191)
+
+const QC_URL_191 =
+  "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+const qcPainel191 = document.createElement("section");
+qcPainel191.id = "qcMinhasSolicitacoes";
+qcPainel191.style.marginTop = "24px";
+
+const qcTitulo191 = document.createElement("h3");
+qcTitulo191.textContent = "Minhas solicitações de QC";
+
+const qcBotao191 = document.createElement("button");
+qcBotao191.type = "button";
+qcBotao191.textContent = "Atualizar solicitações";
+
+const qcMensagem191 = document.createElement("p");
+qcMensagem191.setAttribute("role", "status");
+
+const qcLista191 = document.createElement("div");
+qcLista191.id = "qcListaMinhasSolicitacoes";
+
+qcPainel191.append(
+  qcTitulo191,
+  qcBotao191,
+  qcMensagem191,
+  qcLista191
+);
+
+document.querySelector("#telaCarteira .fichas")
+  .after(qcPainel191);
+
+async function QC_post191(acao, extras = {}) {
+
+  const tokenSessao = sessionStorage.getItem(
+    QC_CHAVE_SESSAO
+  );
+
+  if (!tokenSessao) {
+    throw new Error("Sessão expirada. Entre novamente.");
+  }
+
+  const resposta = await fetch(QC_URL_191, {
+    method: "POST",
+    redirect: "follow",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify({
+      acao,
+      tokenSessao,
+      ...extras
+    })
+  });
+
+  if (!resposta.ok) {
+    throw new Error(
+      "Falha de comunicação: HTTP " + resposta.status
+    );
+  }
+
+  const dados = await resposta.json();
+
+  if (
+    sessionStorage.getItem(QC_CHAVE_SESSAO) !== tokenSessao
+  ) {
+    throw new Error(
+      "A sessão foi encerrada durante a consulta."
+    );
+  }
+
+  return dados;
+}
+
+async function QC_carregarSolicitacoes191() {
+
+  if (!sessionStorage.getItem(QC_CHAVE_SESSAO)) {
+    return;
+  }
+
+  qcBotao191.disabled = true;
+  qcMensagem191.textContent = "Consultando solicitações...";
+  qcLista191.replaceChildren();
+
+  try {
+
+    const dados = await QC_post191(
+      "qc_minhas_solicitacoes"
+    );
+
+    if (
+      dados.status !== "OK" ||
+      !Array.isArray(dados.solicitacoes)
+    ) {
+      throw new Error(
+        dados.mensagem ||
+        "Não foi possível consultar as solicitações."
+      );
+    }
+
+    if (!dados.solicitacoes.length) {
+      qcLista191.textContent =
+        "Nenhuma solicitação registrada.";
+    }
+
+    for (const pedido of dados.solicitacoes) {
+
+      const item = document.createElement("div");
+      item.style.padding = "12px 0";
+      item.style.borderBottom = "1px solid #8886";
+
+      const resumo = document.createElement("strong");
+      resumo.textContent =
+        pedido.valor + " QC — " + pedido.status;
+
+      item.appendChild(resumo);
+
+      if (pedido.idEmissao) {
+        const vinculo = document.createElement("p");
+        vinculo.textContent =
+          "Emissão vinculada: " + pedido.idEmissao;
+
+        item.appendChild(vinculo);
+      }
+
+      const podePreparar =
+        pedido.status === "AUTORIZADA" &&
+        (
+          !pedido.idEmissao ||
+          /^QC-EM-[0-9a-f-]{36}$/i.test(pedido.idEmissao)
+        );
+
+      if (podePreparar) {
+
+        const botao = document.createElement("button");
+        botao.type = "button";
+        botao.textContent = "Preparar fichas autorizadas";
+
+        botao.addEventListener("click", async () => {
+
+          botao.disabled = true;
+          qcMensagem191.textContent = "Preparando cotas...";
+
+          try {
+
+            const resp = await QC_post191(
+              "qc_preparar_emissao",
+              {
+                idAutorizacao: pedido.idAutorizacao
+              }
+            );
+
+            if (resp.status !== "AGUARDANDO_ASSINATURA") {
+              throw new Error(
+                resp.mensagem || "Emissão não preparada."
+              );
+            }
+
+            qcMensagem191.textContent =
+              "✅ " + resp.quantidadeFichas +
+              " ficha(s) planejada(s). " +
+              "Aguardando assinatura criptográfica. " +
+              "Saldo não alterado.";
+
+            botao.textContent = "Cotas preparadas";
+
+          } catch (erro) {
+
+            botao.disabled = false;
+            qcMensagem191.textContent =
+              "⚠️ " + erro.message;
+
+          }
+
+        });
+
+        item.appendChild(botao);
+      }
+
+      qcLista191.appendChild(item);
+
+    }
+
+    qcMensagem191.textContent = "";
+
+  } catch (erro) {
+
+    qcMensagem191.textContent =
+      "⚠️ " + erro.message;
+
+  } finally {
+
+    qcBotao191.disabled = false;
+
+  }
+
+}
+
+qcBotao191.addEventListener(
+  "click",
+  QC_carregarSolicitacoes191
+);
