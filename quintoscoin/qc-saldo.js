@@ -29,6 +29,52 @@
      return Uint8Array.from(s.match(/../g), x => parseInt(x, 16));
    }
 
+  
+  // PASSO 205 - CONSULTA ANONIMA DE GASTO
+
+  async function QC_consultarGastoServidor205(ficha) {
+
+    const url =
+      "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+    // Importante: nao enviar token de login,
+    // IdCadastro nem identificacao da carteira.
+    const resposta = await fetch(url, {
+      method: "POST",
+      redirect: "follow",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify({
+        acao: "qc_consultar_gasto",
+        mensagemHex: ficha.mensagemHex,
+        assinaturaHex: ficha.assinaturaHex
+      })
+    });
+
+    if (!resposta.ok) {
+      throw new Error(
+        "Falha ao consultar gastos. HTTP " +
+        resposta.status
+      );
+    }
+
+    const dados = await resposta.json();
+
+    if (
+      dados.status !== "DISPONIVEL" &&
+      dados.status !== "GASTA"
+    ) {
+      throw new Error(
+        dados.mensagem ||
+        "Nao foi possivel confirmar a situacao da ficha."
+      );
+    }
+
+    return dados.status;
+  }
+
+
    function base64url(b) {
      let str = "";
      for (const x of b) str += String.fromCharCode(x);
@@ -167,6 +213,7 @@
        const registros = Object.values(lerRegistros());
        const fichas = [];
        const mensagens = new Set();
+       let quantidadeGastas = 0;
 
        if (registros.length) {
          const resposta = await QC_post191("qc_chave_publica_10");
@@ -214,9 +261,27 @@
              deHex(ficha.assinaturaHex), msg
            );
 
-           if (!valida) {
-             throw Error("Assinatura de ficha não verificada.");
-           }
+          
+if (!valida) {
+  throw Error("Assinatura de ficha não verificada.");
+}
+
+// Consultar o registro global de fichas gastas.
+const situacao = await QC_consultarGastoServidor205(ficha);
+
+if (situacao === "DISPONIVEL") {
+
+  fichas.push({
+    valor: 10,
+    idChave: "QC-10-V1"
+  });
+
+} else if (situacao === "GASTA") {
+
+  quantidadeGastas++;
+
+}
+
 
            fichas.push({valor:10, idChave:"QC-10-V1"});
          }
@@ -227,11 +292,21 @@
          throw Error("A sessão mudou durante a conferência.");
        }
 
-       memoria = {id, token, fichas, total:fichas.length * 10};
+       memoria = {
+  id,
+  token,
+  fichas,
+  total: fichas.length * 10,
+  gastas: quantidadeGastas
+};
        renderizar();
 
-       aviso.textContent = "✅ " + fichas.length +
-         " ficha(s) assinada(s) e verificadas. Doações ainda bloqueadas.";
+       aviso.textContent =
+  "✅ " + fichas.length +
+  " ficha(s) disponíveis. " +
+  quantidadeGastas +
+  " ficha(s) já gastas. " +
+  "Doações ainda bloqueadas.";
 
      } catch (erro) {
        memoria = null;
