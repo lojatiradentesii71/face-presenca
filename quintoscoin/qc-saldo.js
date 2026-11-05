@@ -1,4 +1,4 @@
-// QuintosCoin — Passo 225: saldo verificado para fichas de 2, 5 e 10 QC.
+// QuintosCoin — Passo 252: saldo e verificacao de backup para fichas de 2, 5 e 10 QC.
 // Nenhuma emissão, gasto ou assinatura é feita neste arquivo.
 (function () {
   "use strict";
@@ -132,11 +132,25 @@
   backup.textContent = "Salvar backup das fichas assinadas";
   backup.style.marginTop = "10px";
 
+  // PASSO 252 - Verificar backup sem importar, apagar ou alterar fichas.
+  const verificarBackup252 = document.createElement("button");
+  verificarBackup252.type = "button";
+  verificarBackup252.textContent = "Verificar backup para recuperacao";
+  verificarBackup252.style.marginTop = "10px";
+
+  const arquivoBackup252 = document.createElement("input");
+  arquivoBackup252.type = "file";
+  arquivoBackup252.accept = ".json,application/json";
+  arquivoBackup252.style.display = "none";
+
   const aviso = document.createElement("p");
   aviso.setAttribute("role", "status");
   aviso.textContent = "Doações ainda desativadas.";
 
-  painel.append(titulo, senha, conferir, backup, aviso);
+  painel.append(
+    titulo, senha, conferir, backup,
+    verificarBackup252, arquivoBackup252, aviso
+  );
   const secao = document.querySelector("#telaCarteira .fichas");
   if (!secao) return;
   secao.after(painel);
@@ -291,6 +305,149 @@
     } catch (erro) {
       aviso.textContent = "⚠️ " + erro.message;
     }
+  });
+
+  // PASSO 252 - Somente leitura: arquivo e chaves publicas.
+  // Nao escreve no localStorage nem envia fichas ou senhas ao servidor.
+  verificarBackup252.addEventListener("click", () => {
+    const sessaoInicial = dadosDaSessao();
+    if (!sessaoInicial.id || !sessaoInicial.token) {
+      aviso.textContent = "Entre na carteira primeiro.";
+      return;
+    }
+
+    const segredo = senha.value;
+    senha.value = "";
+    if (!segredo) {
+      aviso.textContent = "Informe a senha das fichas antes de selecionar o backup.";
+      return;
+    }
+
+    arquivoBackup252.value = "";
+    arquivoBackup252.onchange = async () => {
+      const arquivo = arquivoBackup252.files?.[0];
+      if (!arquivo) return;
+
+      verificarBackup252.disabled = true;
+      aviso.textContent = "Descriptografando e verificando assinaturas do backup...";
+
+      try {
+        if (!crypto?.subtle) throw Error("Criptografia indisponivel.");
+        if (arquivo.size > 10 * 1024 * 1024) {
+          throw Error("Arquivo de backup excede o tamanho permitido.");
+        }
+
+        const dados = JSON.parse(await arquivo.text());
+        if (
+          !dados ||
+          dados.formato !== "QUINTOSCOIN_BACKUP_ASSINADAS_V1" ||
+          !Array.isArray(dados.registrosCifrados) ||
+          dados.registrosCifrados.length === 0
+        ) {
+          throw Error("Formato de backup assinado invalido.");
+        }
+
+        const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+        const chaves = new Map();
+        const mensagens = new Set();
+        let total = 0;
+
+        for (const registro of dados.registrosCifrados) {
+          const ficha = await abrir(registro, segredo);
+          const valor = Number(ficha?.valor);
+          const idChave = "QC-" + valor + "-V1";
+          if (
+            !ficha ||
+            ficha.formato !== "QC_FICHA_ASSINADA_V1" ||
+            ![2, 5, 10].includes(valor) ||
+            ficha.valor !== valor ||
+            ficha.idChave !== idChave ||
+            !/^[0-9a-f]{1024}$/i.test(ficha.assinaturaHex || "")
+          ) {
+            throw Error("Ficha do backup com estrutura invalida.");
+          }
+
+          const mensagemHex = String(ficha.mensagemHex || "").toLowerCase();
+          const mensagem = deHex(mensagemHex);
+          if (mensagem.length < 80 || mensagens.has(mensagemHex)) {
+            throw Error("Mensagem incompleta ou ficha duplicada no backup.");
+          }
+          mensagens.add(mensagemHex);
+
+          const texto = new TextDecoder("utf-8", {fatal:true})
+            .decode(mensagem.subarray(32));
+          const partes = texto.split("|");
+          if (
+            partes.length !== 5 ||
+            partes[0] !== "QUINTOSCOIN" ||
+            partes[1] !== "V1" ||
+            partes[2] !== String(valor) ||
+            partes[3] !== idChave ||
+            !uuid.test(partes[4])
+          ) {
+            throw Error("Conteudo da ficha invalido.");
+          }
+
+          let chave = chaves.get(valor);
+          if (!chave) {
+            const resposta = await QC_post191("qc_chave_publica_" + valor);
+            const nHex = String(resposta.moduloHex || "").toLowerCase();
+            const eHex = String(resposta.expoenteHex || "").toLowerCase();
+            if (
+              resposta.status !== "OK" ||
+              resposta.idChave !== idChave ||
+              !/^[89a-f][0-9a-f]{1023}$/.test(nHex) ||
+              !/^0*10001$/.test(eHex)
+            ) {
+              throw Error("Chave publica de " + valor + " QC indisponivel.");
+            }
+            const expoenteNormal = eHex.length % 2 ? "0" + eHex : eHex;
+            chave = await crypto.subtle.importKey(
+              "jwk",
+              {
+                kty:"RSA", n:base64url(deHex(nHex)),
+                e:base64url(deHex(expoenteNormal)),
+                ext:true, key_ops:["verify"]
+              },
+              {name:"RSA-PSS", hash:"SHA-384"}, false, ["verify"]
+            );
+            chaves.set(valor, chave);
+          }
+
+          const assinaturaValida = await crypto.subtle.verify(
+            {name:"RSA-PSS", saltLength:48}, chave,
+            deHex(ficha.assinaturaHex), mensagem
+          );
+          if (!assinaturaValida) {
+            throw Error("Assinatura de " + valor + " QC nao confere.");
+          }
+
+          total += valor;
+          if (!Number.isSafeInteger(total)) {
+            throw Error("Total do backup invalido.");
+          }
+        }
+
+        const sessaoAtual = dadosDaSessao();
+        if (
+          sessaoAtual.id !== sessaoInicial.id ||
+          sessaoAtual.token !== sessaoInicial.token
+        ) {
+          throw Error("A sessao mudou durante a verificacao.");
+        }
+
+        aviso.textContent = "✅ Backup valido: " +
+          dados.registrosCifrados.length + " ficha(s), " + total +
+          " QC. Nenhuma ficha importada ou alterada.";
+      } catch (erro) {
+        aviso.textContent = "⚠️ Backup nao verificado: " + erro.message;
+      } finally {
+        arquivoBackup252.value = "";
+        verificarBackup252.disabled = false;
+      }
+    };
+
+    arquivoBackup252.click();
   });
 
   renderizar();
