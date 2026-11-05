@@ -1,6 +1,6 @@
-// QUINTOSCOIN - PASSO 195
- // Preparacao local de uma ficha cega de 10 QC.
- // Nao solicita assinatura nem altera saldo.
+// QUINTOSCOIN - PASSO 224
+ // Preparacao e recebimento de fichas de 2, 5 e 10 QC.
+ // Mantem os bloqueios de assinatura no servidor.
 
 (function () {
   "use strict";
@@ -467,8 +467,7 @@ window.QC_inserirBackup197 = function(item, pedido) {
 
   if (
     pedido.status !== "AUTORIZADA" ||
-    Number(pedido.valor) !== 10 ||
-    !pedido.idEmissao
+    !/^QC-EM-[0-9a-f-]{36}$/i.test(pedido.idEmissao || "")
   ) {
     return;
   }
@@ -622,279 +621,249 @@ function QC_base64Url198(bytes) {
     .replace(/=+$/, "");
 }
 
+// PASSO 224 - Receber separadamente todas as fichas autorizadas.
+// Cada assinatura verificada e salva imediatamente. Em caso de falha,
+// fichas anteriores nao sao descartadas e o reenvio usa o mesmo IdOperacao.
 window.QC_inserirRecebimento198 = function(item, pedido) {
-
   if (
     pedido.status !== "AUTORIZADA" ||
-    Number(pedido.valor) !== 10 ||
-    !/^QC-EM-[0-9a-f-]{36}$/i.test(
-      pedido.idEmissao || ""
-    )
+    !/^QC-EM-[0-9a-f-]{36}$/i.test(pedido.idEmissao || "")
   ) {
     return;
   }
 
   const idEmissao = pedido.idEmissao;
-
-  if (!pendencias()[idEmissao]) {
+  const valorAutorizado = Number(pedido.valor);
+  let valoresEsperados;
+  try {
+    valoresEsperados = QC_distribuirFichas222(valorAutorizado);
+    if (!pendencias()[idEmissao]) return;
+  } catch (_) {
     return;
   }
 
   const painel = document.createElement("div");
   painel.style.marginTop = "10px";
-
   const mensagem = document.createElement("p");
   mensagem.setAttribute("role", "status");
-
-  if (QC_lerAssinadas198()[idEmissao]) {
-    mensagem.textContent =
-      "✅ Ficha já recebida e protegida neste celular.";
-
-    painel.append(mensagem);
-    item.appendChild(painel);
-    return;
-  }
-
   const senhaCampo = document.createElement("input");
   senhaCampo.type = "password";
-  senhaCampo.placeholder =
-    "Senha usada para proteger a ficha";
+  senhaCampo.placeholder = "Senha usada para proteger as fichas";
   senhaCampo.autocomplete = "off";
   senhaCampo.style.width = "100%";
-
   const botao = document.createElement("button");
   botao.type = "button";
-  botao.textContent = "Assinar e receber 10 QC";
-
-// A autorização definitiva é conferida no servidor.
-botao.disabled = false;
-
-  mensagem.textContent =
-    "Ficha pronta. Assinatura aguardando liberação.";
-
+  botao.textContent = valoresEsperados.length === 1
+    ? "Assinar e receber " + valorAutorizado + " QC"
+    : "Assinar e receber " + valoresEsperados.length +
+      " fichas (" + valorAutorizado + " QC)";
+  mensagem.textContent = "Fichas prontas. Assinatura depende da liberacao do servidor.";
   painel.append(senhaCampo, botao, mensagem);
   item.appendChild(painel);
 
   botao.addEventListener("click", async () => {
-
     const senha = senhaCampo.value;
     senhaCampo.value = "";
-
     if (!senha) {
-      mensagem.textContent = "Informe a senha da ficha.";
+      mensagem.textContent = "Informe a senha usada para proteger as fichas.";
       return;
     }
-
     botao.disabled = true;
-    mensagem.textContent =
-      "Validando e assinando a ficha...";
+    let armazenadasNestaTentativa = 0;
 
     try {
-
+      if (!crypto?.subtle || typeof BigInt !== "function") {
+        throw Error("Navegador sem suporte criptografico.");
+      }
       const cifrado = pendencias()[idEmissao];
-
-      if (!cifrado) {
-        throw Error("Ficha pendente não encontrada.");
-      }
-
-      const pendente = await QC_descriptografar198(
-        cifrado, senha
-      );
+      if (!cifrado) throw Error("Fichas pendentes nao encontradas.");
+      const aberto = await QC_descriptografar198(cifrado, senha);
+      const fichasPendentes = aberto?.formato === "QC_LOTE_CEGAS_PENDENTES_V2"
+        ? aberto.fichas
+        : [aberto];
 
       if (
-        pendente.formato !== "QC_FICHA_CEGA_PENDENTE_V1" ||
-        pendente.idChave !== "QC-10-V1" ||
-        pendente.valor !== 10 ||
-        pendente.idEmissao !== idEmissao ||
-        pendente.idCota !== idEmissao + "-10" ||
-        !/^[0-9a-f-]{36}$/i.test(
-          pendente.idOperacao || ""
-        ) ||
-        !/^[0-9a-f]{1024}$/i.test(
-          pendente.blocoHex || ""
-        ) ||
-        !/^[0-9a-f]{1024}$/i.test(
-          pendente.inversoHex || ""
-        )
+        !Array.isArray(fichasPendentes) ||
+        fichasPendentes.length !== valoresEsperados.length ||
+        (aberto?.formato === "QC_LOTE_CEGAS_PENDENTES_V2" &&
+          (aberto.idEmissao !== idEmissao ||
+           Number(aberto.valorTotal) !== valorAutorizado))
       ) {
-        throw Error("Dados da ficha inconsistentes.");
+        throw Error("Lote de fichas diferente do valor autorizado.");
       }
 
-      const mensagemBytes = deHex(
-        pendente.mensagemPreparadaHex || ""
-      );
-
-      const conteudo = new TextDecoder().decode(
-        mensagemBytes.slice(32)
-      );
-
-      if (
-        mensagemBytes.length < 90 ||
-        !/^QUINTOSCOIN\|V1\|10\|QC-10-V1\|[0-9a-f-]{36}$/i
-          .test(conteudo)
-      ) {
-        throw Error("Conteúdo da ficha inválido.");
+      const contagemEsperada = [...valoresEsperados].sort((a,b) => a-b);
+      const contagemRecebida = fichasPendentes
+        .map(f => Number(f?.valor)).sort((a,b) => a-b);
+      if (contagemEsperada.some((v, i) => v !== contagemRecebida[i])) {
+        throw Error("Denominacoes do lote inconsistentes.");
       }
 
-      const publico = await QC_post191(
-        "qc_chave_publica_10"
-      );
-
-      const nHex = String(
-        publico.moduloHex || ""
-      ).toLowerCase();
-
-      const eHex = String(
-        publico.expoenteHex || ""
-      ).toLowerCase();
-
-      if (
-        publico.status !== "OK" ||
-        publico.idChave !== "QC-10-V1" ||
-        !/^[89a-f][0-9a-f]{1023}$/.test(nHex) ||
-        !/^0*10001$/.test(eHex)
-      ) {
-        throw Error("Chave pública inválida.");
-      }
-
-      // Em caso de falha, reutilizar a mesma
-      // operação e o mesmo bloco cego.
-      const resposta = await QC_post191(
-        "qc_assinar_ficha",
-        {
-          idEmissao,
-          idOperacao: pendente.idOperacao,
-          blocoHex: pendente.blocoHex
+      const IDs = new Set();
+      const mensagens = new Set();
+      const registrosValidados = [];
+      const padraoUUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+      for (const ficha of fichasPendentes) {
+        const valor = Number(ficha?.valor);
+        const idChave = "QC-" + valor + "-V1";
+        if (
+          ficha?.formato !== "QC_FICHA_CEGA_PENDENTE_V1" ||
+          ficha.idEmissao !== idEmissao ||
+          ficha.idCota !== idEmissao + "-" + valor ||
+          ficha.idChave !== idChave ||
+          !padraoUUID.test(ficha.idOperacao || "") ||
+          !/^[0-9a-f]{1024}$/i.test(ficha.blocoHex || "") ||
+          !/^[0-9a-f]{1024}$/i.test(ficha.inversoHex || "") ||
+          IDs.has(ficha.idOperacao)
+        ) {
+          throw Error("Ficha pendente com dados inconsistentes.");
         }
-      );
-
-      if (
-        resposta.status !== "ASSINADO" ||
-        resposta.idOperacao !== pendente.idOperacao ||
-        resposta.idChave !== "QC-10-V1" ||
-        !/^[0-9a-f]{1024}$/i.test(
-          resposta.assinaturaCegaHex || ""
-        )
-      ) {
-        throw Error(
-          resposta.mensagem ||
-          resposta.status ||
-          "Assinatura indisponível."
-        );
+        IDs.add(ficha.idOperacao);
+        const mensagemBytes = deHex(ficha.mensagemPreparadaHex || "");
+        if (mensagemBytes.length < 90) {
+          throw Error("Mensagem da ficha incompleta.");
+        }
+        const texto = new TextDecoder("utf-8", {fatal: true})
+          .decode(mensagemBytes.slice(32));
+        const partes = texto.split("|");
+        if (
+          partes.length !== 5 ||
+          partes[0] !== "QUINTOSCOIN" || partes[1] !== "V1" ||
+          partes[2] !== String(valor) || partes[3] !== idChave ||
+          !padraoUUID.test(partes[4]) ||
+          mensagens.has(ficha.mensagemPreparadaHex)
+        ) {
+          throw Error("Conteudo da ficha inconsistente.");
+        }
+        mensagens.add(ficha.mensagemPreparadaHex);
+        registrosValidados.push({ficha, valor, idChave, mensagemBytes});
       }
 
-      // Remover o cegamento.
-      const n = BigInt("0x" + nHex);
-
-      const assinada = BigInt(
-        "0x" + resposta.assinaturaCegaHex
-      );
-
-      const inverso = BigInt(
-        "0x" + pendente.inversoHex
-      );
-
-      if (
-        assinada <= ZERO ||
-        assinada >= n ||
-        inverso <= ZERO ||
-        inverso >= n
-      ) {
-        throw Error(
-          "Assinatura fora do intervalo RSA."
-        );
-      }
-
-      const assinaturaHex = hex(
-        bytesFixos((assinada * inverso) % n, 512)
-      );
-
-      // Conferir RSA-PSS / SHA-384.
-      const expoente = deHex(
-        eHex.padStart(
-          eHex.length + eHex.length % 2, "0"
-        )
-      );
-
-      const chavePublica =
-        await crypto.subtle.importKey(
+      // Consultar todas as chaves ANTES de solicitar qualquer assinatura.
+      const chaves = {};
+      for (const valor of new Set(valoresEsperados)) {
+        const idChave = "QC-" + valor + "-V1";
+        const publico = await QC_post191("qc_chave_publica_" + valor);
+        const nHex = String(publico.moduloHex || "").toLowerCase();
+        const eHex = String(publico.expoenteHex || "").toLowerCase();
+        if (
+          publico.status !== "OK" || publico.idChave !== idChave ||
+          !/^[89a-f][0-9a-f]{1023}$/.test(nHex) ||
+          !/^0*10001$/.test(eHex)
+        ) {
+          throw Error("Chave publica de " + valor + " QC indisponivel.");
+        }
+        const eNormal = eHex.length % 2 ? "0" + eHex : eHex;
+        const chave = await crypto.subtle.importKey(
           "jwk",
           {
             kty: "RSA",
             n: QC_base64Url198(deHex(nHex)),
-            e: QC_base64Url198(expoente),
+            e: QC_base64Url198(deHex(eNormal)),
             ext: true,
             key_ops: ["verify"]
           },
-          { name: "RSA-PSS", hash: "SHA-384" },
-          false,
-          ["verify"]
+          {name: "RSA-PSS", hash: "SHA-384"}, false, ["verify"]
         );
-
-      const verificada = await crypto.subtle.verify(
-        { name: "RSA-PSS", saltLength: 48 },
-        chavePublica,
-        deHex(assinaturaHex),
-        mensagemBytes
-      );
-
-      if (!verificada) {
-        throw Error(
-          "Ficha rejeitada na verificação criptográfica."
-        );
+        chaves[valor] = {modulo: BigInt("0x" + nHex), chave};
       }
 
-      // A ficha anônima não contém IdCadastro,
-      // nome do irmão ou número da autorização.
-      const ficha = {
-        formato: "QC_FICHA_ASSINADA_V1",
-        idChave: "QC-10-V1",
-        valor: 10,
-        mensagemHex: pendente.mensagemPreparadaHex,
-        assinaturaHex
-      };
+      for (let i = 0; i < registrosValidados.length; i++) {
+        const {ficha, valor, idChave, mensagemBytes} = registrosValidados[i];
+        mensagem.textContent = "Conferindo ficha " + (i+1) +
+          " de " + registrosValidados.length + " (" + valor + " QC)...";
+        const chaveRegistro = registrosValidados.length === 1
+          ? idEmissao // Preserva a chave usada na versao anterior de 10 QC.
+          : idEmissao + "_" + ficha.idOperacao;
+        const existentes = QC_lerAssinadas198();
+        const chaveVerificacao = chaves[valor];
 
-      const recebidas = QC_lerAssinadas198();
+        if (existentes[chaveRegistro]) {
+          // A ficha ja foi gravada em uma tentativa anterior.
+          const anterior = await QC_descriptografar198(
+            existentes[chaveRegistro], senha
+          );
+          if (
+            anterior?.formato !== "QC_FICHA_ASSINADA_V1" ||
+            anterior.idChave !== idChave || anterior.valor !== valor ||
+            anterior.mensagemHex !== ficha.mensagemPreparadaHex ||
+            !/^[0-9a-f]{1024}$/i.test(anterior.assinaturaHex || "") ||
+            !(await crypto.subtle.verify(
+              {name: "RSA-PSS", saltLength: 48}, chaveVerificacao.chave,
+              deHex(anterior.assinaturaHex), mensagemBytes
+            ))
+          ) {
+            throw Error("Ficha anteriormente salva nao confere.");
+          }
+          continue;
+        }
 
-      if (!recebidas[idEmissao]) {
-        recebidas[idEmissao] =
-          await criptografar(ficha, senha);
+        // A operacao e o bloco cego nao mudam nas tentativas de recuperacao.
+        const resposta = await QC_post191("qc_assinar_ficha", {
+          idEmissao,
+          idOperacao: ficha.idOperacao,
+          blocoHex: ficha.blocoHex,
+          denominacao: valor
+        });
+        if (
+          resposta.status !== "ASSINADO" ||
+          resposta.idOperacao !== ficha.idOperacao ||
+          resposta.idChave !== idChave ||
+          !/^[0-9a-f]{1024}$/i.test(resposta.assinaturaCegaHex || "")
+        ) {
+          throw Error(resposta.mensagem || resposta.status ||
+            "Assinatura indisponivel.");
+        }
 
-        localStorage.setItem(
-          QC_chaveAssinadas198(),
-          JSON.stringify(recebidas)
+        const n = chaveVerificacao.modulo;
+        const assinada = BigInt("0x" + resposta.assinaturaCegaHex);
+        const inverso = BigInt("0x" + ficha.inversoHex);
+        if (assinada <= ZERO || assinada >= n ||
+            inverso <= ZERO || inverso >= n) {
+          throw Error("Assinatura fora do intervalo RSA.");
+        }
+        const assinaturaHex = hex(bytesFixos((assinada * inverso) % n, 512));
+        const valido = await crypto.subtle.verify(
+          {name: "RSA-PSS", saltLength: 48}, chaveVerificacao.chave,
+          deHex(assinaturaHex), mensagemBytes
         );
+        if (!valido) {
+          throw Error("Ficha rejeitada na verificacao criptografica.");
+        }
+
+        // A ficha assinada preserva o anonimato: sem dados do proprietario.
+        const fichaAssinada = {
+          formato: "QC_FICHA_ASSINADA_V1",
+          idChave,
+          valor,
+          mensagemHex: ficha.mensagemPreparadaHex,
+          assinaturaHex
+        };
+        const atualizadas = QC_lerAssinadas198();
+        if (atualizadas[chaveRegistro]) {
+          throw Error("Ficha armazenada simultaneamente. Tente novamente.");
+        }
+        atualizadas[chaveRegistro] = await criptografar(fichaAssinada, senha);
+        localStorage.setItem(QC_chaveAssinadas198(), JSON.stringify(atualizadas));
+        armazenadasNestaTentativa++;
       }
 
-      // Somente eliminar a pendência depois
-      // de salvar a ficha assinada.
+      // So remove a pendencia se TODAS as fichas estao salvas e verificadas.
       const restantes = pendencias();
       delete restantes[idEmissao];
-
-      localStorage.setItem(
-        chaveArmazenamento(),
-        JSON.stringify(restantes)
-      );
-
-      mensagem.textContent =
-        "✅ Ficha assinada, verificada e protegida.";
-
+      localStorage.setItem(chaveArmazenamento(), JSON.stringify(restantes));
+      mensagem.textContent = "✅ " + registrosValidados.length +
+        " ficha(s) assinada(s), verificada(s) e protegida(s).";
       botao.remove();
       senhaCampo.remove();
-
     } catch (erro) {
-
-      mensagem.textContent =
-        "⚠️ " + erro.message;
-
+      mensagem.textContent = "⚠️ " + erro.message +
+        (armazenadasNestaTentativa
+          ? " Fichas ja gravadas foram preservadas; tente novamente com a mesma senha."
+          : " Nenhuma ficha ja salva foi removida.");
       botao.disabled = false;
-
     }
-
   });
-
 };
-
-
 
 })();
