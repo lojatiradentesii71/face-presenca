@@ -1,11 +1,12 @@
-// QuintosCoin — Passo 253: saldo, verificacao e restauracao segura de backup (2, 5 e 10 QC).
-// Nenhuma emissao, gasto ou assinatura nova e feita neste arquivo.
+// QuintosCoin — Passo 263: saldo disponivel e doacao de fichas (2, 5 e 10 QC).
+// A emissao e a assinatura seguem bloqueadas. O gasto depende de liberacao no servidor.
 (function () {
   "use strict";
 
   const dec = new TextDecoder();
   const enc = new TextEncoder();
   let memoria = null;
+  let doacaoEmAndamento263 = false;
 
   function chaveLocal() {
     const id = localStorage.getItem("QC_ID_CARTEIRA");
@@ -60,6 +61,23 @@
     }
   }
 
+  // PASSO 263 - O servidor valida novamente a assinatura e consulta
+  // o identificador global na tabela QC_FichasGastas. Nao e uma doacao.
+  async function consultarFicha263(ficha) {
+    const resposta = await QC_post191("qc_consultar_gasto", {
+      mensagemHex: ficha.mensagemHex,
+      assinaturaHex: ficha.assinaturaHex
+    });
+    if (!resposta || !["DISPONIVEL", "GASTA"].includes(resposta.status)) {
+      throw Error(resposta?.mensagem || resposta?.status ||
+        "Nao foi possivel conferir o gasto da ficha no servidor.");
+    }
+    if (Number(resposta.valor) !== ficha.valor) {
+      throw Error("Valor da ficha diferente do cadastro do servidor.");
+    }
+    return resposta.status;
+  }
+
   function dadosDaSessao() {
     const id = localStorage.getItem("QC_ID_CARTEIRA");
     const token = sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
@@ -77,7 +95,7 @@
     if (!saldo || !equivalente || !lista) return;
 
     const rotulo = document.querySelector("#telaCarteira .saldo p");
-    if (rotulo) rotulo.textContent = "Fichas assinadas verificadas";
+    if (rotulo) rotulo.textContent = "Fichas disponiveis e verificadas";
     lista.replaceChildren();
     if (!memoria) {
       saldo.textContent = token ? "🔒 QC" : "0 QC";
@@ -102,7 +120,7 @@
       lista.appendChild(div);
     }
     if (!memoria.fichas.length) {
-      lista.textContent = "Nenhuma ficha assinada neste celular.";
+      lista.textContent = "Nenhuma ficha disponivel nesta carteira.";
     }
   }
 
@@ -144,6 +162,40 @@
   arquivoBackup252.style.display = "none";
 
 
+  // PASSO 263 - Doacoes por ficha inteira, sem fracoes nem troco.
+  const areaDoacao263 = document.createElement("section");
+  areaDoacao263.style.marginTop = "18px";
+  areaDoacao263.style.paddingTop = "12px";
+  areaDoacao263.style.borderTop = "1px solid #ffffff33";
+
+  const tituloDoacao263 = document.createElement("h4");
+  tituloDoacao263.textContent = "Doar QuintosCoin";
+
+  const selecaoDoacao263 = document.createElement("select");
+  selecaoDoacao263.style.width = "100%";
+  for (const valor of ["", "2", "5", "10"]) {
+    const opcao = document.createElement("option");
+    opcao.value = valor;
+    opcao.textContent = valor
+      ? "Doar uma ficha de " + valor + " QC"
+      : "Escolha o valor da ficha";
+    selecaoDoacao263.append(opcao);
+  }
+
+  const botaoDoacao263 = document.createElement("button");
+  botaoDoacao263.type = "button";
+  botaoDoacao263.textContent = "Confirmar doacao";
+  botaoDoacao263.style.marginTop = "10px";
+
+  const avisoDoacao263 = document.createElement("p");
+  avisoDoacao263.setAttribute("role", "status");
+  avisoDoacao263.textContent =
+    "Use a senha das fichas no campo acima. O servidor deve ter uma sessao aberta.";
+
+  areaDoacao263.append(
+    tituloDoacao263, selecaoDoacao263, botaoDoacao263, avisoDoacao263
+  );
+
   // PASSO 253 - Restauracao segura, sem sobrescrever fichas existentes.
   const restaurarBackup253 = document.createElement("button");
   restaurarBackup253.type = "button";
@@ -162,7 +214,8 @@
   painel.append(
     titulo, senha, conferir, backup,
     verificarBackup252, arquivoBackup252,
-    restaurarBackup253, arquivoRestaurar253, aviso
+    restaurarBackup253, arquivoRestaurar253,
+    areaDoacao263, aviso
   );
   const secao = document.querySelector("#telaCarteira .fichas");
   if (!secao) return;
@@ -188,6 +241,7 @@
       const registros = Object.values(lerRegistros());
       const fichas = [];
       const mensagens = new Set();
+      let gastas = 0;
 
       // PASSO 225 - Verificar cada ficha com a chave de sua denominacao.
       // A mesma chave publica e consultada apenas uma vez por valor.
@@ -266,6 +320,13 @@
         if (!valida) {
           throw Error("Assinatura de ficha de " + valor + " QC nao verificada.");
         }
+        // A assinatura prova autenticidade, mas NAO prova que a ficha
+        // ainda esta disponivel. Consultar o servidor obrigatoriamente.
+        const situacao = await consultarFicha263(ficha);
+        if (situacao === "GASTA") {
+          gastas++;
+          continue;
+        }
         fichas.push({valor, idChave:ficha.idChave});
       }
 
@@ -274,12 +335,13 @@
         throw Error("A sessão mudou durante a conferência.");
       }
       memoria = {
-        id, token, fichas,
+        id, token, fichas, gastas,
         total:fichas.reduce((soma, ficha) => soma + ficha.valor, 0)
       };
       renderizar();
-      aviso.textContent = "✅ " + fichas.length +
-        " ficha(s) assinada(s) e verificadas. Doações ainda bloqueadas.";
+      aviso.textContent = "✅ Saldo disponivel: " + memoria.total +
+        " QC em " + fichas.length + " ficha(s). " + gastas +
+        " ficha(s) ja gastas foram excluidas do saldo.";
     } catch (erro) {
       memoria = null;
       renderizar();
@@ -588,7 +650,8 @@
 
           // Usar a mensagem assinada como identidade, pois o mesmo QC
           // pode ter sido salvo com criptografias diferentes.
-          return {mensagemHex, valor};
+          const situacao = await consultarFicha263(ficha);
+          return {mensagemHex, valor, situacao};
         }
 
         const mensagensBackup = new Set();
@@ -622,14 +685,21 @@
           mensagensAtuais.add(ficha.mensagemHex);
         }
 
-        const novas = fichasBackup.filter(
+        const gastasNoBackup = fichasBackup.filter(
+          ficha => ficha.situacao === "GASTA"
+        ).length;
+        const disponiveisBackup = fichasBackup.filter(
+          ficha => ficha.situacao === "DISPONIVEL"
+        );
+        const novas = disponiveisBackup.filter(
           ficha => !mensagensAtuais.has(ficha.mensagemHex)
         );
-        const repetidas = fichasBackup.length - novas.length;
+        const repetidas = disponiveisBackup.length - novas.length;
 
         if (novas.length === 0) {
-          aviso.textContent = "✅ Nenhuma ficha importada: as " +
-            repetidas + " ficha(s) do backup ja estao na carteira.";
+          aviso.textContent = "✅ Nenhuma ficha importada: " + repetidas +
+            " ja presente(s) e " + gastasNoBackup +
+            " ja gasta(s). Nenhuma ficha alterada.";
           return;
         }
 
@@ -641,8 +711,9 @@
           "Backup validado.\n\n" +
           novas.length + " ficha(s) nova(s), total de " +
           totalNovo + " QC.\n" +
-          repetidas + " ficha(s) ja presente(s) serao ignoradas.\n\n" +
-          "Deseja importar somente as fichas novas?"
+          repetidas + " ja presente(s) e " + gastasNoBackup +
+          " ja gasta(s) serao ignoradas.\n\n" +
+          "Deseja importar somente as fichas disponiveis?"
         );
         if (!permitir) {
           aviso.textContent = "Restauracao cancelada. Nenhuma ficha alterada.";
@@ -678,9 +749,9 @@
 
         aviso.textContent = "✅ Restauracao concluida: " +
           novas.length + " ficha(s), " + totalNovo +
-          " QC adicionados. " + repetidas +
-          " ficha(s) ja existente(s) ignoradas. " +
-          "Clique em Verificar meu saldo.";
+          " QC disponiveis adicionados. " + repetidas +
+          " repetida(s) e " + gastasNoBackup +
+          " ja gasta(s) ignoradas. Clique em Verificar meu saldo.";
 
       } catch (erro) {
         aviso.textContent = "⚠️ Restauracao nao realizada: " + erro.message;
@@ -694,6 +765,159 @@
     };
 
     arquivoRestaurar253.click();
+  });
+
+  // PASSO 263 - Doacao efetiva apenas quando QC_DOACOES_ATIVAS = SIM
+  // no Apps Script. A mesma ficha nunca e enviada com nome/IdCadastro.
+  botaoDoacao263.addEventListener("click", async () => {
+    if (doacaoEmAndamento263) return;
+
+    const sessaoInicial = dadosDaSessao();
+    const valor = Number(selecaoDoacao263.value);
+    const segredo = senha.value;
+    senha.value = "";
+
+    if (!sessaoInicial.id || !sessaoInicial.token) {
+      avisoDoacao263.textContent = "Entre na carteira primeiro.";
+      return;
+    }
+    if (![2, 5, 10].includes(valor)) {
+      avisoDoacao263.textContent = "Escolha uma ficha de 2, 5 ou 10 QC.";
+      return;
+    }
+    if (!segredo) {
+      avisoDoacao263.textContent = "Informe a senha das fichas antes de doar.";
+      return;
+    }
+
+    doacaoEmAndamento263 = true;
+    botaoDoacao263.disabled = true;
+    conferir.disabled = true;
+    restaurarBackup253.disabled = true;
+    verificarBackup252.disabled = true;
+    backup.disabled = true;
+
+    let fichaEscolhida = null;
+    try {
+      if (!crypto?.subtle) throw Error("Criptografia indisponivel.");
+      const chaveRegistros = chaveLocal();
+      const registrosOriginais = localStorage.getItem(chaveRegistros);
+      const registros = lerRegistros();
+      avisoDoacao263.textContent = "Conferindo as fichas disponiveis...";
+
+      // Avaliar as fichas do valor solicitado. A consulta ao servidor
+      // confirma assinatura, denominacao e ausencia de gasto anterior.
+      let encontrada = false;
+      for (const registro of Object.values(registros)) {
+        const ficha = await abrir(registro, segredo);
+        if (ficha?.valor !== valor) continue;
+        encontrada = true;
+        if (
+          ficha.formato !== "QC_FICHA_ASSINADA_V1" ||
+          ficha.idChave !== "QC-" + valor + "-V1" ||
+          !/^[0-9a-f]{1024}$/i.test(ficha.assinaturaHex || "") ||
+          !/^[0-9a-f]+$/i.test(ficha.mensagemHex || "")
+        ) {
+          throw Error("Ficha com estrutura invalida.");
+        }
+        const situacao = await consultarFicha263(ficha);
+        if (situacao === "DISPONIVEL") {
+          fichaEscolhida = ficha;
+          break;
+        }
+      }
+      if (!fichaEscolhida) {
+        avisoDoacao263.textContent = encontrada
+          ? "Nenhuma ficha de " + valor + " QC ainda disponivel."
+          : "Voce nao possui ficha de " + valor + " QC neste navegador.";
+        return;
+      }
+
+      if (localStorage.getItem(chaveRegistros) !== registrosOriginais ||
+          dadosDaSessao().id !== sessaoInicial.id ||
+          dadosDaSessao().token !== sessaoInicial.token) {
+        throw Error("A carteira mudou. Confirme o saldo e tente novamente.");
+      }
+
+      const autorizado = window.confirm(
+        "Confirmar doacao anonima de " + valor + " QC?\n\n" +
+        "A ficha sera registrada como gasta. Esta operacao e irreversivel."
+      );
+      if (!autorizado) {
+        avisoDoacao263.textContent = "Doacao cancelada. Nenhuma ficha gasta.";
+        return;
+      }
+
+      // Nao enviar identidade, senha ou IdCarteira nestes campos.
+      avisoDoacao263.textContent = "Registrando doacao no servidor...";
+      let resultado;
+      try {
+        resultado = await QC_post191("qc_doar_ficha_anonima", {
+          mensagemHex:fichaEscolhida.mensagemHex,
+          assinaturaHex:fichaEscolhida.assinaturaHex
+        });
+      } catch (erroEnvio) {
+        // Falhas apos o envio podem ocorrer DEPOIS do registro no servidor.
+        // Consultar antes de sugerir qualquer tentativa nova.
+        try {
+          const situacao = await consultarFicha263(fichaEscolhida);
+          if (situacao === "GASTA") {
+            memoria = null;
+            renderizar();
+            avisoDoacao263.textContent =
+              "⚠️ Ficha consta como GASTA no servidor. A doacao pode ter sido " +
+              "registrada, mas a resposta se perdeu. Verifique seu saldo; " +
+              "nao repita o envio.";
+            return;
+          }
+        } catch (_) { /* Conexao indisponivel: resultado inconclusivo. */ }
+        throw Error("Resultado da doacao inconclusivo: " +
+          (erroEnvio?.message || "falha de comunicacao") +
+          ". Consulte o saldo antes de tentar novamente.");
+      }
+
+      if (resultado?.status === "DOACAO_REGISTRADA" &&
+          Number(resultado.valor) === valor) {
+        // Preservar as fichas cifradas como historico. Elas serao
+        // EXCLUIDAS do saldo a partir de agora pela consulta global.
+        memoria = null;
+        renderizar();
+        avisoDoacao263.textContent = "✅ Doacao de " + valor +
+          " QC registrada. Clique em Verificar meu saldo para atualizar " +
+          "as fichas disponiveis.";
+      } else if (resultado?.status === "JA_GASTA") {
+        memoria = null;
+        renderizar();
+        avisoDoacao263.textContent =
+          "⚠️ Essa ficha ja foi utilizada. Atualize o saldo antes de doar.";
+      } else if (resultado?.status === "DOACOES_BLOQUEADAS") {
+        avisoDoacao263.textContent =
+          "Doacoes ainda bloqueadas no servidor. Nenhuma ficha foi utilizada.";
+      } else if (["SEM_SESSAO", "SESSAO_ENCERRADA", "SESSAO_NAO_LIBERADA"]
+          .includes(resultado?.status)) {
+        avisoDoacao263.textContent =
+          "Doacao nao registrada: nao ha sessao de arrecadacao aberta e " +
+          "habilitada. Nenhuma ficha foi utilizada.";
+      } else {
+        // A operacao pode ter sido registrada mesmo se o retorno
+        // for inesperado. Nao incentivar repeticao sem nova consulta.
+        memoria = null;
+        renderizar();
+        avisoDoacao263.textContent =
+          "⚠️ Resposta nao confirmada (" +
+          String(resultado?.status || "SEM_STATUS") +
+          "). Consulte o saldo e o registro de gastos antes de repetir.";
+      }
+    } catch (erro) {
+      avisoDoacao263.textContent = "⚠️ " + erro.message;
+    } finally {
+      doacaoEmAndamento263 = false;
+      botaoDoacao263.disabled = false;
+      conferir.disabled = false;
+      restaurarBackup253.disabled = false;
+      verificarBackup252.disabled = false;
+      backup.disabled = false;
+    }
   });
 
   renderizar();
