@@ -1,5 +1,4 @@
-
- // QUINTOSCOIN - PASSO 195
+// QUINTOSCOIN - PASSO 195
  // Preparacao local de uma ficha cega de 10 QC.
  // Nao solicita assinatura nem altera saldo.
 
@@ -261,18 +260,52 @@
     return p;
   }
 
-  window.QC_inserirAcao195 = function(item, pedido) {
+  // PASSO 222 - Distribuicao local igual ao plano sem fichas de 50 QC.
+  // Esta funcao apenas calcula as fichas: o servidor ainda valida cada cota.
+  function QC_distribuirFichas222(valor) {
+    const total = Number(valor);
 
+    if (!Number.isSafeInteger(total) || total < 2 || total === 3) {
+      throw Error("Valor autorizado invalido para fichas.");
+    }
+
+    const fichas = [];
+    let restante = total;
+
+    for (const denominacao of [10, 5, 2]) {
+      while (restante >= denominacao) {
+        const proximo = restante - denominacao;
+        if (proximo === 1 || proximo === 3) break;
+        fichas.push(denominacao);
+        restante = proximo;
+      }
+    }
+
+    if (restante !== 0 ||
+        fichas.reduce((soma, d) => soma + d, 0) !== total) {
+      throw Error("Nao foi possivel distribuir o valor autorizado.");
+    }
+
+    return fichas;
+  }
+
+  window.QC_inserirAcao195 = function(item, pedido) {
     if (
       pedido.status !== "AUTORIZADA" ||
-      Number(pedido.valor) !== 10 ||
-      !/^QC-EM-[0-9a-f-]{36}$/i.test(
-        pedido.idEmissao || ""
-      )
+      !/^QC-EM-[0-9a-f-]{36}$/i.test(pedido.idEmissao || "")
     ) {
       return;
     }
 
+    let valores;
+    try {
+      valores = QC_distribuirFichas222(pedido.valor);
+    } catch (_) {
+      return;
+    }
+
+    const idEmissao = pedido.idEmissao;
+    const total = Number(pedido.valor);
     const painel = document.createElement("div");
     painel.style.marginTop = "10px";
 
@@ -282,7 +315,7 @@
     const entrada = document.createElement("input");
     entrada.type = "password";
     entrada.autocomplete = "off";
-    entrada.placeholder = "Senha para proteger a ficha";
+    entrada.placeholder = "Senha para proteger as fichas";
     entrada.style.width = "100%";
 
     const confirmar = document.createElement("input");
@@ -293,14 +326,14 @@
 
     const botao = document.createElement("button");
     botao.type = "button";
-    botao.textContent =
-      "Preparar ficha cega de 10 QC";
+    botao.textContent = valores.length === 1
+      ? "Preparar ficha cega de " + total + " QC"
+      : "Preparar " + valores.length + " fichas cegas (" + total + " QC)";
 
     try {
-      if (pendencias()[pedido.idEmissao]) {
+      if (pendencias()[idEmissao]) {
         mensagem.textContent =
-          "Ficha cega ja preparada e protegida neste celular.";
-
+          "Fichas cegas ja preparadas e protegidas neste celular.";
         painel.append(mensagem);
         item.appendChild(painel);
         return;
@@ -312,21 +345,12 @@
       return;
     }
 
-    painel.append(
-      entrada,
-      confirmar,
-      botao,
-      mensagem
-    );
-
+    painel.append(entrada, confirmar, botao, mensagem);
     item.appendChild(painel);
 
     botao.addEventListener("click", async () => {
-
-      if (
-        entrada.value.length < 6 ||
-        entrada.value !== confirmar.value
-      ) {
+      if (entrada.value.length < 6 ||
+          entrada.value !== confirmar.value) {
         mensagem.textContent =
           "Informe e confirme uma senha com pelo menos 6 caracteres.";
         return;
@@ -335,131 +359,108 @@
       const senha = entrada.value;
       entrada.value = "";
       confirmar.value = "";
-
       botao.disabled = true;
       mensagem.textContent =
-        "Preparando ficha anonimamente neste celular...";
+        "Preparando " + valores.length + " ficha(s) anonimamente neste celular...";
 
       try {
-        if (
-          !crypto?.subtle ||
-          typeof BigInt !== "function"
-        ) {
-          throw Error(
-            "Navegador sem suporte criptografico."
+        if (!crypto?.subtle || typeof BigInt !== "function") {
+          throw Error("Navegador sem suporte criptografico.");
+        }
+
+        // Uma consulta por denominacao; cada ficha usa um cegamento unico.
+        const chaves = {};
+        for (const denominacao of new Set(valores)) {
+          const idChave = "QC-" + denominacao + "-V1";
+          const resposta = await QC_post191(
+            "qc_chave_publica_" + denominacao
           );
+          const nHex = String(resposta.moduloHex || "").toLowerCase();
+          const eHex = String(resposta.expoenteHex || "").toLowerCase();
+
+          if (
+            resposta.status !== "OK" ||
+            resposta.idChave !== idChave ||
+            !/^[89a-f][0-9a-f]{1023}$/.test(nHex) ||
+            !/^0*10001$/.test(eHex)
+          ) {
+            throw Error("Chave publica de " + denominacao +
+              " QC indisponivel ou invalida.");
+          }
+          chaves[denominacao] = {
+            n: BigInt("0x" + nHex),
+            e: BigInt("0x" + eHex)
+          };
         }
 
-        const resposta = await QC_post191(
-          "qc_chave_publica_10"
-        );
-
-        const nHex = String(
-          resposta.moduloHex || ""
-        ).toLowerCase();
-
-        const eHex = String(
-          resposta.expoenteHex || ""
-        ).toLowerCase();
-
-        if (
-          resposta.status !== "OK" ||
-          resposta.idChave !== "QC-10-V1" ||
-          !/^[89a-f][0-9a-f]{1023}$/.test(nHex) ||
-          !["10001", "010001"].includes(eHex)
-        ) {
-          throw Error(
-            "Chave publica indisponivel ou invalida."
+        const registros = [];
+        for (const denominacao of valores) {
+          const idChave = "QC-" + denominacao + "-V1";
+          const {n, e} = chaves[denominacao];
+          const mensagemFicha = ENC.encode(
+            "QUINTOSCOIN|V1|" + denominacao + "|" +
+            idChave + "|" + crypto.randomUUID()
           );
+          const preparado = juntar(
+            crypto.getRandomValues(new Uint8Array(32)),
+            mensagemFicha
+          );
+          const em = await codificarPSS(preparado);
+          const m = inteiro(em);
+
+          if (m <= ZERO || m >= n || mdc(m, n) !== UM) {
+            throw Error("Mensagem RSA invalida.");
+          }
+
+          const r = aleatorioInversivel(n);
+          const bloco = (m * potMod(r, e, n)) % n;
+
+          registros.push({
+            formato: "QC_FICHA_CEGA_PENDENTE_V1",
+            idChave,
+            valor: denominacao,
+            idEmissao,
+            idCota: idEmissao + "-" + denominacao,
+            idOperacao: crypto.randomUUID(),
+            blocoHex: hex(bytesFixos(bloco, 512)),
+            inversoHex: hex(bytesFixos(inverso(r, n), 512)),
+            mensagemPreparadaHex: hex(preparado)
+          });
         }
 
-        const n = BigInt("0x" + nHex);
-        const e = BigInt("0x" + eHex);
-
-        const mensagemFicha = ENC.encode(
-          "QUINTOSCOIN|V1|10|QC-10-V1|" +
-          crypto.randomUUID()
-        );
-
-        const preparado = juntar(
-          crypto.getRandomValues(
-            new Uint8Array(32)
-          ),
-          mensagemFicha
-        );
-
-        const em = await codificarPSS(preparado);
-        const m = inteiro(em);
-
-        if (
-          m <= ZERO ||
-          m >= n ||
-          mdc(m, n) !== UM
-        ) {
-          throw Error("Mensagem RSA invalida.");
-        }
-
-        const r = aleatorioInversivel(n);
-
-        const bloco = (
-          m * potMod(r, e, n)
-        ) % n;
-
-        const registro = {
-          formato: "QC_FICHA_CEGA_PENDENTE_V1",
-          idChave: "QC-10-V1",
-          valor: 10,
-          idEmissao: pedido.idEmissao,
-          idCota: pedido.idEmissao + "-10",
-          idOperacao: crypto.randomUUID(),
-          blocoHex: hex(bytesFixos(bloco, 512)),
-          inversoHex: hex(
-            bytesFixos(inverso(r, n), 512)
-          ),
-          mensagemPreparadaHex: hex(preparado)
-        };
-
-        const cifrado = await criptografar(
-          registro,
-          senha
-        );
+        // Compatibilidade: uma ficha de 10 QC conserva o formato anterior.
+        // Varias fichas ficam em um unico registro protegido por senha.
+        const conteudo = registros.length === 1
+          ? registros[0]
+          : {
+              formato: "QC_LOTE_CEGAS_PENDENTES_V2",
+              idEmissao,
+              valorTotal: total,
+              fichas: registros
+            };
+        const cifrado = await criptografar(conteudo, senha);
 
         const p = pendencias();
-
-        if (p[pedido.idEmissao]) {
-          throw Error(
-            "Essa emissao ja foi preparada."
-          );
+        if (p[idEmissao]) {
+          throw Error("Essa emissao ja foi preparada.");
         }
-
-        p[pedido.idEmissao] = cifrado;
-
-        localStorage.setItem(
-          chaveArmazenamento(),
-          JSON.stringify(p)
-        );
+        p[idEmissao] = cifrado;
+        localStorage.setItem(chaveArmazenamento(), JSON.stringify(p));
 
         botao.remove();
         entrada.remove();
         confirmar.remove();
-
-        mensagem.textContent =
-          "Bloco cego preparado e protegido. " +
-          "Nenhuma assinatura solicitada. " +
-          "Saldo inalterado.";
+        mensagem.textContent = registros.length +
+          " ficha(s) cega(s) preparada(s) e protegida(s). " +
+          "Nenhuma assinatura solicitada. Saldo inalterado.";
 
       } catch (erro) {
-        mensagem.textContent =
-          "Aviso: " + erro.message;
-
+        mensagem.textContent = "Aviso: " + erro.message;
         botao.disabled = false;
       }
-
     });
-
   };
 
- 
 // PASSO 197 - BACKUP DA FICHA CEGA PENDENTE
 
 window.QC_inserirBackup197 = function(item, pedido) {
