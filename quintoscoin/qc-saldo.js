@@ -1,7 +1,7 @@
-// QUINTOSCOIN - INTERFACE SIMPLIFICADA E PLANEJAMENTO AUTOMATICO - Passo 267
+// QUINTOSCOIN - INTERFACE LIMPA, PLANEJAMENTO E DOACAO ANONIMA - Passo 271
 // Mantem saldo, backup, recuperacao e a consulta de fichas gastas.
-// Doacoes e transferencias continuam controladas pelo servidor.
-// Consulta de gastos preservada; nenhuma doacao e executada neste arquivo.
+// Doacoes: rotas anonimas + fila local criptografada. Transferencias ainda nao integradas.
+// Servidor conserva os bloqueios de doacao e troco ate liberacao final.
 (function () {
   "use strict";
 
@@ -250,6 +250,327 @@
   };
 
   window.QC_atualizarSaldoReal202 = renderizar;
+
+  // PASSO 271 — Operacao anonima a partir do botao ORIGINAL Doar QC.
+  // A interface escolhe apenas o valor; fichas, blinding e recuperacao ficam aqui.
+  let movimentando271 = false;
+  const PENDENTE271 = "QC_DOACAO_PENDENTE_V1_";
+  const BIG_UM271 = BigInt(1);
+  const BIG_ZERO271 = BigInt(0);
+
+  function QC_hex271(bytes) {
+    return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+  }
+  function QC_fixos271(n, tamanho = 512) {
+    const str = n.toString(16).padStart(tamanho * 2, "0");
+    if (str.length !== tamanho * 2) throw Error("Numero RSA fora do limite.");
+    return deHex(str);
+  }
+  function QC_num271(bytes) { return BigInt("0x" + QC_hex271(bytes)); }
+  function QC_juntar271(...partes) {
+    const bytes = new Uint8Array(partes.reduce((n, x) => n + x.length, 0));
+    let i = 0;
+    for (const p of partes) { bytes.set(p, i); i += p.length; }
+    return bytes;
+  }
+  function QC_modpow271(b, expoente, n) {
+    let r = BIG_UM271;
+    b %= n;
+    while (expoente > BIG_ZERO271) {
+      if (expoente % BigInt(2) === BIG_UM271) r = r * b % n;
+      b = b * b % n;
+      expoente /= BigInt(2);
+    }
+    return r;
+  }
+  function QC_mdc271(a, b) {
+    while (b !== BIG_ZERO271) [a,b] = [b,a%b];
+    return a;
+  }
+  function QC_inverso271(a, n) {
+    let t = BIG_ZERO271, nt = BIG_UM271, r = n, nr = a % n;
+    while (nr !== BIG_ZERO271) {
+      const q = r/nr;
+      [t,nt] = [nt,t-q*nt];
+      [r,nr] = [nr,r-q*nr];
+    }
+    if (r !== BIG_UM271) throw Error("Fator de cegamento invalido.");
+    return (t%n+n)%n;
+  }
+  async function QC_sha384_271(bytes) {
+    return new Uint8Array(await crypto.subtle.digest("SHA-384",bytes));
+  }
+  async function QC_pss271(msg) {
+    const sal = crypto.getRandomValues(new Uint8Array(48));
+    const H = await QC_sha384_271(QC_juntar271(
+      new Uint8Array(8), await QC_sha384_271(msg), sal));
+    const db = new Uint8Array(463);
+    db[414] = 1;
+    db.set(sal, 415);
+    const mask = new Uint8Array(463);
+    for (let p=0, i=0; p<mask.length; i++) {
+      const c = Uint8Array.of(i>>>24&255,i>>>16&255,i>>>8&255,i&255);
+      const h = await QC_sha384_271(QC_juntar271(H,c));
+      mask.set(h.subarray(0,Math.min(h.length,mask.length-p)),p);
+      p += Math.min(h.length,mask.length-p);
+    }
+    const masked = db.map((v,i) => v ^ mask[i]);
+    masked[0] &= 0x7f;
+    return QC_juntar271(masked,H,Uint8Array.of(0xbc));
+  }
+  function QC_fator271(n) {
+    for (let i=0;i<256;i++) {
+      const r = QC_num271(crypto.getRandomValues(new Uint8Array(512)));
+      if (r>BIG_ZERO271 && r<n && QC_mdc271(r,n)===BIG_UM271) return r;
+    }
+    throw Error("Nao foi possivel gerar cegamento seguro.");
+  }
+  async function QC_publica271(valor) {
+    const r = await QC_post191("qc_chave_publica_" + valor);
+    const nHex = String(r.moduloHex||"").toLowerCase();
+    const eHex = String(r.expoenteHex||"").toLowerCase();
+    if (r.status!=="OK" || r.idChave!=="QC-"+valor+"-V1" ||
+        !/^[89a-f][0-9a-f]{1023}$/.test(nHex) || !/^0*10001$/.test(eHex)) {
+      throw Error("Chave publica de "+valor+" QC indisponivel.");
+    }
+    const eNorm = eHex.length%2 ? "0"+eHex : eHex;
+    return {
+      n:BigInt("0x"+nHex), e:BigInt("0x"+eHex),
+      verify:await crypto.subtle.importKey("jwk", {
+        kty:"RSA",n:base64url(deHex(nHex)),e:base64url(deHex(eNorm)),
+        ext:true,key_ops:["verify"]
+      },{name:"RSA-PSS",hash:"SHA-384"},false,["verify"])
+    };
+  }
+  async function QC_cifrar271(obj, senha) {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const base = await crypto.subtle.importKey("raw",enc.encode(senha),"PBKDF2",false,["deriveKey"]);
+    const key = await crypto.subtle.deriveKey(
+      {name:"PBKDF2",salt,iterations:310000,hash:"SHA-256"},base,
+      {name:"AES-GCM",length:256},false,["encrypt"]);
+    return {versao:1,saltHex:QC_hex271(salt),ivHex:QC_hex271(iv),
+      dadosHex:QC_hex271(new Uint8Array(await crypto.subtle.encrypt(
+        {name:"AES-GCM",iv},key,enc.encode(JSON.stringify(obj)))))};
+  }
+  function QC_pendenteChave271() { return PENDENTE271 + dadosDaSessao().id; }
+  async function QC_postAnonimo271(acao,payload) {
+    // NUNCA usar QC_post191: a sessao de login revelaria a carteira.
+    const response = await fetch(QC_URL_191,{
+      method:"POST",redirect:"follow",
+      headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body:JSON.stringify({acao,...payload})
+    });
+    if (!response.ok) throw Error("Comunicacao interrompida (HTTP "+response.status+").");
+    const data = await response.json();
+    if (!data || typeof data.status!=="string") throw Error("Resposta inesperada do servidor.");
+    return data;
+  }
+  async function QC_fichasAtuais271(senha) {
+    const todos = lerRegistros();
+    const fichas = [], chaves = new Map(), msgs = new Set();
+    for (const [chaveLocalRegistro, cifrado] of Object.entries(todos)) {
+      const ficha = await abrir(cifrado,senha);
+      const valor = Number(ficha?.valor);
+      if (ficha?.formato!=="QC_FICHA_ASSINADA_V1" ||
+          ![2,5,10].includes(valor) || ficha.idChave!=="QC-"+valor+"-V1" ||
+          !/^[0-9a-f]{1024}$/i.test(String(ficha.assinaturaHex||""))) {
+        throw Error("Existe uma ficha local invalida. Nenhuma doacao realizada.");
+      }
+      const m = deHex(String(ficha.mensagemHex||"").toLowerCase());
+      const frase = dec.decode(m.subarray(32));
+      if (m.length < 80 || !new RegExp("^QUINTOSCOIN\\|V1\\|"+valor+"\\|QC-"+valor+"-V1\\|[0-9a-f-]{36}$","i").test(frase) ||
+          msgs.has(ficha.mensagemHex.toLowerCase())) {
+        throw Error("Ficha local inconsistente ou duplicada.");
+      }
+      msgs.add(ficha.mensagemHex.toLowerCase());
+      let pub=chaves.get(valor);
+      if (!pub) {pub=await QC_publica271(valor);chaves.set(valor,pub);}
+      if (!(await crypto.subtle.verify({name:"RSA-PSS",saltLength:48},pub.verify,
+        deHex(ficha.assinaturaHex),m))) {
+        throw Error("Assinatura de ficha nao confere.");
+      }
+      const situacao=await consultarFicha263(ficha);
+      if (situacao === "DISPONIVEL") {
+        fichas.push({chaveLocalRegistro, valor,
+          mensagemHex:ficha.mensagemHex, assinaturaHex:ficha.assinaturaHex});
+      }
+    }
+    return fichas;
+  }
+  async function QC_prepararTroco271(plano) {
+    const saidasCegas=[],privadas=[];
+    const publicas = new Map();
+    for (const valor of plano.fichasTroco) {
+      let pub = publicas.get(valor);
+      if (!pub) {pub=await QC_publica271(valor);publicas.set(valor,pub);}
+      const idChave="QC-"+valor+"-V1";
+      const msg=QC_juntar271(crypto.getRandomValues(new Uint8Array(32)),
+        enc.encode("QUINTOSCOIN|V1|"+valor+"|"+idChave+"|"+crypto.randomUUID()));
+      const codificado=await QC_pss271(msg);
+      const m=QC_num271(codificado);
+      if (m<=BIG_ZERO271 || m>=pub.n || QC_mdc271(m,pub.n)!==BIG_UM271) {
+        throw Error("Bloco criptografico invalido. Refaça a operacao.");
+      }
+      const r=QC_fator271(pub.n);
+      const bloco=m*QC_modpow271(r,pub.e,pub.n)%pub.n;
+      if (bloco<=BIG_ZERO271 || bloco>=pub.n) throw Error("Bloco RSA invalido.");
+      saidasCegas.push({denominacao:valor,blocoHex:QC_hex271(QC_fixos271(bloco))});
+      privadas.push({indice:saidasCegas.length,valor,idChave,
+        mensagemHex:QC_hex271(msg),inversoHex:QC_hex271(QC_fixos271(QC_inverso271(r,pub.n)))});
+    }
+    return {saidasCegas,privadas};
+  }
+  async function QC_concluirTroco271(operacao,resposta,senha) {
+    if (resposta.status!=="TROCO_ASSINADO" ||
+        resposta.idTroca!==operacao.idOperacao ||
+        Number(resposta.valorDoacao)!==operacao.valorDoacao ||
+        Number(resposta.valorTroco)!==operacao.valorTroco ||
+        !Array.isArray(resposta.assinaturasCegas) ||
+        resposta.assinaturasCegas.length!==operacao.privadas.length) {
+      throw Error("Resposta criptografica de troco divergente. Operacao preservada.");
+    }
+    const publicas=new Map();
+    const novas=[];
+    for (const privada of operacao.privadas) {
+      const a=resposta.assinaturasCegas.find(x=>Number(x.indice)===privada.indice);
+      if (!a || a.denominacao!==privada.valor || a.idChave!==privada.idChave ||
+          !/^[0-9a-f]{1024}$/i.test(String(a.assinaturaCegaHex||""))) {
+        throw Error("Assinatura cega do troco invalida.");
+      }
+      let pub=publicas.get(privada.valor);
+      if (!pub) {pub=await QC_publica271(privada.valor);publicas.set(privada.valor,pub);}
+      const cega=BigInt("0x"+a.assinaturaCegaHex);
+      const inverso=BigInt("0x"+privada.inversoHex);
+      if (cega<=BIG_ZERO271 || cega>=pub.n || inverso<=BIG_ZERO271 || inverso>=pub.n) {
+        throw Error("Assinatura cega fora do dominio RSA.");
+      }
+      const assinaturaHex=QC_hex271(QC_fixos271(cega*inverso%pub.n));
+      if (!(await crypto.subtle.verify({name:"RSA-PSS",saltLength:48},pub.verify,
+        deHex(assinaturaHex),deHex(privada.mensagemHex)))) {
+        throw Error("Assinatura do troco nao confere. Operacao preservada.");
+      }
+      novas.push({
+        ficha:{formato:"QC_FICHA_ASSINADA_V1",idChave:privada.idChave,
+          valor:privada.valor,mensagemHex:privada.mensagemHex,assinaturaHex},
+        chave:"QC-TR-"+operacao.idOperacao+"-"+privada.indice
+      });
+    }
+    // Preparar TODAS as novas fichas antes de gravar. A gravacao e atomica.
+    const cifradas=[];
+    for (const n of novas) cifradas.push({chave:n.chave, registro:await QC_cifrar271(n.ficha,senha)});
+    const chave=chaveLocal();
+    const textoAnterior=localStorage.getItem(chave);
+    const registros=textoAnterior?JSON.parse(textoAnterior):{};
+    if (!registros || typeof registros!=="object" || Array.isArray(registros)) {
+      throw Error("Armazenamento de fichas inconsistente.");
+    }
+    // A chave estavel impede duplicacao em retomadas apos interrupcoes.
+    for (const n of cifradas) {
+      if (registros[n.chave]) {
+        const existente=await abrir(registros[n.chave],senha);
+        if (existente.mensagemHex!==novas.find(x=>x.chave===n.chave).ficha.mensagemHex ||
+            existente.assinaturaHex!==novas.find(x=>x.chave===n.chave).ficha.assinaturaHex) {
+          throw Error("Troco anterior divergente; nao sobrescrever.");
+        }
+      } else {
+        registros[n.chave]=n.registro;
+      }
+    }
+    if (localStorage.getItem(chave)!==textoAnterior) {
+      throw Error("Carteira alterada durante gravacao do troco. Retome a operacao.");
+    }
+    localStorage.setItem(chave,JSON.stringify(registros));
+  }
+  async function QC_retomar271(operacao,senha) {
+    const dados=operacao.tipo==="EXATA" ?
+      {acao:"qc_doar_lote",idOperacao:operacao.idOperacao,
+        valorDoacao:operacao.valorDoacao,fichas:operacao.fichasEntrada} :
+      {acao:"qc_doar_com_troco",idTroca:operacao.idOperacao,
+        valorDoacao:operacao.valorDoacao,
+        fichasEntrada:operacao.fichasEntrada,saidasCegas:operacao.saidasCegas};
+    const {acao,...payload}=dados;
+    const resposta=await QC_postAnonimo271(acao,payload);
+    const ok=operacao.tipo==="EXATA" ? resposta.status==="DOACAO_REGISTRADA" :
+      resposta.status==="TROCO_ASSINADO";
+    if (!ok) {
+      // Quando o servidor indica bloqueio ANTES de aceitar as fichas,
+      // a pendencia nao precisa permanecer gravada.
+      if (["DOACOES_BLOQUEADAS","TROCO_BLOQUEADO"].includes(resposta.status)) {
+        localStorage.removeItem(QC_pendenteChave271());
+      }
+      throw Error(resposta.mensagem||(
+        resposta.status==="DOACOES_BLOQUEADAS"||resposta.status==="TROCO_BLOQUEADO" ?
+        "Doacoes ainda nao habilitadas pelo tesoureiro." :
+        "Operacao pendente: "+resposta.status+". Nao a repita como nova."));
+    }
+    if (operacao.tipo==="COM_TROCO") {
+      await QC_concluirTroco271(operacao,resposta,senha);
+    }
+    localStorage.removeItem(QC_pendenteChave271());
+    memoria=null;
+    renderizar();
+    // Senha ja validada nesta sessao: atualizar sem exibir outro formulario.
+    conferir.click();
+    return {status:"OK",valorDoacao:operacao.valorDoacao,valorTroco:operacao.valorTroco};
+  }
+  window.QC_doarValor271=async function(valor) {
+    if (movimentando271) throw Error("Ja existe uma doacao em andamento.");
+    movimentando271=true;
+    try {
+      const inicio=dadosDaSessao();
+      if (!inicio.id || !inicio.token) throw Error("Entre na carteira antes de doar.");
+      const segredo=await obterSenha265();
+      if (!segredo) return {status:"CANCELADO"};
+      const chavePendente=QC_pendenteChave271();
+      if (localStorage.getItem(chavePendente)) {
+        const pendente=await abrir(JSON.parse(localStorage.getItem(chavePendente)),segredo);
+        if (!pendente || pendente.versao!==1 || !pendente.idOperacao ||
+            !Array.isArray(pendente.fichasEntrada)) {
+          throw Error("Doacao pendente inconsistente. Preserve os dados locais.");
+        }
+        const retomar=window.confirm("Existe uma doacao anterior ainda sem confirmacao local. Deseja consultar e retomar essa operacao, sem criar outra?");
+        if (!retomar) return {status:"PENDENTE"};
+        return await QC_retomar271(pendente,segredo);
+      }
+      const disponiveis=await QC_fichasAtuais271(segredo);
+      const plano=QC_planejarComposicao267(disponiveis.map(x=>x.valor),valor);
+      if (plano.status!=="OK") throw Error(plano.mensagem||plano.status);
+      const aceito=window.confirm(
+        "Confirmar doacao anonima de "+plano.valorSolicitado+" QC?\n\n"+
+        "Fichas utilizadas: "+plano.valoresSelecionados.join(" + ")+" QC\n"+
+        (plano.valorTroco ? "Troco automatico: "+plano.valorTroco+" QC\n" : "Sem necessidade de troco.\n")+
+        "\nNao sera exibida sua identidade ao tesoureiro.");
+      if (!aceito) return {status:"CANCELADO"};
+      if (dadosDaSessao().id!==inicio.id || dadosDaSessao().token!==inicio.token) {
+        throw Error("Sessao alterada; operacao cancelada antes do gasto.");
+      }
+      const entradas=plano.indicesSelecionados.map(i => {
+        const f=disponiveis[i];
+        return {mensagemHex:f.mensagemHex,assinaturaHex:f.assinaturaHex};
+      });
+      const op={versao:1,idOperacao:crypto.randomUUID().toLowerCase(),
+        tipo:plano.tipo,valorDoacao:plano.valorSolicitado,
+        valorTroco:plano.valorTroco,fichasEntrada:entradas,
+        saidasCegas:[],privadas:[]};
+      if (plano.valorTroco) {
+        const troco=await QC_prepararTroco271(plano);
+        op.saidasCegas=troco.saidasCegas;
+        op.privadas=troco.privadas;
+      }
+      // Todo material de recuperacao fica cifrado ANTES do primeiro POST.
+      const cifrado=await QC_cifrar271(op,segredo);
+      if (localStorage.getItem(chavePendente)) {
+        throw Error("Outra operacao foi preparada. Retome-a primeiro.");
+      }
+      localStorage.setItem(chavePendente,JSON.stringify(cifrado));
+      memorizarSenha265(segredo,inicio);
+      return await QC_retomar271(op,segredo);
+    } finally {
+      movimentando271=false;
+    }
+  };
+
 
   const painel = document.createElement("section");
   painel.style.marginTop = "20px";
