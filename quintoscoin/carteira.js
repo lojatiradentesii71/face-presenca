@@ -4,10 +4,7 @@ function QC_lerCarteira() {
 
   try {
     const dados = JSON.parse(
-      localStorage.getItem(
-  QC_CHAVE_CARTEIRA + "_" +
-  (localStorage.getItem("QC_ID_CARTEIRA") || "SEM_CARTEIRA")
-) || "[]"
+      localStorage.getItem(QC_CHAVE_CARTEIRA) || "[]"
     );
 
     return Array.isArray(dados) ? dados : [];
@@ -19,11 +16,6 @@ function QC_lerCarteira() {
 }
 
 function QC_atualizarTela() {
-
-    if (typeof QC_atualizarSaldoReal202 === "function") {
-    QC_atualizarSaldoReal202();
-    return;
-  }
 
   const fichas = QC_lerCarteira();
 
@@ -289,14 +281,107 @@ QC_exibirConfirmacaoReceber(quantidade);
   });
 
 
-document.getElementById("btnDoar")
-  .addEventListener("click", function() {
-
-    document.getElementById("mensagem")
-      .textContent =
-      "Doações serão habilitadas após a validação das fichas.";
-
-  });
+// PASSO 271 - UTILIZAR O BOTAO ORIGINAL DOAR QC.
+// A tela principal continua com um unico botao para doar.
+const qcModalDoar271 = document.createElement("div");
+qcModalDoar271.id = "qcModalDoar271";
+qcModalDoar271.className = "qc-modal-overlay";
+qcModalDoar271.style.display = "none";
+qcModalDoar271.innerHTML = `
+  <div class="qc-modal-card" role="dialog" aria-modal="true"
+       aria-labelledby="qcTituloDoar271">
+    <div class="qc-modal-topo">
+      <h3 id="qcTituloDoar271">Doar QuintosCoin</h3>
+      <button type="button" id="qcFecharDoar271"
+        class="qc-modal-fechar" aria-label="Fechar">×</button>
+    </div>
+    <p class="qc-modal-texto">Quanto deseja doar nesta sessão?</p>
+    <label for="qcValorDoar271" class="qc-label-modal">Valor em QC</label>
+    <input id="qcValorDoar271" class="qc-input-modal" type="number"
+      inputmode="numeric" min="2" step="1" placeholder="Exemplo: 8">
+    <div class="qc-modal-botoes">
+      <button type="button" id="qcConfirmarDoar271"
+        class="qc-btn-modal-principal">Continuar</button>
+      <button type="button" id="qcCancelarDoar271"
+        class="qc-btn-modal-secundario">Cancelar</button>
+    </div>
+    <p id="qcMensagemDoar271" class="qc-modal-mensagem" role="status"></p>
+  </div>`;
+document.body.appendChild(qcModalDoar271);
+const qcBtnDoar271 = document.getElementById("btnDoar");
+const qcValorDoar271 = document.getElementById("qcValorDoar271");
+const qcConfirmarDoar271 = document.getElementById("qcConfirmarDoar271");
+const qcMensagemDoar271 = document.getElementById("qcMensagemDoar271");
+let qcExecutandoDoar271 = false;
+function QC_fecharDoar271() {
+  if (qcExecutandoDoar271) return;
+  qcModalDoar271.style.display = "none";
+}
+qcBtnDoar271.addEventListener("click", () => {
+  qcValorDoar271.value = "";
+  const id = localStorage.getItem("QC_ID_CARTEIRA");
+  const pendente = !!(id && localStorage.getItem("QC_DOACAO_PENDENTE_V1_" + id));
+  qcValorDoar271.disabled = pendente;
+  qcConfirmarDoar271.textContent = pendente ? "Retomar doação" : "Continuar";
+  qcMensagemDoar271.textContent = pendente
+    ? "Uma doação anterior precisa ser concluída. Nenhuma nova será criada."
+    : "";
+  qcModalDoar271.style.display = "flex";
+  if (!pendente) qcValorDoar271.focus();
+});
+document.getElementById("qcFecharDoar271")
+  .addEventListener("click", QC_fecharDoar271);
+document.getElementById("qcCancelarDoar271")
+  .addEventListener("click", QC_fecharDoar271);
+qcModalDoar271.addEventListener("click", e => {
+  if (e.target === qcModalDoar271) QC_fecharDoar271();
+});
+qcConfirmarDoar271.addEventListener("click", async () => {
+  if (qcExecutandoDoar271) return;
+  const id = localStorage.getItem("QC_ID_CARTEIRA");
+  const pendente = !!(id && localStorage.getItem("QC_DOACAO_PENDENTE_V1_" + id));
+  const valor = pendente ? 0 : Number(qcValorDoar271.value);
+  if (!pendente && (!Number.isSafeInteger(valor) || valor < 2 || valor === 3)) {
+    qcMensagemDoar271.textContent =
+      "Informe um valor inteiro a partir de 2 QC, exceto 3 QC.";
+    return;
+  }
+  if (typeof window.QC_doarValor271 !== "function") {
+    qcMensagemDoar271.textContent =
+      "Atualize a página. O módulo de fichas ainda não foi carregado.";
+    return;
+  }
+  qcExecutandoDoar271 = true;
+  qcConfirmarDoar271.disabled = true;
+  qcMensagemDoar271.textContent = pendente
+    ? "Consultando e recuperando a doação anterior..."
+    : "Conferindo fichas e preparando a doação segura...";
+  try {
+    const retorno = await window.QC_doarValor271(valor);
+    if (retorno.status === "OK") {
+      qcMensagemDoar271.textContent = "✅ Doação de " +
+        retorno.valorDoacao + " QC registrada.";
+      document.getElementById("mensagem").textContent =
+        "✅ Doação de " + retorno.valorDoacao + " QC registrada.";
+      qcModalDoar271.style.display = "none";
+    } else if (retorno.status === "CANCELADO") {
+      qcMensagemDoar271.textContent = "Operação cancelada.";
+    } else if (retorno.status === "PENDENTE") {
+      qcMensagemDoar271.textContent =
+        "A operação anterior foi preservada. Retome-a antes de uma nova doação.";
+    }
+  } catch (erro) {
+    qcMensagemDoar271.textContent = "⚠️ " + String(erro.message || erro);
+  } finally {
+    qcExecutandoDoar271 = false;
+    qcConfirmarDoar271.disabled = false;
+  }
+});
+qcValorDoar271.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !qcExecutandoDoar271) {
+    e.preventDefault(); qcConfirmarDoar271.click();
+  }
+});
 
 QC_atualizarTela();
 
@@ -318,8 +403,6 @@ function QC_mostrarLogin() {
 
   document.getElementById("formLogin")
     .style.display = "block";
-
-    QC_atualizarBoasVindas192();
 }
 
 document.getElementById("linkJaTenhoCarteira")
@@ -614,8 +697,7 @@ if (resultado.status === "OK") {
 
   document.getElementById("mensagem").textContent =
     "✅ Login e sessão validados! " +
-    "Carteira de demonstração. " +
-    "Recebimentos e doações ainda não habilitados.";
+    "Use Receber QC ou Doar QC para continuar.";
 
 } else {
 
@@ -680,9 +762,6 @@ function QC_exibirTelaCarteira() {
 
   // Consultar se esta carteira pertence ao tesoureiro.
   QC_atualizarAreaTesoureiro();
-
-  // Consultar solicitações do próprio irmão.
-  QC_carregarSolicitacoes191();
 }
 
 
@@ -1173,7 +1252,7 @@ if (!token || !idCarteira) {
       document.getElementById("mensagem")
         .textContent =
         "✅ Sessão restaurada automaticamente! " +
-        "Carteira demonstrativa.";
+        "Carteira protegida e pronta para consultar suas fichas.";
 
       return;
     }
@@ -2463,406 +2542,3 @@ function QC_confirmarPagamentoPedido(nome, valor) {
   });
 
 }
-
-
-// QUINTOSCOIN - MINHAS SOLICITAÇÕES (PASSO 191)
-
-const QC_URL_191 =
-  "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-
-const qcPainel191 = document.createElement("section");
-qcPainel191.id = "qcMinhasSolicitacoes";
-qcPainel191.style.marginTop = "24px";
-
-const qcTitulo191 = document.createElement("h3");
-qcTitulo191.textContent = "Minhas solicitações de QC";
-
-const qcBotao191 = document.createElement("button");
-qcBotao191.type = "button";
-qcBotao191.textContent = "Atualizar solicitações";
-
-const qcMensagem191 = document.createElement("p");
-qcMensagem191.setAttribute("role", "status");
-
-const qcLista191 = document.createElement("div");
-qcLista191.id = "qcListaMinhasSolicitacoes";
-
-qcPainel191.append(
-  qcTitulo191,
-  qcBotao191,
-  qcMensagem191,
-  qcLista191
-);
-
-document.querySelector("#telaCarteira .fichas")
-  .after(qcPainel191);
-
-async function QC_post191(acao, extras = {}) {
-
-  const tokenSessao = sessionStorage.getItem(
-    QC_CHAVE_SESSAO
-  );
-
-  if (!tokenSessao) {
-    throw new Error("Sessão expirada. Entre novamente.");
-  }
-
-  const resposta = await fetch(QC_URL_191, {
-    method: "POST",
-    redirect: "follow",
-    headers: {
-      "Content-Type": "text/plain;charset=utf-8"
-    },
-    body: JSON.stringify({
-      acao,
-      tokenSessao,
-      ...extras
-    })
-  });
-
-  if (!resposta.ok) {
-    throw new Error(
-      "Falha de comunicação: HTTP " + resposta.status
-    );
-  }
-
-  const dados = await resposta.json();
-
-  if (
-    sessionStorage.getItem(QC_CHAVE_SESSAO) !== tokenSessao
-  ) {
-    throw new Error(
-      "A sessão foi encerrada durante a consulta."
-    );
-  }
-
-  return dados;
-}
-
-async function QC_carregarSolicitacoes191() {
-
-  if (!sessionStorage.getItem(QC_CHAVE_SESSAO)) {
-    return;
-  }
-
-  qcBotao191.disabled = true;
-  qcMensagem191.textContent = "Consultando solicitações...";
-  qcLista191.replaceChildren();
-
-  try {
-
-    const dados = await QC_post191(
-      "qc_minhas_solicitacoes"
-    );
-
-    if (
-      dados.status !== "OK" ||
-      !Array.isArray(dados.solicitacoes)
-    ) {
-      throw new Error(
-        dados.mensagem ||
-        "Não foi possível consultar as solicitações."
-      );
-    }
-
-    if (!dados.solicitacoes.length) {
-      qcLista191.textContent =
-        "Nenhuma solicitação registrada.";
-    }
-
-    for (const pedido of dados.solicitacoes) {
-
-      const item = document.createElement("div");
-      item.style.padding = "12px 0";
-      item.style.borderBottom = "1px solid #8886";
-
-      const resumo = document.createElement("strong");
-      resumo.textContent =
-        pedido.valor + " QC — " + pedido.status;
-
-      item.appendChild(resumo);
-
-      if (pedido.idEmissao) {
-        const vinculo = document.createElement("p");
-        vinculo.textContent =
-          "Emissão vinculada: " + pedido.idEmissao;
-
-        item.appendChild(vinculo);
-      }
-
-      const podePreparar =
-        pedido.status === "AUTORIZADA" &&
-        (
-          !pedido.idEmissao ||
-          /^QC-EM-[0-9a-f-]{36}$/i.test(pedido.idEmissao)
-        );
-
-      if (podePreparar) {
-
-        const botao = document.createElement("button");
-        botao.type = "button";
-        botao.textContent = "Preparar fichas autorizadas";
-
-        botao.addEventListener("click", async () => {
-
-          botao.disabled = true;
-          qcMensagem191.textContent = "Preparando cotas...";
-
-          try {
-
-            const resp = await QC_post191(
-              "qc_preparar_emissao",
-              {
-                idAutorizacao: pedido.idAutorizacao
-              }
-            );
-
-            if (resp.status !== "AGUARDANDO_ASSINATURA") {
-              throw new Error(
-                resp.mensagem || "Emissão não preparada."
-              );
-            }
-
-            qcMensagem191.textContent =
-              "✅ " + resp.quantidadeFichas +
-              " ficha(s) planejada(s). " +
-              "Aguardando assinatura criptográfica. " +
-              "Saldo não alterado.";
-
-            botao.textContent = "Cotas preparadas";
-
-          } catch (erro) {
-
-            botao.disabled = false;
-            qcMensagem191.textContent =
-              "⚠️ " + erro.message;
-
-          }
-
-        });
-
-        item.appendChild(botao);
-      }
-
-      if (typeof QC_inserirAcao195 === "function") {
-  QC_inserirAcao195(item, pedido);
-}
-
-      if (typeof QC_inserirBackup197 === "function") {
-  QC_inserirBackup197(item, pedido);
-}
-
-      if (typeof QC_inserirRecebimento198 === "function") {
-  QC_inserirRecebimento198(item, pedido);
-}
-
-      qcLista191.appendChild(item);
-
-    }
-
-    qcMensagem191.textContent = "";
-
-  } catch (erro) {
-
-    qcMensagem191.textContent =
-      "⚠️ " + erro.message;
-
-  } finally {
-
-    qcBotao191.disabled = false;
-
-  }
-
-}
-
-qcBotao191.addEventListener(
-  "click",
-  QC_carregarSolicitacoes191
-);
-
-
-// PASSO 192 - TROCA DE IRMÃO E BOAS-VINDAS
-
-function QC_atualizarBoasVindas192() {
-
-  const aviso = document.getElementById("qcBoasVindas");
-  if (!aviso) return;
-
-  const idCarteira = localStorage.getItem(QC_ID_LOCAL);
-
-  if (!idCarteira) {
-    aviso.textContent =
-      "Bem-vindo! Informe sua carteira para entrar.";
-    return;
-  }
-
-  const chaveNome = "QC_NOME_CARTEIRA_" + idCarteira;
-  const nomeGuardado = localStorage.getItem(chaveNome);
-
-  if (nomeGuardado) {
-    aviso.textContent =
-      "Bem-vindo, Ir.'. " + nomeGuardado +
-      ". Digite sua senha para entrar na carteira.";
-    return;
-  }
-
-  aviso.textContent =
-    "Bem-vindo! Digite sua senha para entrar na carteira.";
-
-  QC_localizarCarteiraServidor192({ idCarteira })
-    .then(dados => {
-
-      if (dados.status !== "OK" || !dados.nome) return;
-
-      localStorage.setItem(chaveNome, dados.nome);
-
-      if (localStorage.getItem(QC_ID_LOCAL) === idCarteira) {
-        aviso.textContent =
-          "Bem-vindo, Ir.'. " + dados.nome +
-          ". Digite sua senha para entrar na carteira.";
-      }
-
-    })
-    .catch(() => {});
-}
-
-
-async function QC_localizarCarteiraServidor192(consulta) {
-
-  const url =
-    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-
-  const resposta = await fetch(url, {
-    method: "POST",
-    redirect: "follow",
-    headers: {
-      "Content-Type": "text/plain;charset=utf-8"
-    },
-    body: JSON.stringify({
-      acao: "qc_localizar_carteira",
-      ...consulta
-    })
-  });
-
-  if (!resposta.ok) {
-    throw new Error(
-      "Falha de comunicação: HTTP " + resposta.status
-    );
-  }
-
-  return await resposta.json();
-}
-
-
-document.getElementById("qcLinkTrocarCarteira")
-  .addEventListener("click", function(evento) {
-
-    evento.preventDefault();
-
-    document.getElementById("qcPainelTrocaCarteira")
-      .style.display = "block";
-
-    document.getElementById("qcMensagemTrocaCarteira")
-      .textContent = "";
-
-    document.getElementById("qcSenhaLogin").value = "";
-    document.getElementById("qcOutroIdCadastro").focus();
-  });
-
-
-document.getElementById("qcCancelarTrocaCarteira")
-  .addEventListener("click", function() {
-
-    document.getElementById("qcPainelTrocaCarteira")
-      .style.display = "none";
-  });
-
-
-document.getElementById("qcSelecionarOutraCarteira")
-  .addEventListener("click", async function() {
-
-    const botao = this;
-    const idCadastro = document
-      .getElementById("qcOutroIdCadastro")
-      .value.trim();
-
-    const mensagem = document
-      .getElementById("qcMensagemTrocaCarteira");
-
-    if (!idCadastro) {
-      mensagem.textContent = "Informe o IdCadastro do irmão.";
-      return;
-    }
-
-    botao.disabled = true;
-    mensagem.textContent = "Localizando carteira existente...";
-
-    try {
-
-      const dados = await QC_localizarCarteiraServidor192({
-        idCadastro
-      });
-
-      if (dados.status !== "OK" || !dados.idCarteira) {
-        throw new Error(
-          dados.mensagem || "Carteira não encontrada."
-        );
-      }
-
-      // Encerrar a sessão anterior antes da troca.
-      const tokenAnterior = sessionStorage.getItem(
-        QC_CHAVE_SESSAO
-      );
-
-      if (tokenAnterior) {
-        const saida = await QC_enviarLogoutTeste(tokenAnterior);
-
-        if (!["OK", "SESSAO_INVALIDA"].includes(saida.status)) {
-          throw new Error(
-            "Não foi possível encerrar a sessão anterior."
-          );
-        }
-      }
-
-      sessionStorage.removeItem(QC_CHAVE_SESSAO);
-
-      // Selecionar a carteira já existente.
-      localStorage.setItem(
-        QC_ID_LOCAL,
-        dados.idCarteira
-      );
-
-      localStorage.setItem(
-        "QC_NOME_CARTEIRA_" + dados.idCarteira,
-        dados.nome || ""
-      );
-
-      document.getElementById("qcSenhaLogin").value = "";
-      document.getElementById("qcOutroIdCadastro").value = "";
-
-      document.getElementById("qcPainelTrocaCarteira")
-        .style.display = "none";
-
-      QC_mostrarLogin();
-      QC_atualizarBoasVindas192();
-      QC_atualizarTela();
-
-      document.getElementById("qcSenhaLogin").focus();
-
-      QC_mostrarMensagemAcesso(
-        "Carteira selecionada. Digite a senha do irmão para entrar.",
-        "sucesso"
-      );
-
-    } catch (erro) {
-
-      mensagem.textContent = "⚠️ " + erro.message;
-
-    } finally {
-
-      botao.disabled = false;
-
-    }
-  });
-
-QC_atualizarBoasVindas192();
