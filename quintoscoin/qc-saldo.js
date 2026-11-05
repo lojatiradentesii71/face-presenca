@@ -1,4 +1,4 @@
-// QUINTOSCOIN - INTERFACE SIMPLIFICADA - Passo 265
+// QUINTOSCOIN - INTERFACE SIMPLIFICADA E PLANEJAMENTO AUTOMATICO - Passo 267
 // Mantem saldo, backup, recuperacao e a consulta de fichas gastas.
 // Doacoes e transferencias continuam controladas pelo servidor.
 // Consulta de gastos preservada; nenhuma doacao e executada neste arquivo.
@@ -136,6 +136,118 @@
       lista.textContent = "Nenhuma ficha disponivel nesta carteira.";
     }
   }
+
+  // PASSO 267 - Composicao automatica, sem gasto nem assinatura.
+  // O motor tambem sera reutilizado por Transferir QC.
+  function QC_decomporTroco267(total) {
+    if (!Number.isSafeInteger(total) || total < 0 || total > 10000) {
+      return null;
+    }
+    const opcoes = Array(total + 1).fill(null);
+    opcoes[0] = [];
+    for (let soma = 1; soma <= total; soma++) {
+      for (const valor of [10, 5, 2]) {
+        if (soma < valor || !opcoes[soma - valor]) continue;
+        const candidata = [...opcoes[soma - valor], valor];
+        if (!opcoes[soma] || candidata.length < opcoes[soma].length) {
+          opcoes[soma] = candidata;
+        }
+      }
+    }
+    return opcoes[total];
+  }
+
+  function QC_planejarComposicao267(valoresDisponiveis, valorSolicitado) {
+    const valor = Number(valorSolicitado);
+    if (!Number.isSafeInteger(valor) || valor < 2 || valor === 3) {
+      return {status:"VALOR_NAO_PERMITIDO", mensagem:"O valor deve ser inteiro, a partir de 2 QC, exceto 3 QC."};
+    }
+    if (!Array.isArray(valoresDisponiveis)) {
+      return {status:"CARTEIRA_INDISPONIVEL"};
+    }
+    const itens = valoresDisponiveis.map((v, indice) => ({
+      valor:Number(v), indice
+    }));
+    if (itens.some(item => ![2,5,10].includes(item.valor))) {
+      return {status:"DENOMINACAO_INVALIDA"};
+    }
+    const saldo = itens.reduce((soma, i) => soma + i.valor, 0);
+    if (!Number.isSafeInteger(saldo) || saldo > 10000) {
+      return {status:"LIMITE_OPERACIONAL", mensagem:"Saldo acima do limite de planejamento por operacao."};
+    }
+    if (valor > saldo) {
+      return {status:"SALDO_INSUFICIENTE", saldoDisponivel:saldo};
+    }
+
+    // As fichas sao indivisiveis: para cada soma, guardar a selecao
+    // que utiliza menos fichas. Isso evita a explosao de combinacoes.
+    const estados = new Map([[0, []]]);
+    for (const item of itens) {
+      const anteriores = [...estados.entries()];
+      for (const [soma, indices] of anteriores) {
+        if (indices.length >= 50) continue;
+        const proximaSoma = soma + item.valor;
+        const selecionadas = estados.get(proximaSoma);
+        if (!selecionadas || indices.length + 1 < selecionadas.length) {
+          estados.set(proximaSoma, [...indices, item.indice]);
+        }
+      }
+    }
+
+    let melhor = null;
+    for (const [soma, indices] of estados) {
+      if (soma < valor) continue;
+      const valorTroco = soma - valor;
+      const fichasTroco = QC_decomporTroco267(valorTroco);
+      if (!fichasTroco || fichasTroco.length > 50) continue;
+      const candidato = {soma, indices, valorTroco, fichasTroco};
+      if (!melhor ||
+          candidato.valorTroco < melhor.valorTroco ||
+          (candidato.valorTroco === melhor.valorTroco &&
+            candidato.indices.length < melhor.indices.length) ||
+          (candidato.valorTroco === melhor.valorTroco &&
+            candidato.indices.length === melhor.indices.length &&
+            candidato.fichasTroco.length < melhor.fichasTroco.length)) {
+        melhor = candidato;
+      }
+    }
+
+    if (!melhor) {
+      return {
+        status:"TROCO_IMPOSSIVEL",
+        saldoDisponivel:saldo,
+        mensagem:"Nenhuma combinacao preserva o valor restante com fichas de 2, 5 e 10 QC. Nenhuma ficha foi usada."
+      };
+    }
+    if (melhor.soma !== valor + melhor.valorTroco) {
+      throw Error("Plano de fichas inconsistente.");
+    }
+    return {
+      status:"OK", valorSolicitado:valor, saldoDisponivel:saldo,
+      tipo:melhor.valorTroco === 0 ? "EXATA" : "COM_TROCO",
+      indicesSelecionados:melhor.indices.slice(),
+      valoresSelecionados:melhor.indices.map(i => itens[i].valor),
+      totalFichasSelecionadas:melhor.soma,
+      valorTroco:melhor.valorTroco,
+      fichasTroco:melhor.fichasTroco.slice()
+    };
+  }
+
+  // Disponibilizar apenas o PLANO matematico ao botao original Doar QC.
+  // Nao divulga mensagens, assinaturas, senha ou registros criptografados.
+  window.QC_planejarMovimento267 = function(valor) {
+    const {id, token} = dadosDaSessao();
+    if (!id || !token || !memoria ||
+        memoria.id !== id || memoria.token !== token) {
+      return {
+        status:"SALDO_NAO_VERIFICADO",
+        mensagem:"Atualize seu saldo antes de continuar."
+      };
+    }
+    return QC_planejarComposicao267(
+      memoria.fichas.map(f => f.valor), valor
+    );
+  };
 
   window.QC_atualizarSaldoReal202 = renderizar;
 
