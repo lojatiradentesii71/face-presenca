@@ -1,4 +1,6 @@
-// QuintosCoin — Passo 264: saldo verificado, backup e recuperacao; doacao pelo botao original da carteira.
+// QUINTOSCOIN - INTERFACE SIMPLIFICADA - Passo 265
+// Mantem saldo, backup, recuperacao e a consulta de fichas gastas.
+// Doacoes e transferencias continuam controladas pelo servidor.
 // Consulta de gastos preservada; nenhuma doacao e executada neste arquivo.
 (function () {
   "use strict";
@@ -6,6 +8,7 @@
   const dec = new TextDecoder();
   const enc = new TextEncoder();
   let memoria = null;
+  let senhaSessao265 = null;
 
   function chaveLocal() {
     const id = localStorage.getItem("QC_ID_CARTEIRA");
@@ -63,10 +66,21 @@
   // PASSO 263 - O servidor valida novamente a assinatura e consulta
   // o identificador global na tabela QC_FichasGastas. Nao e uma doacao.
   async function consultarFicha263(ficha) {
-    const resposta = await QC_post191("qc_consultar_gasto", {
-      mensagemHex: ficha.mensagemHex,
-      assinaturaHex: ficha.assinaturaHex
+    // Consulta anonima: nao use QC_post191, que inclui o token da carteira.
+    const http = await fetch(QC_URL_191, {
+      method: "POST",
+      redirect: "follow",
+      headers: {"Content-Type": "text/plain;charset=utf-8"},
+      body: JSON.stringify({
+        acao: "qc_consultar_gasto",
+        mensagemHex: ficha.mensagemHex,
+        assinaturaHex: ficha.assinaturaHex
+      })
     });
+    if (!http.ok) {
+      throw Error("Falha na consulta anonima de gasto. HTTP " + http.status);
+    }
+    const resposta = await http.json();
     if (!resposta || !["DISPONIVEL", "GASTA"].includes(resposta.status)) {
       throw Error(resposta?.mensagem || resposta?.status ||
         "Nao foi possivel conferir o gasto da ficha no servidor.");
@@ -134,11 +148,71 @@
   const titulo = document.createElement("h3");
   titulo.textContent = "Conferir minhas fichas assinadas";
 
-  const senha = document.createElement("input");
-  senha.type = "password";
-  senha.placeholder = "Senha utilizada para proteger a ficha";
-  senha.autocomplete = "off";
-  senha.style.width = "100%";
+  // Senha das fichas: solicitada so quando necessaria, nunca fixa na tela.
+  async function obterSenha265() {
+    const {id, token} = dadosDaSessao();
+    if (senhaSessao265 && senhaSessao265.id === id &&
+        senhaSessao265.token === token) {
+      return senhaSessao265.valor;
+    }
+    senhaSessao265 = null;
+    return new Promise(resolve => {
+      const modal = document.createElement("dialog");
+      modal.setAttribute("aria-label", "Desbloquear fichas QuintosCoin");
+      modal.style.cssText =
+        "width:min(92vw,370px);border:1px solid #6a7691;border-radius:16px;" +
+        "padding:22px;background:#17243b;color:#fff;box-shadow:0 18px 70px #0009";
+      const titulo = document.createElement("h3");
+      titulo.textContent = "Desbloquear fichas";
+      titulo.style.marginTop = "0";
+      const descricao = document.createElement("p");
+      descricao.textContent = "Informe a senha que protege suas fichas. " +
+        "Ela sera mantida apenas nesta aba durante a sessao.";
+      descricao.style.fontSize = "14px";
+      const entrada = document.createElement("input");
+      entrada.type = "password";
+      entrada.autocomplete = "off";
+      entrada.placeholder = "Senha das fichas";
+      entrada.style.cssText = "display:block;width:100%;padding:12px;" +
+        "box-sizing:border-box;margin:15px 0;color:#17243b";
+      const acoes = document.createElement("div");
+      acoes.style.cssText = "display:flex;gap:10px;justify-content:flex-end";
+      const cancelar = document.createElement("button");
+      cancelar.type = "button";
+      cancelar.textContent = "Cancelar";
+      const confirmar = document.createElement("button");
+      confirmar.type = "button";
+      confirmar.textContent = "Continuar";
+      confirmar.style.fontWeight = "bold";
+      acoes.append(cancelar, confirmar);
+      modal.append(titulo, descricao, entrada, acoes);
+      document.body.appendChild(modal);
+      let resolvido = false;
+      const concluir = valor => {
+        if (resolvido) return;
+        resolvido = true;
+        modal.close();
+        modal.remove();
+        entrada.value = "";
+        resolve(valor);
+      };
+      confirmar.addEventListener("click", () => concluir(entrada.value));
+      cancelar.addEventListener("click", () => concluir(""));
+      entrada.addEventListener("keydown", e => {
+        if (e.key === "Enter") { e.preventDefault(); concluir(entrada.value); }
+      });
+      modal.addEventListener("cancel", e => { e.preventDefault(); concluir(""); });
+      modal.showModal();
+      entrada.focus();
+    });
+  }
+
+  function memorizarSenha265(valor, sessao) {
+    const atual = dadosDaSessao();
+    if (atual.id === sessao.id && atual.token === sessao.token) {
+      senhaSessao265 = {id:atual.id, token:atual.token, valor};
+    }
+  }
 
   const conferir = document.createElement("button");
   conferir.type = "button";
@@ -174,22 +248,51 @@
 
   const aviso = document.createElement("p");
   aviso.setAttribute("role", "status");
-  aviso.textContent = "Doações ainda desativadas.";
+  aviso.textContent = "Fichas protegidas. Consulte seu saldo quando desejar.";
 
-  painel.append(
-    titulo, senha, conferir, backup,
+  // So a consulta de saldo fica visivel no fluxo principal.
+  const detalhes = document.createElement("details");
+  detalhes.style.cssText = "margin-top:12px;border-top:1px solid #ffffff24;" +
+    "padding-top:10px";
+  const resumo = document.createElement("summary");
+  resumo.textContent = "Seguranca e recuperacao";
+  resumo.style.cssText = "cursor:pointer;font-size:14px;opacity:.9";
+  detalhes.append(
+    resumo, backup,
     verificarBackup252, arquivoBackup252,
-    restaurarBackup253, arquivoRestaurar253,
-    aviso
+    restaurarBackup253, arquivoRestaurar253
   );
+  titulo.textContent = "Meu saldo";
+  conferir.textContent = "Atualizar saldo";
+  painel.append(titulo, conferir, aviso, detalhes);
   const secao = document.querySelector("#telaCarteira .fichas");
   if (!secao) return;
-  secao.after(painel);
+  // Fichas detalhadas continuam disponiveis, mas recolhidas por padrao.
+  const listaDetalhes = document.createElement("details");
+  listaDetalhes.style.marginTop = "8px";
+  const listaResumo = document.createElement("summary");
+  listaResumo.textContent = "Detalhes das minhas fichas";
+  listaResumo.style.cssText = "cursor:pointer;font-size:14px;opacity:.85";
+  secao.parentNode.insertBefore(listaDetalhes, secao);
+  listaDetalhes.append(listaResumo, secao);
+  listaDetalhes.after(painel);
+
+  // Esconder os detalhes de solicitacoes tecnicas fora do fluxo principal.
+  // As acoes existentes continuam acessiveis, sem serem removidas.
+  const pedidos = document.getElementById("qcMinhasSolicitacoes");
+  if (pedidos && pedidos.parentNode) {
+    const gavetaPedidos = document.createElement("details");
+    gavetaPedidos.style.cssText = "margin-top:12px;padding:10px 0";
+    const abrirPedidos = document.createElement("summary");
+    abrirPedidos.textContent = "Meus pedidos e recebimentos";
+    abrirPedidos.style.cssText = "cursor:pointer;font-size:14px;opacity:.9";
+    pedidos.parentNode.insertBefore(gavetaPedidos, pedidos);
+    gavetaPedidos.append(abrirPedidos, pedidos);
+  }
 
   conferir.addEventListener("click", async () => {
     const {id, token} = dadosDaSessao();
-    const segredo = senha.value;
-    senha.value = "";
+    const segredo = await obterSenha265();
     if (!id || !token) {
       aviso.textContent = "Entre na carteira primeiro.";
       return;
@@ -303,6 +406,7 @@
         id, token, fichas, gastas,
         total:fichas.reduce((soma, ficha) => soma + ficha.valor, 0)
       };
+      memorizarSenha265(segredo, {id, token});
       renderizar();
       aviso.textContent = "✅ Saldo disponivel: " + memoria.total +
         " QC em " + fichas.length + " ficha(s). " + gastas +
@@ -349,15 +453,14 @@
 
   // PASSO 252 - Somente leitura: arquivo e chaves publicas.
   // Nao escreve no localStorage nem envia fichas ou senhas ao servidor.
-  verificarBackup252.addEventListener("click", () => {
+  verificarBackup252.addEventListener("click", async () => {
     const sessaoInicial = dadosDaSessao();
     if (!sessaoInicial.id || !sessaoInicial.token) {
       aviso.textContent = "Entre na carteira primeiro.";
       return;
     }
 
-    const segredo = senha.value;
-    senha.value = "";
+    const segredo = await obterSenha265();
     if (!segredo) {
       aviso.textContent = "Informe a senha das fichas antes de selecionar o backup.";
       return;
@@ -476,6 +579,7 @@
           throw Error("A sessao mudou durante a verificacao.");
         }
 
+        memorizarSenha265(segredo, sessaoInicial);
         aviso.textContent = "✅ Backup valido: " +
           dados.registrosCifrados.length + " ficha(s), " + total +
           " QC. Nenhuma ficha importada ou alterada.";
@@ -494,15 +598,14 @@
   // PASSO 253 - Importa apenas fichas novas depois de validar TODAS as
   // assinaturas e conferir duplicatas com as fichas ja existentes.
   // A gravacao e unica e nao altera fichas anteriores.
-  restaurarBackup253.addEventListener("click", () => {
+  restaurarBackup253.addEventListener("click", async () => {
     const sessaoInicial = dadosDaSessao();
     if (!sessaoInicial.id || !sessaoInicial.token) {
       aviso.textContent = "Entre na carteira primeiro.";
       return;
     }
 
-    const segredo = senha.value;
-    senha.value = "";
+    const segredo = await obterSenha265();
     if (!segredo) {
       aviso.textContent = "Digite a senha das fichas antes de selecionar o backup.";
       return;
@@ -660,6 +763,7 @@
           ficha => !mensagensAtuais.has(ficha.mensagemHex)
         );
         const repetidas = disponiveisBackup.length - novas.length;
+        memorizarSenha265(segredo, sessaoInicial);
 
         if (novas.length === 0) {
           aviso.textContent = "✅ Nenhuma ficha importada: " + repetidas +
