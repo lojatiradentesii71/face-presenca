@@ -1,5 +1,5 @@
-// QuintosCoin — Passo 252: saldo e verificacao de backup para fichas de 2, 5 e 10 QC.
-// Nenhuma emissão, gasto ou assinatura é feita neste arquivo.
+// QuintosCoin — Passo 253: saldo, verificacao e restauracao segura de backup (2, 5 e 10 QC).
+// Nenhuma emissao, gasto ou assinatura nova e feita neste arquivo.
 (function () {
   "use strict";
 
@@ -143,13 +143,26 @@
   arquivoBackup252.accept = ".json,application/json";
   arquivoBackup252.style.display = "none";
 
+
+  // PASSO 253 - Restauracao segura, sem sobrescrever fichas existentes.
+  const restaurarBackup253 = document.createElement("button");
+  restaurarBackup253.type = "button";
+  restaurarBackup253.textContent = "Restaurar fichas do backup";
+  restaurarBackup253.style.marginTop = "10px";
+
+  const arquivoRestaurar253 = document.createElement("input");
+  arquivoRestaurar253.type = "file";
+  arquivoRestaurar253.accept = ".json,application/json";
+  arquivoRestaurar253.style.display = "none";
+
   const aviso = document.createElement("p");
   aviso.setAttribute("role", "status");
   aviso.textContent = "Doações ainda desativadas.";
 
   painel.append(
     titulo, senha, conferir, backup,
-    verificarBackup252, arquivoBackup252, aviso
+    verificarBackup252, arquivoBackup252,
+    restaurarBackup253, arquivoRestaurar253, aviso
   );
   const secao = document.querySelector("#telaCarteira .fichas");
   if (!secao) return;
@@ -448,6 +461,239 @@
     };
 
     arquivoBackup252.click();
+  });
+
+
+  // PASSO 253 - Importa apenas fichas novas depois de validar TODAS as
+  // assinaturas e conferir duplicatas com as fichas ja existentes.
+  // A gravacao e unica e nao altera fichas anteriores.
+  restaurarBackup253.addEventListener("click", () => {
+    const sessaoInicial = dadosDaSessao();
+    if (!sessaoInicial.id || !sessaoInicial.token) {
+      aviso.textContent = "Entre na carteira primeiro.";
+      return;
+    }
+
+    const segredo = senha.value;
+    senha.value = "";
+    if (!segredo) {
+      aviso.textContent = "Digite a senha das fichas antes de selecionar o backup.";
+      return;
+    }
+
+    arquivoRestaurar253.value = "";
+    arquivoRestaurar253.onchange = async () => {
+      const arquivo = arquivoRestaurar253.files?.[0];
+      if (!arquivo) return;
+
+      restaurarBackup253.disabled = true;
+      verificarBackup252.disabled = true;
+      conferir.disabled = true;
+      backup.disabled = true;
+      aviso.textContent = "Verificando fichas do backup e da carteira...";
+
+      try {
+        if (!crypto?.subtle || !crypto.randomUUID) {
+          throw Error("Criptografia segura indisponivel.");
+        }
+        if (arquivo.size > 10 * 1024 * 1024) {
+          throw Error("Arquivo de backup excede o tamanho permitido.");
+        }
+
+        const dados = JSON.parse(await arquivo.text());
+        if (
+          !dados ||
+          dados.formato !== "QUINTOSCOIN_BACKUP_ASSINADAS_V1" ||
+          !Array.isArray(dados.registrosCifrados) ||
+          dados.registrosCifrados.length === 0 ||
+          dados.registrosCifrados.length > 2000
+        ) {
+          throw Error("Formato de backup assinado invalido.");
+        }
+
+        const chaves = new Map();
+        const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+
+        async function validarFicha253(registro) {
+          const ficha = await abrir(registro, segredo);
+          const valor = ficha?.valor;
+          const idChave = "QC-" + valor + "-V1";
+
+          if (
+            !ficha ||
+            ficha.formato !== "QC_FICHA_ASSINADA_V1" ||
+            ![2, 5, 10].includes(valor) ||
+            ficha.idChave !== idChave ||
+            !/^[0-9a-f]{1024}$/i.test(ficha.assinaturaHex || "")
+          ) {
+            throw Error("Ficha com estrutura invalida.");
+          }
+
+          const mensagemHex = String(ficha.mensagemHex || "").toLowerCase();
+          const mensagem = deHex(mensagemHex);
+          if (mensagem.length < 80) {
+            throw Error("Mensagem da ficha incompleta.");
+          }
+
+          const conteudo = new TextDecoder("utf-8", {fatal:true})
+            .decode(mensagem.subarray(32));
+          const partes = conteudo.split("|");
+          if (
+            partes.length !== 5 ||
+            partes[0] !== "QUINTOSCOIN" ||
+            partes[1] !== "V1" ||
+            partes[2] !== String(valor) ||
+            partes[3] !== idChave ||
+            !uuid.test(partes[4])
+          ) {
+            throw Error("Conteudo da ficha invalido.");
+          }
+
+          let chave = chaves.get(valor);
+          if (!chave) {
+            // Apenas consulta a chave PUBLICA; nao envia a ficha ao servidor.
+            const resposta = await QC_post191("qc_chave_publica_" + valor);
+            const nHex = String(resposta.moduloHex || "").toLowerCase();
+            const eHex = String(resposta.expoenteHex || "").toLowerCase();
+
+            if (
+              resposta.status !== "OK" ||
+              resposta.idChave !== idChave ||
+              !/^[89a-f][0-9a-f]{1023}$/.test(nHex) ||
+              !/^0*10001$/.test(eHex)
+            ) {
+              throw Error("Chave publica de " + valor + " QC indisponivel.");
+            }
+
+            const eNormal = eHex.length % 2 ? "0" + eHex : eHex;
+            chave = await crypto.subtle.importKey(
+              "jwk",
+              {
+                kty:"RSA", n:base64url(deHex(nHex)),
+                e:base64url(deHex(eNormal)),
+                ext:true, key_ops:["verify"]
+              },
+              {name:"RSA-PSS", hash:"SHA-384"}, false, ["verify"]
+            );
+            chaves.set(valor, chave);
+          }
+
+          const confere = await crypto.subtle.verify(
+            {name:"RSA-PSS", saltLength:48}, chave,
+            deHex(ficha.assinaturaHex), mensagem
+          );
+          if (!confere) {
+            throw Error("Assinatura de " + valor + " QC invalida.");
+          }
+
+          // Usar a mensagem assinada como identidade, pois o mesmo QC
+          // pode ter sido salvo com criptografias diferentes.
+          return {mensagemHex, valor};
+        }
+
+        const mensagensBackup = new Set();
+        const fichasBackup = [];
+        for (const registro of dados.registrosCifrados) {
+          const ficha = await validarFicha253(registro);
+          if (mensagensBackup.has(ficha.mensagemHex)) {
+            throw Error("O backup contem fichas duplicadas.");
+          }
+          mensagensBackup.add(ficha.mensagemHex);
+          fichasBackup.push({registro, ...ficha});
+        }
+
+        // Ler e validar o armazenamento ANTES de propor qualquer gravacao.
+        const chave = chaveLocal();
+        const textoAnterior = localStorage.getItem(chave);
+        const atuais = textoAnterior === null
+          ? {}
+          : JSON.parse(textoAnterior);
+        if (!atuais || typeof atuais !== "object" ||
+            Array.isArray(atuais)) {
+          throw Error("Armazenamento atual da carteira invalido.");
+        }
+
+        const mensagensAtuais = new Set();
+        for (const registro of Object.values(atuais)) {
+          const ficha = await validarFicha253(registro);
+          if (mensagensAtuais.has(ficha.mensagemHex)) {
+            throw Error("A carteira ja contem fichas duplicadas.");
+          }
+          mensagensAtuais.add(ficha.mensagemHex);
+        }
+
+        const novas = fichasBackup.filter(
+          ficha => !mensagensAtuais.has(ficha.mensagemHex)
+        );
+        const repetidas = fichasBackup.length - novas.length;
+
+        if (novas.length === 0) {
+          aviso.textContent = "✅ Nenhuma ficha importada: as " +
+            repetidas + " ficha(s) do backup ja estao na carteira.";
+          return;
+        }
+
+        const totalNovo = novas.reduce((soma, ficha) =>
+          soma + ficha.valor, 0
+        );
+
+        const permitir = window.confirm(
+          "Backup validado.\n\n" +
+          novas.length + " ficha(s) nova(s), total de " +
+          totalNovo + " QC.\n" +
+          repetidas + " ficha(s) ja presente(s) serao ignoradas.\n\n" +
+          "Deseja importar somente as fichas novas?"
+        );
+        if (!permitir) {
+          aviso.textContent = "Restauracao cancelada. Nenhuma ficha alterada.";
+          return;
+        }
+
+        // Verificacoes finais: impedir importacao se a sessao ou os
+        // registros mudaram enquanto o backup era conferido.
+        const sessaoAtual = dadosDaSessao();
+        if (
+          sessaoAtual.id !== sessaoInicial.id ||
+          sessaoAtual.token !== sessaoInicial.token ||
+          localStorage.getItem(chave) !== textoAnterior
+        ) {
+          throw Error("Carteira ou sessao mudou. Repita a restauracao.");
+        }
+
+        const atualizados = Object.assign(Object.create(null), atuais);
+        for (const ficha of novas) {
+          let chaveFicha;
+          do {
+            chaveFicha = "QC-REC-" + crypto.randomUUID();
+          } while (Object.prototype.hasOwnProperty.call(
+            atualizados, chaveFicha
+          ));
+          atualizados[chaveFicha] = ficha.registro;
+        }
+
+        // Uma unica gravacao; nao remove nem substitui fichas antigas.
+        localStorage.setItem(chave, JSON.stringify(atualizados));
+        memoria = null;
+        renderizar();
+
+        aviso.textContent = "✅ Restauracao concluida: " +
+          novas.length + " ficha(s), " + totalNovo +
+          " QC adicionados. " + repetidas +
+          " ficha(s) ja existente(s) ignoradas. " +
+          "Clique em Verificar meu saldo.";
+
+      } catch (erro) {
+        aviso.textContent = "⚠️ Restauracao nao realizada: " + erro.message;
+      } finally {
+        arquivoRestaurar253.value = "";
+        restaurarBackup253.disabled = false;
+        verificarBackup252.disabled = false;
+        conferir.disabled = false;
+        backup.disabled = false;
+      }
+    };
+
+    arquivoRestaurar253.click();
   });
 
   renderizar();
