@@ -758,7 +758,67 @@
       senha
     );
   }
+  // PASSO 286: envio parcelado usa as rotas 284/285, uma ficha por assinatura.
+  // O mesmo material cifrado local e reutilizado em qualquer retomada.
+  async function QC_retomarEnvioEmLotes286(op, senha) {
+    const base={idOperacao:op.idTransferencia,codigo:op.codigo};
+    const abrir=await QC_postAnonimo271("qc_mov_lote_abrir",{
+      ...base,tipo:"TRANSFERENCIA",valorSolicitado:op.valorEnviado,
+      quantidadeEntradas:op.fichasEntrada.length,
+      quantidadeTroco:op.saidasCegas.length
+    });
+    let etapa=abrir.status;
+    if (etapa==="RECEBENDO") {
+      for (const [fase,lista] of [["ENTRADA",op.fichasEntrada],
+                                  ["TROCO",op.saidasCegas]]) {
+        for (let pos=0;pos<lista.length;pos+=20) {
+          const parte=await QC_postAnonimo271("qc_mov_lote_parte",{
+            ...base,etapa:fase,indiceInicial:pos+1,
+            fichas:lista.slice(pos,pos+20)
+          });
+          if (parte.status!=="RECEBENDO") {
+            throw Error(parte.mensagem||"Envio de parcela nao confirmado: "+parte.status);
+          }
+        }
+      }
+      const pronto=await QC_postAnonimo271("qc_mov_lote_pronto",base);
+      etapa=pronto.status;
+    }
+    if (!["PRONTO","PROCESSANDO","CONCLUIDO"].includes(etapa)) {
+      throw Error(abrir.mensagem||"Envio parcelado pendente: "+etapa);
+    }
+    const assinaturas=[];
+    for (let i=1;i<=op.saidasCegas.length;i++) {
+      const r=await QC_postAnonimo271("qc_mov_lote_assinar",{
+        ...base,etapa:"TROCO",indice:i
+      });
+      if (r.status!=="ASSINADO" || !Array.isArray(r.assinaturasCegas) ||
+          r.assinaturasCegas.length!==1 ||
+          Number(r.assinaturasCegas[0].indice)!==i) {
+        throw Error(r.mensagem||"Assinatura do troco pendente: "+r.status);
+      }
+      assinaturas.push(r.assinaturasCegas[0]);
+    }
+    const fim=await QC_postAnonimo271("qc_mov_lote_concluir",{
+      ...base,etapa:"TROCO"
+    });
+    if (fim.status!=="TRANSFERENCIA_PRONTA" ||
+        fim.idOperacao!==op.idTransferencia ||
+        Number(fim.valor)!==op.valorEnviado) {
+      throw Error(fim.mensagem||"Transferencia em preparacao: "+fim.status);
+    }
+    await QC_concluirAssinaturas275("TX-"+op.idTransferencia,
+      op.privadasTroco,assinaturas,op.valorEnviado,op.valorTroco,senha);
+    memoria=null;renderizar();
+    return {status:"PRONTA",idTransferencia:op.idTransferencia,
+      valorEnviado:op.valorEnviado,
+      codigoQR:QC_codificarTransferencia275(op.idTransferencia,op.codigo)};
+  }
+
   async function QC_retomarEnvio275(op, senha) {
+    if (op.metodo === "LOTE285") {
+      return await QC_retomarEnvioEmLotes286(op, senha);
+    }
     const resp = await QC_postAnonimo271("qc_transferir_criar", {
       idTransferencia:op.idTransferencia,
       codigo:op.codigo,
@@ -834,6 +894,8 @@
         versao:1, idTransferencia:crypto.randomUUID().toLowerCase(),
         codigo:QC_hex271(crypto.getRandomValues(new Uint8Array(32))),
         valorEnviado:valor, valorTroco:plano.valorTroco,
+        metodo:(plano.indicesSelecionados.length>50 ||
+          troco.saidasCegas.length>50) ? "LOTE285" : "DIRETO273",
         fichasEntrada:plano.indicesSelecionados.map(i=>({
           mensagemHex:disponiveis[i].mensagemHex,
           assinaturaHex:disponiveis[i].assinaturaHex
@@ -868,7 +930,60 @@
     return {status:resp.status,valorEnviado:op.valorEnviado,
       codigoQR:QC_codificarTransferencia275(op.idTransferencia,op.codigo)};
   };
+  // PASSO 286: recebimento em lotes. Nunca regerar blocos cegos
+  // quando o pedido ja estiver salvo e criptografado neste aparelho.
+  async function QC_retomarRecebimentoEmLotes286(op,senha) {
+    const base={idTransferencia:op.idTransferencia,codigo:op.codigo};
+    const iniciar=await QC_postAnonimo271("qc_transf_rx_abrir",{
+      ...base,quantidade:op.saidasCegas.length
+    });
+    let estado=iniciar.status;
+    if (estado==="RECEBENDO") {
+      for (let pos=0;pos<op.saidasCegas.length;pos+=20) {
+        const parte=await QC_postAnonimo271("qc_transf_rx_parte",{
+          ...base,indiceInicial:pos+1,
+          saidas:op.saidasCegas.slice(pos,pos+20)
+        });
+        if (parte.status!=="RECEBENDO") {
+          throw Error(parte.mensagem||"Parcela nao registrada: "+parte.status);
+        }
+      }
+      const pronto=await QC_postAnonimo271("qc_transf_rx_pronto",base);
+      estado=pronto.status;
+    }
+    if (!["PRONTO","ASSINANDO","CONCLUIDO"].includes(estado)) {
+      throw Error(iniciar.mensagem||"Recebimento parcelado pendente: "+estado);
+    }
+    const assinaturas=[];
+    for (let i=1;i<=op.saidasCegas.length;i++) {
+      const resp=await QC_postAnonimo271("qc_transf_rx_assinar",{
+        ...base,indice:i
+      });
+      const a=resp.assinatura;
+      if (resp.status!=="ASSINADO" || !a ||
+          Number(a.indice)!==i || !/^[0-9a-f]{1024}$/i.test(
+            String(a.assinaturaCegaHex||""))) {
+        throw Error(resp.mensagem||"Assinatura de recebimento pendente: "+resp.status);
+      }
+      assinaturas.push(a);
+    }
+    const concluido=await QC_postAnonimo271("qc_transf_rx_concluir",base);
+    if (concluido.status!=="TRANSFERENCIA_RESGATADA" ||
+        concluido.idTransferencia!==op.idTransferencia ||
+        Number(concluido.valorRecebido)!==op.valorRecebido) {
+      throw Error(concluido.mensagem||"Recebimento pendente: "+concluido.status);
+    }
+    await QC_concluirAssinaturas275("RX-"+op.idTransferencia,
+      op.privadas,assinaturas,0,op.valorRecebido,senha);
+    localStorage.removeItem(QC_chaveRX275());
+    memoria=null;renderizar();
+    return {status:"RECEBIDA",valorRecebido:op.valorRecebido};
+  }
+
   async function QC_retomarResgate275(op,senha) {
+    if (op.metodo === "LOTE286") {
+      return await QC_retomarRecebimentoEmLotes286(op,senha);
+    }
     const resp=await QC_postAnonimo271("qc_transferir_resgatar",{
       idTransferencia:op.idTransferencia,
       codigo:op.codigo, saidasCegas:op.saidasCegas
@@ -924,12 +1039,13 @@
         throw Error("Valor recebido invalido.");
       }
       const valores=QC_decomporTroco267(valor);
-      if (!valores || valores.length>50) throw Error("Nao e possivel compor o recebimento.");
+      if (!valores) throw Error("Nao e possivel compor o recebimento.");
       if (!window.confirm("Receber "+valor+" QC nesta carteira?")) {
         return {status:"CANCELADO"};
       }
       const preparadas=await QC_prepararTroco271({fichasTroco:valores});
       const op={versao:1,idTransferencia:info.id,codigo:info.codigo,
+        metodo:preparadas.saidasCegas.length>50 ? "LOTE286" : "DIRETO273",
         valorRecebido:valor,saidasCegas:preparadas.saidasCegas,
         privadas:preparadas.privadas};
       await QC_salvarPendente275(QC_chaveRX275(),op,senha);
