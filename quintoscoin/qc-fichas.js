@@ -1,4 +1,5 @@
-// QUINTOSCOIN - PASSO 224
+
+ // QUINTOSCOIN - PASSO 291 - FICHAS PROTEGIDAS PELA SENHA DO LOGIN
  // Preparacao e recebimento de fichas de 2, 5 e 10 QC.
  // Mantem os bloqueios de assinatura no servidor.
 
@@ -345,18 +346,22 @@
       return;
     }
 
-    painel.append(entrada, confirmar, botao, mensagem);
+    const sessaoSenha291 = (typeof window.QC_senhaFichas291 === "function")
+      ? window.QC_senhaFichas291() : "";
+    if (sessaoSenha291) painel.append(botao, mensagem);
+    else painel.append(entrada, confirmar, botao, mensagem);
     item.appendChild(painel);
 
     botao.addEventListener("click", async () => {
-      if (entrada.value.length < 6 ||
-          entrada.value !== confirmar.value) {
-        mensagem.textContent =
-          "Informe e confirme uma senha com pelo menos 6 caracteres.";
+      const senhaDaSessao = (typeof window.QC_senhaFichas291 === "function")
+        ? window.QC_senhaFichas291() : "";
+      if (!senhaDaSessao && (entrada.value.length < 6 ||
+          entrada.value !== confirmar.value)) {
+        mensagem.textContent = "Entre na carteira novamente para proteger as fichas.";
         return;
       }
 
-      const senha = entrada.value;
+      const senha = senhaDaSessao || entrada.value;
       entrada.value = "";
       confirmar.value = "";
       botao.disabled = true;
@@ -658,11 +663,14 @@ window.QC_inserirRecebimento198 = function(item, pedido) {
     : "Assinar e receber " + valoresEsperados.length +
       " fichas (" + valorAutorizado + " QC)";
   mensagem.textContent = "Fichas prontas. Assinatura depende da liberacao do servidor.";
-  painel.append(senhaCampo, botao, mensagem);
+  if (typeof window.QC_senhaFichas291 === "function" &&
+      window.QC_senhaFichas291()) painel.append(botao, mensagem);
+  else painel.append(senhaCampo, botao, mensagem);
   item.appendChild(painel);
 
   botao.addEventListener("click", async () => {
-    const senha = senhaCampo.value;
+    const senha = (typeof window.QC_senhaFichas291 === "function"
+      ? window.QC_senhaFichas291() : "") || senhaCampo.value;
     senhaCampo.value = "";
     if (!senha) {
       mensagem.textContent = "Informe a senha usada para proteger as fichas.";
