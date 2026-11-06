@@ -1100,7 +1100,154 @@
     }
     return op;
   }
+  // PASSO 287 - RESGATE DE MUITAS FICHAS.
+  // A solicitacao usa a mesma interface e o mesmo segredo cifrado do
+  // Passo 278. Ate 20 fichas sao transmitidas em cada POST, e TODAS as
+  // assinaturas de troco/devolucao podem ser recuperadas individualmente.
+  // A unica baixa de fichas continua sendo feita pelo servidor (Passo 285).
+  async function QC_resgateLoteAssinaturas287(op,senha,fase,permitirNovas) {
+    const devolucao=fase==="DEVOLUCAO";
+    const privadas=devolucao?op.privadasDevolucao:op.privadasTroco;
+    const assinaturas=[];
+    for (let i=1;i<=privadas.length;i++) {
+      const base={idResgate:op.idResgate,etapa:fase,indice:i};
+      let resp=await QC_postResgate278("qc_resgate_lote_assinatura",base);
+      // Antes da primeira assinatura, QC_Resgates ainda pode nao ter
+      // sido criado: a rota de leitura responde NAO_ENCONTRADO.
+      // Somente entao o servidor de movimentacao pode iniciar a baixa.
+      if (["ASSINATURA_PENDENTE","NAO_ENCONTRADO"].includes(resp.status)
+          && permitirNovas) {
+        resp=await QC_postResgate278("qc_mov_lote_assinar",{
+          idOperacao:op.idResgate,etapa:fase,indice:i
+        });
+        if (resp.status==="ASSINADO" &&
+            Array.isArray(resp.assinaturasCegas) &&
+            resp.assinaturasCegas.length===1) {
+          resp={status:"ASSINADO",assinatura:resp.assinaturasCegas[0]};
+        }
+      }
+      const a=resp.assinatura;
+      if (resp.status!=="ASSINADO" || !a ||
+          Number(a.indice)!==i ||
+          a.denominacao!==privadas[i-1].valor ||
+          a.idChave!==privadas[i-1].idChave ||
+          !/^[0-9a-f]{1024}$/i.test(String(a.assinaturaCegaHex||""))) {
+        throw Error(resp.mensagem||"Assinatura de "+fase+" pendente no indice "+
+          i+". Preserve o pedido e retome-o sem gerar novas fichas.");
+      }
+      assinaturas.push(a);
+    }
+    await QC_concluirAssinaturas275(
+      (devolucao?"RS-D-":"RS-T-")+op.idResgate,
+      privadas,assinaturas,0,
+      devolucao?op.valorResgate:op.valorTroco,senha
+    );
+  }
+
+  async function QC_sincronizarResgateLotes287(op,senha) {
+    const base={idOperacao:op.idResgate};
+    let estado=await QC_postResgate278("qc_resgate_lote_status",{
+      idResgate:op.idResgate
+    });
+    if (estado.status==="ERRO") throw Error(estado.mensagem||"Falha na consulta do resgate.");
+    // Antes do primeiro registro financeiro, abrir o lote ou recuperar
+    // a abertura existente. Nunca alterar IDs ou blocos cegos em retomadas.
+    if (estado.status==="NAO_ENCONTRADO") {
+      const abrir=await QC_postResgate278("qc_mov_lote_abrir",{
+        ...base,tipo:"RESGATE",valorSolicitado:op.valorResgate,
+        quantidadeEntradas:op.fichasEntrada.length,
+        quantidadeTroco:op.trocoCego.length,
+        quantidadeDevolucao:op.devolucaoCega.length
+      });
+      let fase=abrir.status;
+      if (fase==="RECEBENDO") {
+        for (const [etapa,lista] of [
+          ["ENTRADA",op.fichasEntrada],
+          ["TROCO",op.trocoCego],
+          ["DEVOLUCAO",op.devolucaoCega]
+        ]) {
+          for (let pos=0;pos<lista.length;pos+=20) {
+            const parte=await QC_postResgate278("qc_mov_lote_parte",{
+              ...base,etapa,indiceInicial:pos+1,
+              fichas:lista.slice(pos,pos+20)
+            });
+            if (parte.status!=="RECEBENDO") {
+              throw Error(parte.mensagem||"Parcela de resgate pendente: "+parte.status);
+            }
+          }
+        }
+        const pronto=await QC_postResgate278("qc_mov_lote_pronto",base);
+        fase=pronto.status;
+      }
+      if (!["PRONTO","PROCESSANDO","CONCLUIDO"].includes(fase)) {
+        throw Error(abrir.mensagem||"Preparacao do resgate pendente: "+fase+
+          ". Nenhuma nova solicitacao deve ser criada.");
+      }
+      // O metadata de QC_Resgates so surge apos a primeira chamada de
+      // assinatura/baixa feita pelo servidor, sob o lock global.
+      estado=await QC_postResgate278("qc_resgate_lote_status",{
+        idResgate:op.idResgate
+      });
+    }
+    // A operacao somente sai de CRIANDO quando TODAS as fichas de troco
+    // foram assinadas, armazenadas e a baixa foi conciliada no servidor.
+    if (estado.status==="NAO_ENCONTRADO" ||
+        estado.status==="RESGATE_CRIANDO") {
+      await QC_resgateLoteAssinaturas287(op,senha,"TROCO",true);
+      const concluido=await QC_postResgate278("qc_mov_lote_concluir",{
+        ...base,etapa:"TROCO"
+      });
+      if (concluido.status!=="RESGATE_PENDENTE") {
+        throw Error(concluido.mensagem||"Resgate ainda em preparacao: "+
+          concluido.status+". Retome a mesma solicitacao.");
+      }
+      estado=await QC_postResgate278("qc_resgate_lote_status",{
+        idResgate:op.idResgate
+      });
+    } else {
+      // O tesoureiro pode ter confirmado ou cancelado enquanto o celular
+      // esteve offline. Recuperar o troco ja salvo sem novas assinaturas.
+      await QC_resgateLoteAssinaturas287(op,senha,"TROCO",false);
+    }
+    if (estado.status==="ERRO") throw Error(estado.mensagem||"Falha no estado do resgate.");
+    if (estado.idResgate!==op.idResgate ||
+        Number(estado.valorResgate)!==op.valorResgate ||
+        Number(estado.valorTroco)!==op.valorTroco) {
+      throw Error("Valores do resgate divergentes. Preserve a operacao local.");
+    }
+    if (estado.status==="RESGATE_CANCELAMENTO_APROVADO" ||
+        estado.status==="RESGATE_CANCELADO") {
+      await QC_resgateLoteAssinaturas287(op,senha,"DEVOLUCAO",
+        estado.status==="RESGATE_CANCELAMENTO_APROVADO");
+      if (estado.status==="RESGATE_CANCELAMENTO_APROVADO") {
+        const fim=await QC_postResgate278("qc_mov_lote_concluir",{
+          ...base,etapa:"DEVOLUCAO"
+        });
+        if (fim.status!=="RESGATE_CANCELADO") {
+          throw Error(fim.mensagem||"Devolucao aguardando conclusao: "+fim.status);
+        }
+      }
+      localStorage.removeItem(QC_chaveResgate278(op.idResgate));
+      memoria=null;renderizar();
+      return {status:"CANCELADO",valor:op.valorResgate};
+    }
+    if (estado.status==="RESGATE_CONFIRMADO") {
+      localStorage.removeItem(QC_chaveResgate278(op.idResgate));
+      memoria=null;renderizar();
+      return {status:"CONFIRMADO",valor:op.valorResgate};
+    }
+    if (!["RESGATE_PENDENTE","RESGATE_CANCELAMENTO_SOLICITADO"].includes(
+        estado.status)) {
+      throw Error("Estado de resgate inesperado: "+estado.status);
+    }
+    memoria=null;renderizar();
+    return {status:"PENDENTE",valor:op.valorResgate,situacao:estado.status};
+  }
+
   async function QC_sincronizarResgate278(op, senha) {
+    if (op.metodo==="LOTE285") {
+      return await QC_sincronizarResgateLotes287(op,senha);
+    }
     // Primeiro consultar sem criar uma nova solicitacao. O mesmo ID e
     // repetido apos falhas para impedir reservas ou assinaturas duplicadas.
     let resposta = await QC_postResgate278("qc_resgate_consultar",{
@@ -1201,11 +1348,14 @@
       }
       const troco=await QC_prepararTroco271(plano);
       const valoresDevolucao=QC_decomporTroco267(plano.valorSolicitado);
-      if (!valoresDevolucao || valoresDevolucao.length>50) {
+      if (!valoresDevolucao) {
         throw Error("Nao foi possivel preparar a devolucao segura do resgate.");
       }
       const devolucao=await QC_prepararTroco271({fichasTroco:valoresDevolucao});
+      const lotes=plano.indicesSelecionados.length>50 ||
+        troco.saidasCegas.length>50 || devolucao.saidasCegas.length>50;
       const op={versao:1,idResgate:crypto.randomUUID().toLowerCase(),
+        metodo:lotes?"LOTE285":"DIRETO277",
         valorResgate:plano.valorSolicitado,valorTroco:plano.valorTroco,
         fichasEntrada:plano.indicesSelecionados.map(i=>({
           mensagemHex:fichas[i].mensagemHex,
