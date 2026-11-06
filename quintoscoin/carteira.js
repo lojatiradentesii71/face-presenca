@@ -1,4 +1,4 @@
-// QUINTOSCOIN - PASSO 289 - PUBLICACAO SINCRONIZADA
+// QUINTOSCOIN - PASSO 291 - LOGIN, NOME E INTERFACE SIMPLIFICADA
 // Mantem as funcoes do Passo 278 e acrescenta o cliente de API ausente.
 // IMPORTANTE: esta funcao e somente para rotas autenticadas.
 // Doacoes e transferencias anonimas continuam com fetch proprio.
@@ -46,43 +46,11 @@ function QC_lerCarteira() {
 }
 
 function QC_atualizarTela() {
-
-  const fichas = QC_lerCarteira();
-
-  const saldo = fichas.reduce(
-    (total, ficha) => total + Number(ficha.valor || 0),
-    0
-  );
-
-  document.getElementById("saldo")
-    .textContent = saldo + " QC";
-
-  document.getElementById("equivalente")
-    .textContent = saldo.toLocaleString(
-      "pt-BR",
-      {
-        style: "currency",
-        currency: "BRL"
-      }
-    );
-
-  const lista = document.getElementById("listaFichas");
-
-  lista.innerHTML = "";
-
-  if (fichas.length === 0) {
-    lista.textContent = "Nenhuma ficha disponível.";
-    return;
+  // Nunca apresentar o saldo demonstrativo QC_CARTEIRA_TESTE como saldo real.
+  // O modulo qc-saldo.js valida assinaturas e consulta fichas gastas.
+  if (typeof window.QC_atualizarSaldoReal202 === "function") {
+    window.QC_atualizarSaldoReal202();
   }
-
-  fichas.forEach(ficha => {
-
-    const elemento = document.createElement("div");
-    elemento.className = "ficha";
-    elemento.textContent = ficha.valor + " QC";
-
-    lista.appendChild(elemento);
-  });
 }
 
 
@@ -868,6 +836,92 @@ QC_atualizarTela();
 
 const QC_ID_LOCAL = "QC_ID_CARTEIRA";
 
+// PASSO 291 — Identificação da carteira e nome, SEM tocar nas fichas.
+function QC_atualizarBoasVindas291() {
+  const alvo = document.getElementById("qcBoasVindas");
+  if (!alvo) return;
+  const id = localStorage.getItem(QC_ID_LOCAL);
+  const nome = id ? String(localStorage.getItem("QC_NOME_CARTEIRA_"+id)||"").trim() : "";
+  alvo.textContent = nome
+    ? "Bem-vindo, Ir.'. " + nome + ". Digite sua senha para entrar."
+    : "Bem-vindo! Digite sua senha para entrar na carteira.";
+}
+
+async function QC_localizarConta291(dados) {
+  const resposta = await fetch(QC_URL_191, {
+    method:"POST", redirect:"follow",
+    headers:{"Content-Type":"text/plain;charset=utf-8"},
+    body:JSON.stringify(Object.assign({acao:"qc_localizar_carteira"},dados))
+  });
+  if (!resposta.ok) throw Error("Falha na consulta da carteira (HTTP "+resposta.status+").");
+  const r = await resposta.json();
+  if (!r || r.status !== "OK" || !r.idCarteira) {
+    throw Error(r?.mensagem || "Carteira ativa não localizada para esse irmão.");
+  }
+  return {idCarteira:String(r.idCarteira).trim(),
+    nome:String(r.nome || r.nomeIrmao || r.Nome || "").trim()};
+}
+
+async function QC_carregarNome291() {
+  const id = localStorage.getItem(QC_ID_LOCAL);
+  if (!id) return;
+  QC_atualizarBoasVindas291();
+  if (localStorage.getItem("QC_NOME_CARTEIRA_"+id)) return;
+  try {
+    const conta = await QC_localizarConta291({idCarteira:id});
+    if (conta.idCarteira !== id || !conta.nome ||
+        localStorage.getItem(QC_ID_LOCAL) !== id) return;
+    localStorage.setItem("QC_NOME_CARTEIRA_"+id,conta.nome);
+    QC_atualizarBoasVindas291();
+  } catch (_) {
+    // Sem conectar, permitir login sem nome inventado.
+  }
+}
+
+(function QC_restaurarTrocaDeCarteira291() {
+  const link=document.getElementById("qcLinkTrocarCarteira");
+  const painel=document.getElementById("qcPainelTrocaCarteira");
+  const idCampo=document.getElementById("qcOutroIdCadastro");
+  const selecionar=document.getElementById("qcSelecionarOutraCarteira");
+  const cancelar=document.getElementById("qcCancelarTrocaCarteira");
+  const mensagem=document.getElementById("qcMensagemTrocaCarteira");
+  if (!link||!painel||!idCampo||!selecionar||!cancelar||!mensagem) return;
+  link.addEventListener("click", e=>{
+    e.preventDefault();
+    painel.style.display="block";
+    mensagem.textContent="";
+    idCampo.focus();
+  });
+  cancelar.addEventListener("click",()=>{
+    painel.style.display="none";
+    idCampo.value="";
+    mensagem.textContent="";
+  });
+  selecionar.addEventListener("click",async()=>{
+    const idCadastro=idCampo.value.trim();
+    if(!idCadastro){mensagem.textContent="Informe o IdCadastro.";return;}
+    selecionar.disabled=true;
+    mensagem.textContent="Localizando carteira...";
+    try {
+      const conta=await QC_localizarConta291({idCadastro});
+      // Nunca remover registros com outras carteiras; apenas selecionar o ID.
+      sessionStorage.removeItem("QC_TOKEN_SESSAO_TESTE");
+      if (window.QC_limparSenhaSessao291) window.QC_limparSenhaSessao291();
+      localStorage.setItem(QC_ID_LOCAL,conta.idCarteira);
+      if(conta.nome) localStorage.setItem("QC_NOME_CARTEIRA_"+conta.idCarteira,conta.nome);
+      const senhaCampo=document.getElementById("qcSenhaLogin");
+      if(senhaCampo) senhaCampo.value="";
+      painel.style.display="none";
+      idCampo.value="";
+      mensagem.textContent="";
+      QC_atualizarBoasVindas291();
+      QC_carregarNome291();
+      QC_mostrarMensagemAcesso("Carteira selecionada. Digite a senha desse irmão.","sucesso");
+    }catch(err){mensagem.textContent="⚠️ "+(err.message||err);}
+    finally{selecionar.disabled=false;}
+  });
+})();
+
 function QC_mostrarAtivacao() {
 
   document.getElementById("formAtivacao")
@@ -878,6 +932,8 @@ function QC_mostrarAtivacao() {
 }
 
 function QC_mostrarLogin() {
+  QC_atualizarBoasVindas291();
+  QC_carregarNome291();
 
   document.getElementById("formAtivacao")
     .style.display = "none";
@@ -1166,11 +1222,21 @@ if (resultado.status === "OK") {
     resultado.tokenSessao
   );
 
-  // Limpar o campo da senha
+  // Limpar a tela de senha, mas preservar a credencial apenas nesta
+  // chamada, para iniciar as fichas na memoria durante a sessao.
   campoSenha.value = "";
 
-  // Mostrar a carteira demonstrativa
   QC_exibirTelaCarteira();
+  try {
+    if (typeof window.QC_aposLogin291 !== "function") {
+      throw Error("Modulo do saldo nao carregado.");
+    }
+    await window.QC_aposLogin291(senha);
+  } catch (erroFichas) {
+    const msg=document.getElementById("mensagem");
+    if(msg) msg.textContent="⚠️ Fichas protegidas: "+
+      (erroFichas.message||erroFichas)+". Nenhuma ficha foi apagada.";
+  }
 
   // Manter operações financeiras desabilitadas
   document.getElementById("btnReceber").disabled = false;
@@ -1178,9 +1244,8 @@ if (resultado.status === "OK") {
   document.getElementById("btnTransferir").disabled = false;
   if (window.QC_habilitarResgate278) window.QC_habilitarResgate278();
 
-  document.getElementById("mensagem").textContent =
-    "✅ Login e sessão validados! " +
-    "Use Receber QC ou Doar QC para continuar.";
+  const avisoLogin=document.getElementById("mensagem");
+  if(avisoLogin && !avisoLogin.textContent.startsWith("⚠️")) avisoLogin.textContent="";
 
 } else {
 
@@ -1648,6 +1713,7 @@ document.getElementById("btnSairCarteira")
 
       // Remover somente o token de sessão.
       sessionStorage.removeItem(QC_CHAVE_SESSAO);
+      if (window.QC_limparSenhaSessao291) window.QC_limparSenhaSessao291();
 
       // Ocultar a carteira e mostrar o login.
       QC_exibirTelaAcesso();
@@ -1684,107 +1750,14 @@ document.getElementById("btnSairCarteira")
 /* QUINTOSCOIN - RESTAURAR SESSÃO AO ABRIR */
 
 async function QC_restaurarSessaoTeste() {
-
-  const token = sessionStorage.getItem(
-    QC_CHAVE_SESSAO
-  );
-
-  const idCarteira = localStorage.getItem(
-    QC_ID_LOCAL
-  );
-
-  // Sem token ou sem carteira identificada:
-  // manter a tela de acesso.
- 
-if (!token || !idCarteira) {
-  document.documentElement.classList.remove(
-    "qc-restaurando"
-  );
-  return;
+  // Senha unica = login. Nao persistir a senha em localStorage/sessionStorage.
+  // Por isso, apos recarregar a pagina, pedir novamente o login.
+  sessionStorage.removeItem(QC_CHAVE_SESSAO);
+  document.documentElement.classList.remove("qc-restaurando");
+  QC_exibirTelaAcesso();
+  QC_mostrarLogin();
+  QC_carregarNome291();
 }
-
-
-  // Não interferir na tela temporária de teste
-  // do código de recuperação.
-  if (
-    new URLSearchParams(window.location.search)
-      .has("testeRecuperacao")
-  ) {
-    return;
-  }
-
-  try {
-
-    const resultado = await QC_validarSessaoServidor(
-      token
-    );
-
-    if (
-      resultado.status === "OK" &&
-      resultado.idCarteira === idCarteira
-    ) {
-
-      // Sessão confirmada pelo servidor.
-      QC_exibirTelaCarteira();
-
-      // Manter as operações desabilitadas.
-      document.getElementById("btnReceber")
-        .disabled = false;
-
-      document.getElementById("btnDoar")
-        .disabled = false;
-      document.getElementById("btnTransferir")
-        .disabled = false;
-      if (window.QC_habilitarResgate278) window.QC_habilitarResgate278();
-
-      document.getElementById("mensagem")
-        .textContent =
-        "✅ Sessão restaurada automaticamente! " +
-        "Carteira protegida e pronta para consultar suas fichas.";
-
-      return;
-    }
-
-    // Sessão expirada, inválida ou de outra carteira.
-    sessionStorage.removeItem(
-      QC_CHAVE_SESSAO
-    );
-
-    QC_exibirTelaAcesso();
-    QC_mostrarLogin();
-
-    QC_mostrarMensagemAcesso(
-      "Sua sessão expirou. Digite sua senha para entrar.",
-      "erro"
-    );
-
-  } catch (erro) {
-
-    // Se a comunicação falhar, manter a tela de login.
-    // Não apagar o token até termos uma resposta
-    // confirmando que ele é inválido.
-    QC_exibirTelaAcesso();
-    QC_mostrarLogin();
-
-   
-QC_mostrarMensagemAcesso(
-  "Não foi possível verificar sua sessão. " +
-  "Confira a conexão ou faça login novamente.",
-  "erro"
-);
-
-} finally {
-
-  // Remover a tela de verificação,
-  // independentemente do resultado.
-  document.documentElement.classList.remove(
-    "qc-restaurando"
-  );
-
-}
-
-}
-
 
 
 // Verificar a sessão ao abrir a página.
@@ -1930,6 +1903,15 @@ document.getElementById("btnConfirmarTrocaSenha")
       );
 
       if (resultado.status === "OK") {
+        // Senha alterada no servidor. Ajustar tambem a criptografia local.
+        try {
+          if(window.QC_migrarSenhaLogin291)
+            await window.QC_migrarSenhaLogin291(atual, nova);
+        } catch(migracaoErro) {
+          // O antigo segredo continua protegendo as fichas.
+          // No proximo login sera pedida a senha anterior so para migrar.
+          console.warn("Migracao local pendente:",migracaoErro.message);
+        }
 
         // Remover token da sessão anterior
         sessionStorage.removeItem(QC_CHAVE_SESSAO);
@@ -3371,4 +3353,30 @@ function QC_confirmarPagamentoPedido(nome, valor) {
   }
   painel.addEventListener("toggle",()=>{if(painel.open)carregar();});
   window.QC_atualizarResgatesTesoureiro278=()=>{if(painel.open)carregar();};
+})();
+
+
+// PASSO 291 — Icones locais, sem dependencias externas ou botoes adicionais.
+(function QC_iconesOperacoes291() {
+  const desenho={
+    btnDoar:'<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>',
+    btnReceber:'<path d="M12 3v14m-5-5 5 5 5-5"/><path d="M4 20h16"/>',
+    btnTransferir:'<path d="M4 7h16m-5-5 5 5-5 5M20 17H4m5-5-5 5 5 5"/>',
+    btnResgatar:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 12h.01M18 12h.01"/>'
+  };
+  const rotulos={btnDoar:'Doar QC',btnReceber:'Receber QC',
+    btnTransferir:'Transferir QC',btnResgatar:'Resgatar QC'};
+  for(const id of Object.keys(desenho)) {
+    const botao=document.getElementById(id);
+    if(!botao) continue;
+    const svg='<svg aria-hidden="true" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+desenho[id]+'</svg>';
+    botao.innerHTML=svg+'<span>'+rotulos[id]+'</span>';
+    botao.setAttribute('aria-label',rotulos[id]);
+  }
+  const estilo=document.createElement('style');
+  estilo.textContent='#telaCarteira .acoes button{display:flex;align-items:center;justify-content:center;gap:7px}'+
+    '#telaCarteira .acoes button svg{flex:0 0 auto;width:18px;height:18px}'+
+    '#telaCarteira #btnDoar svg{width:23px;height:23px}'+
+    '@media(max-width:380px){#telaCarteira .acoes button{gap:4px;font-size:11px!important}#telaCarteira .acoes button svg{width:15px;height:15px}}';
+  document.head.appendChild(estilo);
 })();
