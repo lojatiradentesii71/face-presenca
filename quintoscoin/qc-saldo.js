@@ -536,6 +536,73 @@
       valor:resposta.valor,recuperada:!!resposta.recuperada};
   }
 
+  // PASSO 283 - Troco em lotes, sem alterar o unico botao Doar QC.
+  // Todas as parcelas usam o idOperacao ja salvo e cifrado na carteira.
+  async function QC_doarTrocoEmLotes283(operacao) {
+    const id=operacao.idOperacao;
+    const entradas=operacao.fichasEntrada;
+    const trocos=operacao.saidasCegas;
+    const abrir=await QC_postAnonimo271("qc_lote_troco_abrir",{
+      idOperacao:id,valorSolicitado:operacao.valorDoacao,
+      quantidadeEntradas:entradas.length,quantidadeTroco:trocos.length
+    });
+    let etapa=abrir.status;
+    if (etapa==="RECEBENDO") {
+      for (let pos=0;pos<entradas.length;pos+=20) {
+        const parte=await QC_postAnonimo271("qc_lote_troco_parte",{
+          idOperacao:id,etapa:"ENTRADA",indiceInicial:pos+1,
+          fichas:entradas.slice(pos,pos+20)
+        });
+        if (parte.status!=="RECEBENDO") {
+          throw Error(parte.mensagem||"Entrada do troco nao confirmada: "+parte.status);
+        }
+      }
+      for (let pos=0;pos<trocos.length;pos+=20) {
+        const parte=await QC_postAnonimo271("qc_lote_troco_parte",{
+          idOperacao:id,etapa:"TROCO",indiceInicial:pos+1,
+          fichas:trocos.slice(pos,pos+20)
+        });
+        if (parte.status!=="RECEBENDO") {
+          throw Error(parte.mensagem||"Saida cega do troco nao confirmada: "+parte.status);
+        }
+      }
+      const pronto=await QC_postAnonimo271("qc_lote_troco_pronto",{
+        idOperacao:id
+      });
+      etapa=pronto.status;
+    }
+    if (!["PRONTO","PROCESSANDO","CONCLUIDO"].includes(etapa)) {
+      throw Error(abrir.mensagem||"Doacao com troco pendente: "+etapa);
+    }
+    // Uma assinatura cega por chamada: nao ultrapassa o tempo do Apps Script.
+    // Repetir apos queda devolve a MESMA assinatura, nunca cria outra.
+    for (let indice=1;indice<=trocos.length;indice++) {
+      const assinatura=await QC_postAnonimo271("qc_lote_troco_assinar",{
+        idOperacao:id,indice
+      });
+      if (assinatura.status!=="ASSINADO" || assinatura.idOperacao!==id ||
+          Number(assinatura.indice)!==indice ||
+          Number(assinatura.denominacao)!==Number(trocos[indice-1].denominacao)) {
+        throw Error(assinatura.mensagem||
+          "Troco pendente de assinatura: "+assinatura.status+
+          ". Retome a mesma operacao.");
+      }
+    }
+    const resposta=await QC_postAnonimo271("qc_lote_troco_concluir",{
+      idOperacao:id
+    });
+    if (resposta.status!=="TROCO_ASSINADO" || resposta.idTroca!==id ||
+        Number(resposta.valorDoacao)!==operacao.valorDoacao ||
+        Number(resposta.valorTroco)!==operacao.valorTroco ||
+        !Array.isArray(resposta.assinaturasCegas) ||
+        resposta.assinaturasCegas.length!==trocos.length) {
+      throw Error(resposta.mensagem||
+        "Troco aguardando conclusao: "+resposta.status+
+        ". Retome a mesma operacao.");
+    }
+    return resposta;
+  }
+
   async function QC_retomar271(operacao,senha) {
     const dados=operacao.tipo==="EXATA" ?
       {acao:"qc_doar_lote",idOperacao:operacao.idOperacao,
@@ -546,9 +613,13 @@
     const {acao,...payload}=dados;
     const usarLotes282=operacao.tipo==="EXATA" &&
       operacao.fichasEntrada.length>50;
+    const usarTrocoLotes283=operacao.tipo==="COM_TROCO" &&
+      (operacao.fichasEntrada.length>30 || operacao.saidasCegas.length>30);
     const resposta=usarLotes282
       ? await QC_doarExataEmLotes282(operacao)
-      : await QC_postAnonimo271(acao,payload);
+      : usarTrocoLotes283
+        ? await QC_doarTrocoEmLotes283(operacao)
+        : await QC_postAnonimo271(acao,payload);
     const ok=operacao.tipo==="EXATA" ? resposta.status==="DOACAO_REGISTRADA" :
       resposta.status==="TROCO_ASSINADO";
     if (!ok) {
