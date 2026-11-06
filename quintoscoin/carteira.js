@@ -1,4 +1,4 @@
-// QUINTOSCOIN - PASSO 275 - TRANSFERENCIAS COM QR LOCAL
+// QUINTOSCOIN - PASSO 278 - CARTEIRA COM RESGATE E DOACAO EM DESTAQUE
 const QC_CHAVE_CARTEIRA = "QC_CARTEIRA_TESTE";
 
 function QC_lerCarteira() {
@@ -1147,6 +1147,7 @@ if (resultado.status === "OK") {
   document.getElementById("btnReceber").disabled = false;
   document.getElementById("btnDoar").disabled = false;
   document.getElementById("btnTransferir").disabled = false;
+  if (window.QC_habilitarResgate278) window.QC_habilitarResgate278();
 
   document.getElementById("mensagem").textContent =
     "✅ Login e sessão validados! " +
@@ -1193,6 +1194,8 @@ function QC_exibirTelaAcesso() {
 
   document.getElementById("telaCarteira")
     .style.display = "none";
+  const resgate278 = document.getElementById("btnResgatar");
+  if (resgate278) resgate278.disabled = true;
 
     const areaTesoureiro = document.getElementById(
     "qcAreaTesoureiro"
@@ -1703,6 +1706,7 @@ if (!token || !idCarteira) {
         .disabled = false;
       document.getElementById("btnTransferir")
         .disabled = false;
+      if (window.QC_habilitarResgate278) window.QC_habilitarResgate278();
 
       document.getElementById("mensagem")
         .textContent =
@@ -2564,6 +2568,9 @@ async function QC_carregarPainelTesoureiro276(tokenSessao) {
       " · Doacoes extintas: " +
       (Number.isSafeInteger(dados.doacoesExtintas) ?
         formato(dados.doacoesExtintas) + " QC" : "a conferir") +
+      " · Resgates confirmados: " +
+      (Number.isSafeInteger(dados.resgatesEmDinheiro) ?
+        formato(dados.resgatesEmDinheiro) + " QC" : "a conferir") +
       " · Atualizado: " + dados.atualizadoEm;
     if (dados.conferencia !== "CONFERIDO") {
       aviso.textContent = "⚠️ Conferencia necessaria: " +
@@ -2666,6 +2673,8 @@ async function QC_atualizarAreaTesoureiro(abrirLista = false) {
     area.style.display = "block";
     mensagem.textContent = "";
     QC_carregarPainelTesoureiro276(token);
+    if (window.QC_atualizarResgatesTesoureiro278)
+      window.QC_atualizarResgatesTesoureiro278();
 
 
     const esfera = document.getElementById(
@@ -3077,3 +3086,260 @@ function QC_confirmarPagamentoPedido(nome, valor) {
   });
 
 }
+
+
+// PASSO 278 - Interface de resgates definitivos.
+// Receber, Doar, Transferir e Resgatar: um botao por operacao.
+(function QC_montarResgates278() {
+  const acoes=document.querySelector("#telaCarteira .acoes");
+  const doar=document.getElementById("btnDoar");
+  const receber=document.getElementById("btnReceber");
+  const transferir=document.getElementById("btnTransferir");
+  if (!acoes||!doar||!receber||!transferir) return;
+  const resgatar=document.createElement("button");
+  resgatar.type="button";
+  resgatar.id="btnResgatar";
+  resgatar.textContent="Resgatar QC";
+  resgatar.disabled=true;
+  acoes.appendChild(resgatar);
+
+  // Layout simplificado: Doar tem prioridade visual.
+  const estilo=document.createElement("style");
+  estilo.textContent=`
+    #telaCarteira .acoes {display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:16px 0}
+    #telaCarteira .acoes button {min-width:0;white-space:normal;padding:13px 5px;border-radius:11px;font-size:clamp(11px,2.8vw,14px);line-height:1.25}
+    #telaCarteira #btnDoar {grid-column:1/-1;grid-row:1;background:#168055!important;color:white!important;border:1px solid #2c9b71!important;font-size:20px!important;font-weight:750;padding:20px 12px;box-shadow:0 7px 18px #0002}
+    #telaCarteira #btnReceber {grid-column:1;grid-row:2}
+    #telaCarteira #btnTransferir {grid-column:2;grid-row:2}
+    #telaCarteira #btnResgatar {grid-column:3;grid-row:2}
+    #qcModalResgate278 [hidden], #qcAreaResgatesTesoureiro278 [hidden] {display:none!important}
+    .qc-resgate-linha278 {border:1px solid #ffffff28;border-radius:10px;margin:10px 0;padding:11px}
+    .qc-resgate-linha278 p {margin:5px 0;font-size:13px;overflow-wrap:anywhere}
+    .qc-resgate-linha278 button {margin:5px 5px 0 0;padding:9px 12px;border-radius:8px}
+    .qc-resgate-status278 {opacity:.85;font-size:12px}
+  `;
+  document.head.appendChild(estilo);
+  const modal=document.createElement("div");
+  modal.id="qcModalResgate278";
+  modal.className="qc-modal-overlay";
+  modal.style.display="none";
+  modal.innerHTML=`
+    <div class="qc-modal-card" role="dialog" aria-modal="true" aria-labelledby="qcTituloResgate278">
+      <div class="qc-modal-topo"><h3 id="qcTituloResgate278">Resgatar QuintosCoin</h3>
+        <button type="button" id="qcFecharResgate278" class="qc-modal-fechar" aria-label="Fechar">×</button></div>
+      <p class="qc-modal-texto">Informe quanto deseja resgatar. O pagamento sera combinado com o tesoureiro.</p>
+      <label for="qcValorResgate278" class="qc-label-modal">Valor em QC</label>
+      <input id="qcValorResgate278" class="qc-input-modal" type="number" min="2" step="1"
+        inputmode="numeric" placeholder="Exemplo: 20">
+      <div class="qc-modal-botoes">
+        <button id="qcSolicitarResgate278" type="button" class="qc-btn-modal-principal">Solicitar resgate</button>
+        <button id="qcCancelarTelaResgate278" type="button" class="qc-btn-modal-secundario">Voltar</button>
+      </div>
+      <p id="qcMensagemResgate278" class="qc-modal-mensagem" role="status"></p>
+      <details id="qcMeusResgates278" style="margin-top:14px">
+        <summary style="cursor:pointer">Acompanhar meus resgates</summary>
+        <div id="qcListaMeusResgates278" style="margin-top:10px"></div>
+      </details>
+    </div>`;
+  document.body.appendChild(modal);
+  const status=document.getElementById("qcMensagemResgate278");
+  const campo=document.getElementById("qcValorResgate278");
+  const enviar=document.getElementById("qcSolicitarResgate278");
+  const lista=document.getElementById("qcListaMeusResgates278");
+  let ocupado=false;
+  function fechar() {if(!ocupado) modal.style.display="none";}
+  function rotuloEstado(st) {
+    return ({PENDENTE:"Aguardando tesoureiro",
+      CRIANDO:"Preparando",
+      CANCELAMENTO_SOLICITADO:"Cancelamento solicitado",
+      CANCELAMENTO_APROVADO:"Aguardando devolucao",
+      CONFIRMADO:"Pago e encerrado",CANCELADO:"Cancelado"})[st]||st;
+  }
+  function acaoLinha(texto, handler) {
+    const b=document.createElement("button");b.type="button";
+    b.textContent=texto;
+    b.className="qc-btn-modal-secundario";
+    b.addEventListener("click",async()=>{
+      if(ocupado) return;
+      ocupado=true;b.disabled=true;status.textContent="Consultando a solicitacao...";
+      try {await handler();await atualizarMeus();}
+      catch(e){status.textContent="⚠️ "+String(e.message||e);}
+      finally {ocupado=false;b.disabled=false;}
+    });
+    return b;
+  }
+  async function atualizarMeus() {
+    lista.textContent="Consultando...";
+    if(typeof window.QC_meusResgates278!=="function") {
+      lista.textContent="Atualize a pagina para carregar os resgates.";return;
+    }
+    const pedidos=await window.QC_meusResgates278();
+    lista.replaceChildren();
+    if(!pedidos.length){lista.textContent="Nenhum resgate solicitado.";return;}
+    pedidos.forEach(p=>{
+      const item=document.createElement("div");item.className="qc-resgate-linha278";
+      const nome=document.createElement("strong");nome.textContent=p.valor+" QC";
+      const situacao=document.createElement("p");situacao.className="qc-resgate-status278";
+      situacao.textContent=rotuloEstado(p.status)+" · "+p.solicitadoEm;
+      item.append(nome,situacao);
+      if(p.possuiRecuperacaoLocal){
+        item.append(acaoLinha("Atualizar / recuperar fichas",async()=>{
+          const r=await window.QC_retomarResgate278(p.idResgate);
+          status.textContent=r.status==="CANCELADO" ?
+            "✅ Resgate cancelado; fichas devolvidas com seguranca." :
+            r.status==="CONFIRMADO" ? "✅ Pagamento confirmado." :
+            "Solicitacao atualizada. Aguardando tesoureiro.";
+        }));
+      }
+      if(!p.possuiRecuperacaoLocal && ["CANCELADO","CRIANDO","CANCELAMENTO_APROVADO"].includes(p.status)){
+        const atencao=document.createElement("p");
+        atencao.textContent="Para recuperar fichas, use o aparelho que fez a solicitacao.";
+        item.append(atencao);
+      }
+      if(p.status==="PENDENTE"){
+        item.append(acaoLinha("Pedir cancelamento",async()=>{
+          if(!window.confirm("Solicitar cancelamento de "+p.valor+" QC? As fichas continuam reservadas ate autorizacao do tesoureiro.")) return;
+          await window.QC_pedirCancelamentoResgate278(p.idResgate);
+          status.textContent="Cancelamento solicitado. Aguarde autorizacao do tesoureiro.";
+        }));
+      }
+      lista.appendChild(item);
+    });
+  }
+  resgatar.addEventListener("click",()=>{
+    if(!sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")) return;
+    status.textContent="";campo.value="";modal.style.display="flex";
+  });
+  document.getElementById("qcFecharResgate278").addEventListener("click",fechar);
+  document.getElementById("qcCancelarTelaResgate278").addEventListener("click",fechar);
+  modal.addEventListener("click",e=>{if(e.target===modal)fechar();});
+  enviar.addEventListener("click",async()=>{
+    if(ocupado)return;
+    const valor=Number(campo.value);
+    if(!campo.value.trim()||!Number.isSafeInteger(valor)||valor<2||valor===3){
+      status.textContent="Informe valor inteiro a partir de 2 QC, exceto 3 QC.";return;
+    }
+    ocupado=true;enviar.disabled=true;status.textContent="Preparando resgate seguro...";
+    try{
+      if(typeof window.QC_solicitarResgate278!=="function")throw Error("Modulo de resgate nao carregado.");
+      const r=await window.QC_solicitarResgate278(valor);
+      if(r.status==="CANCELADO_PELO_USUARIO") status.textContent="Operacao cancelada.";
+      else if(r.status==="PENDENTE" && r.situacao){
+        status.textContent="✅ Resgate registrado. Combine o pagamento com o tesoureiro. " +
+          "Os QCs permanecem reservados.";
+        campo.value="";await atualizarMeus();
+      } else {
+        status.textContent=r.mensagem||"Operacao pendente. Preserve este aparelho e retome o pedido.";
+        await atualizarMeus();
+      }
+    }catch(e){status.textContent="⚠️ "+String(e.message||e)+" Se a conexao caiu, preserve os dados deste aparelho.";}
+    finally{ocupado=false;enviar.disabled=false;}
+  });
+  campo.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();enviar.click();}});
+  document.getElementById("qcMeusResgates278").addEventListener("toggle",e=>{
+    if(e.target.open) atualizarMeus().catch(err=>{
+      lista.textContent="⚠️ "+String(err.message||err);
+    });
+  });
+
+  // Habilitar apenas o botao na interface. O servidor mantem os bloqueios.
+  const mostrarResgatar=()=>{
+    resgatar.disabled=!sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
+  };
+  // O fluxo de login/restauracao chama a mesma ativacao dos demais botoes.
+  window.QC_habilitarResgate278=mostrarResgatar;
+})();
+
+// PASSO 278 - Pedidos identificados restritos a area do tesoureiro.
+(function QC_montarTesourariaResgates278(){
+  const area=document.getElementById("qcAreaTesoureiro");
+  if(!area)return;
+  const painel=document.createElement("details");
+  painel.id="qcAreaResgatesTesoureiro278";
+  painel.style.cssText="margin:15px 0;border:1px solid #ffffff29;border-radius:12px;padding:12px";
+  const titulo=document.createElement("summary");
+  titulo.textContent="💵 Resgates pendentes";
+  titulo.style.cssText="cursor:pointer;font-weight:600";
+  const lista=document.createElement("div");
+  lista.id="qcListaResgatesTesoureiro278";
+  lista.style.marginTop="12px";
+  painel.append(titulo,lista);
+  area.appendChild(painel);
+  const URL_SCRIPT="https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+  async function postar(acao,params={}){
+    const token=sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
+    if(!token) throw Error("Sessao expirada.");
+    const r=await fetch(URL_SCRIPT,{method:"POST",redirect:"follow",
+      headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body:JSON.stringify({acao,tokenSessao:token,...params})});
+    if(!r.ok)throw Error("Falha de comunicacao: HTTP "+r.status);
+    const dados=await r.json();
+    if(token!==sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE"))throw Error("Sessao alterada.");
+    if(dados.status==="ERRO"||dados.status==="NAO_AUTORIZADO"){
+      throw Error(dados.mensagem||"Operacao nao autorizada.");
+    }
+    return dados;
+  }
+  let carregando=false;
+  async function carregar(){
+    if(carregando)return;
+    carregando=true;lista.textContent="Consultando resgates...";
+    try{
+      const r=await postar("qc_resgate_pendentes_tesoureiro");
+      if(r.status!=="OK"||!Array.isArray(r.pedidos))throw Error("Lista de resgates invalida.");
+      lista.replaceChildren();
+      titulo.textContent="💵 Resgates pendentes"+(r.pedidos.length?" ("+r.pedidos.length+")":"");
+      if(!r.pedidos.length){lista.textContent="Nenhum resgate pendente.";return;}
+      r.pedidos.forEach(p=>{
+        const item=document.createElement("div");item.className="qc-resgate-linha278";
+        const nome=document.createElement("strong");nome.textContent=p.nome;
+        const info=document.createElement("p");
+        info.textContent=p.valor+" QC · "+p.solicitadoEm+" · "+p.status;
+        const mensagem=document.createElement("p");mensagem.setAttribute("role","status");
+        item.append(nome,info);
+        function botao(texto,acao,mensagemConfirmacao){
+          const b=document.createElement("button");b.type="button";
+          b.className="qc-btn-modal-secundario";b.textContent=texto;
+          b.addEventListener("click",async()=>{
+            if(!window.confirm(mensagemConfirmacao))return;
+            b.disabled=true;mensagem.textContent="Registrando...";
+            try{
+              const r=await postar(acao,{idResgate:p.idResgate});
+              if(acao==="qc_resgate_confirmar_pagamento" && r.status!=="RESGATE_CONFIRMADO"){
+                throw Error(r.mensagem||"Confirmacao nao concluida: "+r.status);
+              }
+              if(acao==="qc_resgate_autorizar_cancelamento" &&
+                 !["RESGATE_CANCELADO","CANCELAMENTO_PENDENTE_ASSINATURA"].includes(r.status)){
+                throw Error(r.mensagem||"Cancelamento nao concluido: "+r.status);
+              }
+              mensagem.textContent=acao==="qc_resgate_confirmar_pagamento" ?
+                "✅ Pagamento registrado e QCs extintos." :
+                r.status==="RESGATE_CANCELADO" ?
+                "✅ Cancelamento autorizado. Irmao deve recuperar as fichas na carteira." :
+                "Cancelamento aprovado. Assinaturas pendentes; retomar autorizacao.";
+              await carregar();
+              QC_carregarPainelTesoureiro276(sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE"));
+            }catch(err){mensagem.textContent="⚠️ "+String(err.message||err);}
+            finally{b.disabled=false;}
+          });return b;
+        }
+        if(p.status==="PENDENTE"||p.status==="CANCELAMENTO_SOLICITADO"){
+          item.append(botao("Confirmar pagamento",
+            "qc_resgate_confirmar_pagamento",
+            "Confirma que JA PAGOU R$ "+Number(p.valor).toFixed(2)+" a "+p.nome+
+            " fora do sistema? Esta operacao extingue os QCs definitivamente e reduz o lastro."));
+        }
+        if(p.status==="CANCELAMENTO_SOLICITADO"||p.status==="CANCELAMENTO_APROVADO"){
+          item.append(botao("Autorizar cancelamento",
+            "qc_resgate_autorizar_cancelamento",
+            "Confirma que NENHUM pagamento foi realizado a "+p.nome+
+            "? Esta operacao devolve fichas para recuperacao na carteira do irmao."));
+        }
+        item.append(mensagem);lista.appendChild(item);
+      });
+    }catch(e){lista.textContent="⚠️ "+String(e.message||e);}
+    finally{carregando=false;}
+  }
+  painel.addEventListener("toggle",()=>{if(painel.open)carregar();});
+  window.QC_atualizarResgatesTesoureiro278=()=>{if(painel.open)carregar();};
+})();
