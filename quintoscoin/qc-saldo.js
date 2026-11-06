@@ -1,4 +1,4 @@
-// QUINTOSCOIN - INTERFACE LIMPA, PLANEJAMENTO E DOACAO ANONIMA - Passo 275
+// QUINTOSCOIN - INTERFACE LIMPA, PLANEJAMENTO E DOACAO ANONIMA - Passo 278
 // Mantem saldo, backup, recuperacao e a consulta de fichas gastas.
 // Doacoes: rotas anonimas + fila local criptografada. Transferencias ainda nao integradas.
 // Servidor conserva os bloqueios de doacao e troco ate liberacao final.
@@ -808,6 +808,206 @@
     } finally {
       transferindo275=false;
     }
+  };
+
+
+  // PASSO 278 - SOLICITACOES IDENTIFICADAS DE RESGATE DEFINITIVO.
+  // Os blocos cegos, inversos e fichas ficam cifrados no aparelho ANTES
+  // do envio. Apenas o resgate usa sessao de login; doacoes seguem anonimas.
+  const PREFIXO_RESGATE278 = "QC_RESGATE_LOCAL_V1_";
+  let ocupadaResgate278 = false;
+
+  function QC_chaveResgate278(idResgate) {
+    const sessao = dadosDaSessao();
+    if (!sessao.id) throw Error("Entre na carteira primeiro.");
+    if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(idResgate)) {
+      throw Error("Identificador de resgate invalido.");
+    }
+    return PREFIXO_RESGATE278 + sessao.id + "_" + idResgate.toLowerCase();
+  }
+  function QC_resgatesLocais278() {
+    const sessao = dadosDaSessao();
+    if (!sessao.id) return [];
+    const prefixo = PREFIXO_RESGATE278 + sessao.id + "_";
+    return Object.keys(localStorage).filter(chave => chave.startsWith(prefixo));
+  }
+  async function QC_postResgate278(acao, parametros = {}) {
+    const inicio = dadosDaSessao();
+    if (!inicio.id || !inicio.token) throw Error("Entre na carteira novamente.");
+    const r = await QC_postAnonimo271(acao, {
+      tokenSessao:inicio.token, ...parametros
+    });
+    const atual = dadosDaSessao();
+    if (atual.id !== inicio.id || atual.token !== inicio.token) {
+      throw Error("A sessao foi alterada durante a operacao. Nao reinicie o resgate.");
+    }
+    return r;
+  }
+  async function QC_lerResgateLocal278(chave, senha) {
+    const texto = localStorage.getItem(chave);
+    if (!texto) return null;
+    const op = await abrir(JSON.parse(texto),senha);
+    if (!op || op.versao!==1 || !op.idResgate ||
+        !Array.isArray(op.fichasEntrada) ||
+        !Array.isArray(op.privadasTroco) ||
+        !Array.isArray(op.privadasDevolucao)) {
+      throw Error("Resgate local inconsistente. Preserve os dados do aparelho.");
+    }
+    return op;
+  }
+  async function QC_sincronizarResgate278(op, senha) {
+    // Primeiro consultar sem criar uma nova solicitacao. O mesmo ID e
+    // repetido apos falhas para impedir reservas ou assinaturas duplicadas.
+    let resposta = await QC_postResgate278("qc_resgate_consultar",{
+      idResgate:op.idResgate
+    });
+    if (["NAO_ENCONTRADO","RESGATE_CRIANDO"].includes(resposta.status)) {
+      resposta = await QC_postResgate278("qc_resgate_criar", {
+        idResgate:op.idResgate,
+        valorResgate:op.valorResgate,
+        fichasEntrada:op.fichasEntrada,
+        trocoCego:op.trocoCego,
+        devolucaoCega:op.devolucaoCega
+      });
+      if (["RESGATES_BLOQUEADOS","FICHA_INDISPONIVEL"].includes(resposta.status)) {
+        // Resposta definitiva: servidor nao reservou nem gastou ficha.
+        // A operacao pode ser descartada sem comprometer o saldo.
+        localStorage.removeItem(QC_chaveResgate278(op.idResgate));
+        throw Error(resposta.status==="RESGATES_BLOQUEADOS" ?
+          "Resgates ainda nao foram habilitados pelo tesoureiro." :
+          "Uma das fichas nao esta disponivel. Nenhum novo resgate foi registrado.");
+      }
+      if (resposta.status==="RESGATE_PENDENTE_ASSINATURA") {
+        return {status:"PENDENTE",mensagem:"Assinatura pendente. Retome este mesmo resgate."};
+      }
+      if (!resposta.status.startsWith("RESGATE_")) {
+        throw Error(resposta.mensagem || "Resgate nao concluido: " + resposta.status);
+      }
+      resposta = await QC_postResgate278("qc_resgate_consultar",{
+        idResgate:op.idResgate
+      });
+    }
+    const estados = ["RESGATE_PENDENTE","RESGATE_CANCELAMENTO_SOLICITADO",
+      "RESGATE_CANCELAMENTO_APROVADO","RESGATE_CONFIRMADO","RESGATE_CANCELADO"];
+    if (resposta.status==="RESGATE_CRIANDO") {
+      return {status:"PENDENTE",mensagem:"Resgate em preparacao. Retome a solicitacao."};
+    }
+    if (!estados.includes(resposta.status) ||
+        resposta.idResgate !== op.idResgate ||
+        Number(resposta.valorResgate) !== op.valorResgate ||
+        Number(resposta.valorTroco) !== op.valorTroco) {
+      throw Error(resposta.mensagem || "Confirmacao de resgate divergente. Preserve a operacao local.");
+    }
+
+    // Concluir SEMPRE o troco primeiro, inclusive apos pagamento/cancelamento.
+    // Assinaturas cegas so viram fichas apos verificacao RSA.
+    if (op.privadasTroco.length && !Array.isArray(resposta.assinaturasTroco)) {
+      return {status:"PENDENTE",mensagem:"Troco ainda nao recuperavel. Retome depois."};
+    }
+    await QC_concluirAssinaturas275("RS-T-"+op.idResgate,
+      op.privadasTroco,resposta.assinaturasTroco || [],
+      0,op.valorTroco,senha);
+    if (resposta.status==="RESGATE_CANCELADO") {
+      if (!Array.isArray(resposta.assinaturasDevolucao)) {
+        return {status:"PENDENTE",mensagem:"Devolucao aprovada, mas assinaturas ainda indisponiveis."};
+      }
+      await QC_concluirAssinaturas275("RS-D-"+op.idResgate,
+        op.privadasDevolucao,resposta.assinaturasDevolucao,
+        0,op.valorResgate,senha);
+      // So apagar o segredo depois que todas as fichas de devolucao
+      // estiverem verificadas e salvas localmente.
+      localStorage.removeItem(QC_chaveResgate278(op.idResgate));
+      memoria=null;renderizar();
+      return {status:"CANCELADO",valor:op.valorResgate};
+    }
+    if (resposta.status==="RESGATE_CONFIRMADO") {
+      localStorage.removeItem(QC_chaveResgate278(op.idResgate));
+      memoria=null;renderizar();
+      return {status:"CONFIRMADO",valor:op.valorResgate};
+    }
+    memoria=null;renderizar();
+    return {status:"PENDENTE",valor:op.valorResgate,
+      situacao:resposta.status};
+  }
+  window.QC_solicitarResgate278 = async function(valor) {
+    if (ocupadaResgate278) throw Error("Outra operacao de resgate esta em andamento.");
+    ocupadaResgate278=true;
+    try {
+      const inicio=dadosDaSessao();
+      if (!inicio.id || !inicio.token) throw Error("Entre na carteira primeiro.");
+      if (!Number.isSafeInteger(Number(valor)) || Number(valor)<2 || Number(valor)===3) {
+        throw Error("Informe um valor inteiro a partir de 2 QC, exceto 3 QC.");
+      }
+      const senha=await obterSenha265();
+      if (!senha) return {status:"CANCELADO_PELO_USUARIO"};
+      memorizarSenha265(senha,inicio);
+      const fichas=await QC_fichasAtuais271(senha);
+      const plano=QC_planejarComposicao267(fichas.map(f=>f.valor), Number(valor));
+      if (plano.status!=="OK") throw Error(plano.mensagem||plano.status);
+      const confirmar=window.confirm(
+        "Solicitar resgate de " + plano.valorSolicitado + " QC?\n\n" +
+        "As fichas ficarao reservadas ate o pagamento ou cancelamento " +
+        "autorizado pelo tesoureiro.\n" +
+        (plano.valorTroco ? "Troco automatico: "+plano.valorTroco+" QC.\n" : "")+
+        "O pagamento sera combinado diretamente com o tesoureiro.");
+      if (!confirmar) return {status:"CANCELADO_PELO_USUARIO"};
+      if (inicio.id!==dadosDaSessao().id || inicio.token!==dadosDaSessao().token) {
+        throw Error("Sessao alterada. Resgate nao iniciado.");
+      }
+      const troco=await QC_prepararTroco271(plano);
+      const valoresDevolucao=QC_decomporTroco267(plano.valorSolicitado);
+      if (!valoresDevolucao || valoresDevolucao.length>50) {
+        throw Error("Nao foi possivel preparar a devolucao segura do resgate.");
+      }
+      const devolucao=await QC_prepararTroco271({fichasTroco:valoresDevolucao});
+      const op={versao:1,idResgate:crypto.randomUUID().toLowerCase(),
+        valorResgate:plano.valorSolicitado,valorTroco:plano.valorTroco,
+        fichasEntrada:plano.indicesSelecionados.map(i=>({
+          mensagemHex:fichas[i].mensagemHex,
+          assinaturaHex:fichas[i].assinaturaHex
+        })),
+        trocoCego:troco.saidasCegas,
+        devolucaoCega:devolucao.saidasCegas,
+        privadasTroco:troco.privadas,
+        privadasDevolucao:devolucao.privadas};
+      const chave=QC_chaveResgate278(op.idResgate);
+      // Material para recuperar a devolucao e armazenado ANTES da primeira
+      // chamada ao Apps Script, nunca em texto puro no navegador.
+      localStorage.setItem(chave,JSON.stringify(await QC_cifrar271(op,senha)));
+      return await QC_sincronizarResgate278(op,senha);
+    } finally {ocupadaResgate278=false;}
+  };
+  window.QC_meusResgates278 = async function() {
+    const resposta=await QC_postResgate278("qc_resgate_meus");
+    if (resposta.status!=="OK" || !Array.isArray(resposta.pedidos)) {
+      throw Error(resposta.mensagem||"Nao foi possivel consultar os resgates.");
+    }
+    const locais=new Set(QC_resgatesLocais278().map(k=>k.split("_").pop()));
+    return resposta.pedidos.map(p=>({...p,
+      possuiRecuperacaoLocal:locais.has(p.idResgate)}));
+  };
+  window.QC_retomarResgate278 = async function(idResgate) {
+    if (ocupadaResgate278) throw Error("Ja existe resgate em andamento.");
+    ocupadaResgate278=true;
+    try {
+      const senha=await obterSenha265();
+      if (!senha) return {status:"CANCELADO_PELO_USUARIO"};
+      const chave=QC_chaveResgate278(idResgate);
+      const op=await QC_lerResgateLocal278(chave,senha);
+      if (!op) throw Error("Os dados protegidos desta solicitacao nao estao neste aparelho. " +
+        "Preserve a copia original da carteira e procure o tesoureiro.");
+      return await QC_sincronizarResgate278(op,senha);
+    } finally {ocupadaResgate278=false;}
+  };
+  window.QC_pedirCancelamentoResgate278 = async function(idResgate) {
+    const resp=await QC_postResgate278("qc_resgate_pedir_cancelamento",{idResgate});
+    if (!["CANCELAMENTO_SOLICITADO","PENDENTE"].includes(resp.status)) {
+      throw Error(resp.mensagem||"Cancelamento nao registrado: "+resp.status);
+    }
+    return resp;
+  };
+  window.QC_resgatesSemConfirmacaoLocal278 = function() {
+    return QC_resgatesLocais278().length;
   };
 
 
