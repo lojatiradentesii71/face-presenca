@@ -114,7 +114,26 @@ qcModalReceber.innerHTML = `
 
 document.body.appendChild(qcModalReceber);
 
+// PASSO 293 - A confirmacao aparece NA MESMA JANELA do formulario.
+// Preservar os elementos originais preserva tambem seus eventos de clique.
+const qcCartaoReceber293 = qcModalReceber.querySelector(".qc-modal-card");
+const qcFormularioReceber293 = Array.from(qcCartaoReceber293.children);
+const qcConfirmacaoReceber293 = document.createElement("div");
+qcConfirmacaoReceber293.id = "qcConfirmacaoReceber293";
+qcConfirmacaoReceber293.setAttribute("role", "status");
+qcConfirmacaoReceber293.setAttribute("tabindex", "-1");
+qcConfirmacaoReceber293.style.cssText =
+  "display:none;flex-direction:column;align-items:center;" +
+  "justify-content:center;gap:14px;text-align:center;min-height:300px";
+qcCartaoReceber293.appendChild(qcConfirmacaoReceber293);
+
 function QC_abrirModalReceber() {
+  // Uma nova abertura sempre mostra o formulario, nunca a confirmacao antiga.
+  qcFormularioReceber293.forEach(elemento => {
+    elemento.style.display = "";
+  });
+  qcConfirmacaoReceber293.style.display = "none";
+  document.getElementById("qcMensagemReceber").textContent = "";
   qcModalReceber.style.display = "flex";
 }
 
@@ -123,69 +142,45 @@ function QC_fecharModalReceber() {
   document.getElementById("qcMensagemReceber").textContent = "";
 }
 
-
 function QC_exibirConfirmacaoReceber(quantidade) {
+  // Substituir visualmente o formulario pela confirmacao dentro do modal.
+  qcFormularioReceber293.forEach(elemento => {
+    elemento.style.display = "none";
+  });
+  qcConfirmacaoReceber293.replaceChildren();
 
-  const telaCarteira = document.getElementById(
-    "telaCarteira"
-  );
-
-  // Reutilizar o aviso, caso já exista.
-  let aviso = document.getElementById(
-    "qcAvisoSolicitacao"
-  );
-
-  if (!aviso) {
-
-    aviso = document.createElement("div");
-    aviso.id = "qcAvisoSolicitacao";
-    aviso.className = "qc-aviso-solicitacao";
-    aviso.setAttribute("role", "status");
-    aviso.setAttribute("tabindex", "-1");
-
-    telaCarteira.prepend(aviso);
-  }
-
-  // Montar a confirmação sem alterar o saldo.
-  aviso.replaceChildren();
-
-  const titulo = document.createElement("strong");
+  const titulo = document.createElement("h3");
   titulo.textContent = "✅ Solicitação registrada!";
+  titulo.style.cssText = "margin:0;color:#e6c363;font-size:21px";
 
   const valor = document.createElement("div");
-  valor.className = "qc-aviso-valor";
   valor.textContent = quantidade + " QC solicitados";
+  valor.style.cssText = "font-size:24px;font-weight:700;color:#fff";
 
   const situacao = document.createElement("div");
-  situacao.className = "qc-aviso-situacao";
   situacao.textContent = "⏳ Status: PENDENTE";
+  situacao.style.cssText = "font-weight:700;color:#e6c363";
 
   const descricao = document.createElement("p");
   descricao.textContent =
-    "Aguardando confirmação do pagamento e " +
-    "autorização do tesoureiro. " +
+    "Aguardando confirmação do pagamento e autorização do tesoureiro. " +
     "Os QCs ainda não foram creditados.";
+  descricao.style.cssText = "margin:0;line-height:1.5";
 
   const fechar = document.createElement("button");
   fechar.type = "button";
-  fechar.className = "qc-aviso-fechar";
+  fechar.className = "qc-btn-modal-principal";
   fechar.textContent = "Entendi";
+  fechar.style.cssText = "margin-top:8px;min-width:130px;max-width:210px";
+  fechar.addEventListener("click", QC_fecharModalReceber);
 
-  fechar.addEventListener("click", function() {
-    aviso.remove();
-  });
-
-  aviso.append(
-    titulo,
-    valor,
-    situacao,
-    descricao,
-    fechar
+  qcConfirmacaoReceber293.append(
+    titulo, valor, situacao, descricao, fechar
   );
-
-  aviso.focus();
+  qcConfirmacaoReceber293.style.display = "flex";
+  qcModalReceber.style.display = "flex";
+  qcConfirmacaoReceber293.focus();
 }
-
 
 qcBtnReceber.addEventListener("click", function() {
   QC_abrirModalReceber();
@@ -253,14 +248,10 @@ document.getElementById("qcConfirmarReceber")
         );
       }
 
-      
-campo.value = "";
 
-// Fechar automaticamente o formulário.
-QC_fecharModalReceber();
-
-// Mostrar confirmação destacada na carteira.
-QC_exibirConfirmacaoReceber(quantidade);
+      campo.value = "";
+      // Mostrar a confirmação na própria janela, sem tocar no saldo.
+      QC_exibirConfirmacaoReceber(quantidade);
 
 
     } catch (erro) {
@@ -543,7 +534,7 @@ function QC_desenharQR275(elemento, texto) {
 const qcBotaoTransferir275 = document.createElement("button");
 qcBotaoTransferir275.type = "button";
 qcBotaoTransferir275.id = "btnTransferir";
-qcBotaoTransferir275.textContent = "Transferir QC";
+qcBotaoTransferir275.textContent = "Transferir Qc$";
 qcBotaoTransferir275.disabled = true;
 const qcAcoes275 = document.querySelector("#telaCarteira .acoes");
 if (qcAcoes275) qcAcoes275.appendChild(qcBotaoTransferir275);
@@ -594,7 +585,7 @@ qcModalTransferir275.innerHTML = `
         style="width:100%;box-sizing:border-box;resize:vertical"
         placeholder="Cole aqui o código QC1|..."></textarea>
       <button type="button" id="qcReceber275" class="qc-btn-modal-principal"
-        style="width:100%;margin-top:10px">Receber QC</button>
+        style="width:100%;margin-top:10px">Receber Qc$</button>
     </div>
     <p id="qcAvisoTransferir275" role="status" class="qc-modal-mensagem"></p>
   </div>`;
@@ -646,7 +637,7 @@ function QC_mostrarAbaTransferencia275(aba) {
       "Recebimento anterior pendente. Toque em Retomar recebimento.";
   } else if (!enviar) {
     qcValorReceber275.disabled = false;
-    qcReceber275.textContent = "Receber QC";
+    qcReceber275.textContent = "Receber Qc$";
   }
 }
 qcBotaoTransferir275.addEventListener("click", () => {
@@ -770,7 +761,7 @@ qcReceber275.addEventListener("click", async () => {
       if (mensagem) mensagem.textContent=qcAvisoTransferir275.textContent;
       qcValorReceber275.value="";
       qcValorReceber275.disabled=false;
-      qcReceber275.textContent="Receber QC";
+      qcReceber275.textContent="Receber Qc$";
     } else if (retorno.status === "CANCELADO") {
       qcAvisoTransferir275.textContent = "Recebimento cancelado.";
     } else {
@@ -3110,7 +3101,7 @@ function QC_confirmarPagamentoPedido(nome, valor) {
   const resgatar=document.createElement("button");
   resgatar.type="button";
   resgatar.id="btnResgatar";
-  resgatar.textContent="Resgatar QC";
+  resgatar.textContent="Resgatar Qc$";
   resgatar.disabled=true;
   acoes.appendChild(resgatar);
 
@@ -3364,8 +3355,8 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     btnTransferir:'<path d="M4 7h16m-5-5 5 5-5 5M20 17H4m5-5-5 5 5 5"/>',
     btnResgatar:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 12h.01M18 12h.01"/>'
   };
-  const rotulos={btnDoar:'Doar QC',btnReceber:'Receber QC',
-    btnTransferir:'Transferir QC',btnResgatar:'Resgatar QC'};
+  const rotulos={btnDoar:'Doar Qc$',btnReceber:'Receber Qc$',
+    btnTransferir:'Transferir Qc$',btnResgatar:'Resgatar Qc$'};
   for(const id of Object.keys(desenho)) {
     const botao=document.getElementById(id);
     if(!botao) continue;
