@@ -2473,6 +2473,22 @@ qcAreaTesoureiro.style.display = "none";
 qcAreaTesoureiro.innerHTML = `
   <h3>ÁREA DO TESOUREIRO</h3>
 
+  <section id="qcPainelCirculacao276" style="margin:14px 0 18px;padding:14px;border:1px solid #ffffff29;border-radius:12px">
+    <h4 style="margin:0 0 12px">📊 Circulação e lastro</h4>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
+      <div style="padding:10px;border-radius:10px;background:#ffffff10">
+        <small style="display:block;opacity:.8">QCs em circulação</small>
+        <strong id="qcCirculacao276" style="font-size:21px">—</strong>
+      </div>
+      <div style="padding:10px;border-radius:10px;background:#ffffff10">
+        <small style="display:block;opacity:.8">Lastro mínimo a reservar</small>
+        <strong id="qcLastro276" style="font-size:21px">—</strong>
+      </div>
+    </div>
+    <p id="qcResumoLastro276" style="font-size:13px;opacity:.85;margin:10px 0 0">Consultando registros...</p>
+    <p id="qcAvisoLastro276" role="status" style="font-size:13px;margin:6px 0 0"></p>
+  </section>
+
   <button
     type="button"
     id="qcBtnPedidosTesoureiro"
@@ -2504,6 +2520,68 @@ qcAreaTesoureiro.innerHTML = `
 document.getElementById("telaCarteira")
   .appendChild(qcAreaTesoureiro);
 
+
+// PASSO 276 - Dados financeiros visiveis apenas apos validacao no servidor.
+async function QC_carregarPainelTesoureiro276(tokenSessao) {
+  const painel = document.getElementById("qcPainelCirculacao276");
+  if (!painel) return;
+  const circulacao = document.getElementById("qcCirculacao276");
+  const lastro = document.getElementById("qcLastro276");
+  const resumo = document.getElementById("qcResumoLastro276");
+  const aviso = document.getElementById("qcAvisoLastro276");
+  circulacao.textContent = "—";
+  lastro.textContent = "—";
+  resumo.textContent = "Conferindo registros...";
+  aviso.textContent = "";
+  try {
+    const URL_SCRIPT =
+      "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+    const resposta = await fetch(URL_SCRIPT, {
+      method: "POST",
+      redirect: "follow",
+      headers: {"Content-Type": "text/plain;charset=utf-8"},
+      body: JSON.stringify({
+        acao: "qc_painel_tesoureiro",
+        tokenSessao: tokenSessao
+      })
+    });
+    if (!resposta.ok) throw new Error("Falha na comunicacao.");
+    const dados = await resposta.json();
+    if (sessionStorage.getItem(QC_CHAVE_SESSAO) !== tokenSessao) return;
+    if (dados.status !== "OK" || dados.tesoureiro !== true) {
+      throw new Error("Painel financeiro indisponivel.");
+    }
+    const formato = n => Number(n).toLocaleString("pt-BR");
+    if (dados.conferencia === "CONFERIDO" &&
+        Number.isSafeInteger(dados.circulacao) &&
+        Number.isSafeInteger(dados.lastroReservadoBRL)) {
+      circulacao.textContent = formato(dados.circulacao) + " QC";
+      lastro.textContent = Number(dados.lastroReservadoBRL)
+        .toLocaleString("pt-BR", {style:"currency", currency:"BRL"});
+    }
+    resumo.textContent =
+      "Emitidos: " + formato(dados.emitidos) + " QC" +
+      " · Doacoes extintas: " +
+      (Number.isSafeInteger(dados.doacoesExtintas) ?
+        formato(dados.doacoesExtintas) + " QC" : "a conferir") +
+      " · Atualizado: " + dados.atualizadoEm;
+    if (dados.conferencia !== "CONFERIDO") {
+      aviso.textContent = "⚠️ Conferencia necessaria: " +
+        (Array.isArray(dados.avisos) && dados.avisos.length ?
+          dados.avisos.join(" ") : "lancamentos inconsistentes.");
+      resumo.textContent += " · Lastro ainda nao confirmado.";
+    } else {
+      aviso.textContent = "Valores contabeis calculados. Confira o saldo bancario separadamente.";
+    }
+  } catch (erro) {
+    if (sessionStorage.getItem(QC_CHAVE_SESSAO) === tokenSessao) {
+      circulacao.textContent = "—";
+      lastro.textContent = "—";
+      resumo.textContent = "Nao foi possivel conferir o lastro.";
+      aviso.textContent = "Acesso ou registros indisponiveis.";
+    }
+  }
+}
 
 // Consultar autorização e pedidos no Apps Script.
 async function QC_atualizarAreaTesoureiro(abrirLista = false) {
@@ -2584,9 +2662,11 @@ async function QC_atualizarAreaTesoureiro(abrirLista = false) {
 
     const quantidade = pedidos.length;
 
-    // Mostrar área administrativa.
+    // Mostrar area administrativa somente apos a autorizacao.
     area.style.display = "block";
     mensagem.textContent = "";
+    QC_carregarPainelTesoureiro276(token);
+
 
     const esfera = document.getElementById(
       "qcEsferaPedidos"
