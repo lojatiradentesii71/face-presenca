@@ -140,21 +140,23 @@
   // PASSO 267 - Composicao automatica, sem gasto nem assinatura.
   // O motor tambem sera reutilizado por Transferir QC.
   function QC_decomporTroco267(total) {
-    if (!Number.isSafeInteger(total) || total < 0 || total > 10000) {
-      return null;
-    }
-    const opcoes = Array(total + 1).fill(null);
-    opcoes[0] = [];
-    for (let soma = 1; soma <= total; soma++) {
-      for (const valor of [10, 5, 2]) {
-        if (soma < valor || !opcoes[soma - valor]) continue;
-        const candidata = [...opcoes[soma - valor], valor];
-        if (!opcoes[soma] || candidata.length < opcoes[soma].length) {
-          opcoes[soma] = candidata;
-        }
-      }
-    }
-    return opcoes[total];
+    // Fichas de 2, 5 e 10 QC: nao ha decomposicao para 1 ou 3 QC.
+    // Calculo proporcional a quantidade de fichas, nao ao valor numerico.
+    if (!Number.isSafeInteger(total) || total < 0) return null;
+    if (total === 0) return [];
+    if (total === 1 || total === 3) return null;
+
+    const restos = {
+      0: [], 1: [5,2,2,2], 2: [2], 3: [5,2,2,2,2],
+      4: [2,2], 5: [5], 6: [2,2,2], 7: [5,2],
+      8: [2,2,2,2], 9: [5,2,2]
+    };
+    const resto = total % 10;
+    const dezenas = Math.floor(total / 10) - ((resto === 1 || resto === 3) ? 1 : 0);
+    if (dezenas < 0) return null;
+    const fichas = Array(dezenas).fill(10);
+    fichas.push(...restos[resto]);
+    return fichas;
   }
 
   function QC_planejarComposicao267(valoresDisponiveis, valorSolicitado) {
@@ -172,8 +174,8 @@
       return {status:"DENOMINACAO_INVALIDA"};
     }
     const saldo = itens.reduce((soma, i) => soma + i.valor, 0);
-    if (!Number.isSafeInteger(saldo) || saldo > 10000) {
-      return {status:"LIMITE_OPERACIONAL", mensagem:"Saldo acima do limite de planejamento por operacao."};
+    if (!Number.isSafeInteger(saldo)) {
+      return {status:"SALDO_INVALIDO", mensagem:"O saldo informado nao e um numero inteiro seguro."};
     }
     if (valor > saldo) {
       return {status:"SALDO_INSUFICIENTE", saldoDisponivel:saldo};
@@ -683,8 +685,8 @@
         return await QC_retomarEnvio275(pendente,senha);
       }
       const valor = Number(valorSolicitado);
-      if (!Number.isSafeInteger(valor) || valor < 2 || valor === 3 || valor > 10000) {
-        throw Error("Informe valor inteiro entre 2 e 10.000 QC, exceto 3 QC.");
+      if (!Number.isSafeInteger(valor) || valor < 2 || valor === 3) {
+        throw Error("Informe valor inteiro a partir de 2 QC, exceto 3 QC.");
       }
       const disponiveis = await QC_fichasAtuais271(senha);
       const plano = QC_planejarComposicao267(disponiveis.map(f=>f.valor),valor);
@@ -791,7 +793,7 @@
           "Transferencia indisponivel: "+consulta.status));
       }
       const valor=Number(consulta.valorEnviado);
-      if (!Number.isSafeInteger(valor)||valor<2||valor===3||valor>10000) {
+      if (!Number.isSafeInteger(valor)||valor<2||valor===3) {
         throw Error("Valor recebido invalido.");
       }
       const valores=QC_decomporTroco267(valor);
