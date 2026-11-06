@@ -1,4 +1,4 @@
-// QUINTOSCOIN - INTERFACE LIMPA, PLANEJAMENTO E DOACAO ANONIMA - Passo 278
+// QUINTOSCOIN - PASSO 291 - SALDO AUTOMATICO COM A SENHA DO LOGIN
 // Mantem saldo, backup, recuperacao e a consulta de fichas gastas.
 // Doacoes: rotas anonimas + fila local criptografada. Transferencias ainda nao integradas.
 // Servidor conserva os bloqueios de doacao e troco ate liberacao final.
@@ -9,6 +9,11 @@
   const enc = new TextEncoder();
   let memoria = null;
   let senhaSessao265 = null;
+  function QC_formatoValor291(valor) {
+    return "QC$ " + Number(valor).toLocaleString("pt-BR", {
+      minimumFractionDigits:2, maximumFractionDigits:2
+    });
+  }
 
   function chaveLocal() {
     const id = localStorage.getItem("QC_ID_CARTEIRA");
@@ -111,17 +116,16 @@
     if (rotulo) rotulo.textContent = "Fichas disponiveis e verificadas";
     lista.replaceChildren();
     if (!memoria) {
-      saldo.textContent = token ? "🔒 QC" : "0 QC";
+      saldo.textContent = token ? "QC$ --" : "QC$ 0,00";
       equivalente.textContent = token
-        ? "Verifique suas fichas para visualizar o saldo"
-        : "R$ 0,00";
+        ? "Conferindo saldo..." : "R$ 0,00";
       lista.textContent = token
-        ? "Fichas protegidas. Toque em ‘Verificar meu saldo’ abaixo."
+        ? "Aguardando verificação automática."
         : "Entre na carteira para consultar suas fichas.";
       return;
     }
 
-    saldo.textContent = memoria.total + " QC";
+    saldo.textContent = QC_formatoValor291(memoria.total);
     equivalente.textContent = memoria.total.toLocaleString("pt-BR", {
       style: "currency", currency: "BRL"
     });
@@ -1531,7 +1535,15 @@
   );
   titulo.textContent = "Meu saldo";
   conferir.textContent = "Atualizar saldo";
+  // Saldo principal ja mostra a verificacao automatica.
+  titulo.hidden = true;
+  conferir.hidden = true;
+  aviso.hidden = true;
+  painel.style.cssText = "padding:0;border:0;margin-top:4px";
   painel.append(titulo, conferir, aviso, detalhes);
+  const senhaAcao=document.getElementById("btnAbrirTrocaSenha");
+  const senhaPainel=document.getElementById("qcPainelTrocaSenha");
+  if(senhaAcao && senhaPainel) detalhes.append(senhaAcao,senhaPainel);
   const secao = document.querySelector("#telaCarteira .fichas");
   if (!secao) return;
   // Fichas detalhadas continuam disponiveis, mas recolhidas por padrao.
@@ -1557,7 +1569,7 @@
     gavetaPedidos.append(abrirPedidos, pedidos);
   }
 
-  conferir.addEventListener("click", async () => {
+  const QC_conferirSaldo291 = async () => {
     const {id, token} = dadosDaSessao();
     const segredo = await obterSenha265();
     if (!id || !token) {
@@ -1682,9 +1694,16 @@
       memoria = null;
       renderizar();
       aviso.textContent = "⚠️ " + erro.message;
+      throw erro;
     } finally {
       conferir.disabled = false;
     }
+  };
+  conferir.addEventListener("click", () => {
+    QC_conferirSaldo291().catch(erro => {
+      const msg=document.getElementById("mensagem");
+      if(msg) msg.textContent="⚠️ "+(erro.message||erro);
+    });
   });
 
   backup.addEventListener("click", () => {
@@ -2103,6 +2122,138 @@
     arquivoRestaurar253.click();
   });
 
+
+
+
+  // PASSO 291 — Migracao de senha local, sem alterar o conteudo das fichas.
+  // A senha da conta fica APENAS em memoria nesta guia, nunca em storage.
+  function QC_chavesMigracao291(id) {
+    const prefixoResgate="QC_RESGATE_LOCAL_V1_"+id+"_";
+    const fixas=["QC_FICHAS_ASSINADAS_V1_"+id,
+      "QC_FICHAS_CEGAS_PENDENTES_V1_"+id,
+      "QC_DOACAO_PENDENTE_V1_"+id,
+      "QC_TRANSFERENCIA_ENVIO_V1_"+id,
+      "QC_TRANSFERENCIA_RESGATE_V1_"+id];
+    return [...fixas.filter(k=>localStorage.getItem(k)!==null),
+      ...Object.keys(localStorage).filter(k=>k.startsWith(prefixoResgate))];
+  }
+  function QC_recuperarMigracao291(id) {
+    const marca="QC_MIGRACAO_SENHA_291_"+id;
+    const texto=localStorage.getItem(marca);
+    if(!texto) return;
+    const dados=JSON.parse(texto);
+    if(dados?.id!==id || dados?.versao!==1 || !dados?.originais ||
+       typeof dados.originais!=="object") {
+      throw Error("Migração anterior inconsistente. Preserve o navegador.");
+    }
+    for(const [chave,valor] of Object.entries(dados.originais)) {
+      if(typeof valor!=="string") throw Error("Backup de migração inválido.");
+      localStorage.setItem(chave,valor);
+    }
+    localStorage.removeItem(marca);
+  }
+  async function QC_migrarSenhaLocal291(antiga,nova) {
+    const sessao=dadosDaSessao();
+    if(!sessao.id||!sessao.token) throw Error("Entre na carteira novamente.");
+    const id=sessao.id;
+    QC_recuperarMigracao291(id);
+    if(antiga===nova) return;
+    const chaves=QC_chavesMigracao291(id);
+    const originais={};
+    const novos={};
+    function cifrado(v) {
+      return v&&typeof v==="object"&&!Array.isArray(v)&&v.versao===1&&
+        typeof v.dadosHex==="string";
+    }
+    for(const chave of chaves) {
+      const original=localStorage.getItem(chave);
+      if(original===null) continue;
+      originais[chave]=original;
+      const obj=JSON.parse(original);
+      if(cifrado(obj)) {
+        novos[chave]=JSON.stringify(await QC_cifrar271(await abrir(obj,antiga),nova));
+      }else if(obj&&typeof obj==="object"&&!Array.isArray(obj)) {
+        const alterado={};
+        for(const [chaveFicha,registro] of Object.entries(obj)) {
+          if(!cifrado(registro)) throw Error("Registro local nao reconhecido: "+chave);
+          alterado[chaveFicha]=await QC_cifrar271(await abrir(registro,antiga),nova);
+        }
+        novos[chave]=JSON.stringify(alterado);
+      }else throw Error("Estrutura criptografada nao reconhecida.");
+    }
+    // Prepare todas as cifragens ANTES de escrever. O marcador preserva os
+    // valores originais para uma eventual interrupcao entre as gravacoes.
+    const marca="QC_MIGRACAO_SENHA_291_"+id;
+    localStorage.setItem(marca,JSON.stringify({id,versao:1,originais}));
+    try {
+      for(const [chave,original] of Object.entries(originais)) {
+        if(localStorage.getItem(chave)!==original) throw Error("Dados locais mudaram durante a migracao.");
+      }
+      for(const [chave,valor] of Object.entries(novos)) localStorage.setItem(chave,valor);
+      localStorage.removeItem(marca);
+    }catch(erro) {
+      QC_recuperarMigracao291(id);
+      throw erro;
+    }
+  }
+  window.QC_limparSenhaSessao291=function() {
+    senhaSessao265=null;
+    memoria=null;
+    renderizar();
+  };
+  window.QC_senhaFichas291=function() {
+    const s=dadosDaSessao();
+    return senhaSessao265?.id===s.id&&senhaSessao265?.token===s.token
+      ? senhaSessao265.valor : "";
+  };
+  window.QC_aposLogin291=async function(senhaLogin) {
+    const sessao=dadosDaSessao();
+    if(!sessao.id||!sessao.token||!senhaLogin) throw Error("Sessao nao autenticada.");
+    QC_recuperarMigracao291(sessao.id);
+    const chaves=QC_chavesMigracao291(sessao.id);
+    let primeira=null;
+    for(const chave of chaves) {
+      const dados=JSON.parse(localStorage.getItem(chave));
+      if(dados?.versao===1 && dados.dadosHex) {primeira=dados;break;}
+      if(dados&&typeof dados==="object"&&!Array.isArray(dados)) {
+        primeira=Object.values(dados).find(v=>v?.versao===1&&v?.dadosHex);
+        if(primeira) break;
+      }
+    }
+    if(primeira) {
+      try {await abrir(primeira,senhaLogin);} catch(_) {
+        // So o primeiro login com fichas antigas (ou apos mudar a senha)
+        // pede a senha de protecao anterior, uma unica vez para a migracao.
+        const anterior=await obterSenha265();
+        if(!anterior) throw Error("Migracao cancelada. As fichas antigas foram preservadas.");
+        await abrir(primeira,anterior);
+        await QC_migrarSenhaLocal291(anterior,senhaLogin);
+      }
+    }
+    memorizarSenha265(senhaLogin,sessao);
+    try {
+      await QC_conferirSaldo291();
+      const info=document.getElementById("mensagem");
+      if(info) info.textContent="";
+    } catch(e) {throw e;}
+    return {status:"OK"};
+  };
+  window.QC_migrarSenhaLogin291=async function(senhaAntiga,senhaNova) {
+    const sessao=dadosDaSessao();
+    if(!sessao.id||!sessao.token) throw Error("Sessao encerrada.");
+    await QC_migrarSenhaLocal291(senhaAntiga,senhaNova);
+    memorizarSenha265(senhaNova,sessao);
+  };
+  // Reconsulta quando o usuario retorna a aba; sem digitar outra senha.
+  document.addEventListener("visibilitychange",()=>{
+    if(!document.hidden && window.QC_senhaFichas291()) {
+      QC_conferirSaldo291().catch(()=>{});
+    }
+  });
+  window.QC_atualizarSaldoReal202=function(){
+    if(window.QC_senhaFichas291()) return QC_conferirSaldo291();
+    return renderizar();
+  };
 
   renderizar();
 })();
