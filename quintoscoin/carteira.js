@@ -1,3 +1,32 @@
+// QUINTOSCOIN - PASSO 289 - PUBLICACAO SINCRONIZADA
+// Mantem as funcoes do Passo 278 e acrescenta o cliente de API ausente.
+// IMPORTANTE: esta funcao e somente para rotas autenticadas.
+// Doacoes e transferencias anonimas continuam com fetch proprio.
+const QC_URL_191 = "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+
+async function QC_post191(acao, parametros = {}) {
+  if (typeof acao !== "string" || !/^qc_[a-z0-9_]+$/.test(acao)) {
+    throw new Error("Acao do QuintosCoin invalida.");
+  }
+  if (!parametros || typeof parametros !== "object" || Array.isArray(parametros)) {
+    throw new Error("Parametros da requisicao invalidos.");
+  }
+  const tokenSessao = sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
+  if (!tokenSessao) {
+    throw new Error("Sua sessao expirou. Entre na carteira novamente.");
+  }
+  const resposta = await fetch(QC_URL_191, {
+    method: "POST",
+    redirect: "follow",
+    headers: {"Content-Type": "text/plain;charset=utf-8"},
+    body: JSON.stringify({ ...parametros, acao, tokenSessao })
+  });
+  if (!resposta.ok) {
+    throw new Error("Falha de comunicacao com o Apps Script. HTTP " + resposta.status);
+  }
+  return await resposta.json();
+}
+
 // QUINTOSCOIN - PASSO 278 - CARTEIRA COM RESGATE E DOACAO EM DESTAQUE
 const QC_CHAVE_CARTEIRA = "QC_CARTEIRA_TESTE";
 
