@@ -1,3 +1,4 @@
+// QUINTOSCOIN - PASSO 275 - TRANSFERENCIAS COM QR LOCAL
 const QC_CHAVE_CARTEIRA = "QC_CARTEIRA_TESTE";
 
 function QC_lerCarteira() {
@@ -383,6 +384,457 @@ qcValorDoar271.addEventListener("keydown", e => {
   }
 });
 
+// Gerador QR local para codigos de transferencia. QR Model 2, versao 10-L.
+// Nao utiliza servidor externo nem transmite o conteudo.
+function QC_matrizQR275(texto) {
+  const bytes = new TextEncoder().encode(texto);
+  const blocosInfo = [[86,68],[86,68],[87,69],[87,69]];
+  const capacidade = blocosInfo.reduce((s,b)=>s+b[1],0);
+  // V10: cabecalho de 4 bits + comprimento de 16 bits + carga em bytes.
+  if (bytes.length < 1 || bytes.length > capacidade-3) {
+    throw Error("Codigo QR fora da capacidade local.");
+  }
+  const bits = [];
+  const addBits = (valor,qtd) => {
+    for (let i=qtd-1; i>=0; i--) bits.push((valor>>>i)&1);
+  };
+  addBits(4,4);
+  addBits(bytes.length,16);
+  for (const b of bytes) addBits(b,8);
+  for (let i=0; i<4 && bits.length<capacidade*8; i++) bits.push(0);
+  while (bits.length%8) bits.push(0);
+  const dados=[];
+  for (let i=0; i<bits.length; i+=8) {
+    let v=0; for(let j=0; j<8; j++) v=(v<<1)|bits[i+j];
+    dados.push(v);
+  }
+  for (let i=0; dados.length<capacidade;i++) dados.push(i%2 ? 0x11 : 0xec);
+  const multiplicar = (a,b) => {
+    let produto=0;
+    for(let i=7;i>=0;i--) {
+      produto=(produto<<1)^((produto>>>7)*0x11d);
+      produto^=(((b>>>i)&1)*a);
+    }
+    return produto;
+  };
+  let gerador=[1];
+  let raiz=1;
+  for(let i=0;i<18;i++) {
+    const novo=Array(gerador.length+1).fill(0);
+    gerador.forEach((v,j)=>{novo[j]^=v;novo[j+1]^=multiplicar(v,raiz)});
+    gerador=novo;
+    raiz=multiplicar(raiz,2);
+  }
+  const blocos=[];
+  let inicio=0;
+  for(const [total,dadosPorBloco] of blocosInfo) {
+    const dadosBloco=dados.slice(inicio,inicio+dadosPorBloco);
+    inicio+=dadosPorBloco;
+    const resto=Array(18).fill(0);
+    for(const b of dadosBloco) {
+      const fator=b^resto[0];
+      resto.shift();resto.push(0);
+      for(let i=0;i<18;i++) resto[i]^=multiplicar(gerador[i+1],fator);
+    }
+    blocos.push({dados:dadosBloco,ecc:resto});
+  }
+  const saida=[];
+  for (let i=0;i<69;i++) for (const b of blocos) {
+    if(i<b.dados.length) saida.push(b.dados[i]);
+  }
+  for (let i=0;i<18;i++) for (const b of blocos) saida.push(b.ecc[i]);
+  const tam=57;
+  const mod=Array.from({length:tam},()=>Array(tam).fill(false));
+  const fixo=Array.from({length:tam},()=>Array(tam).fill(false));
+  function atribuir(x,y,escuro) {
+    if(x>=0&&x<tam&&y>=0&&y<tam) {mod[y][x]=!!escuro;fixo[y][x]=true;}
+  }
+  // Padrões fixos do QR: localizacao, alinhamento, timing, versao e formato.
+  for(let i=0;i<tam;i++) {
+    atribuir(6,i,i%2===0);
+    atribuir(i,6,i%2===0);
+  }
+  for (const [cx,cy] of [[3,3],[tam-4,3],[3,tam-4]]) {
+    for(let dy=-4;dy<=4;dy++) for(let dx=-4;dx<=4;dx++) {
+      const d=Math.max(Math.abs(dx),Math.abs(dy));
+      atribuir(cx+dx,cy+dy,d!==2&&d!==4);
+    }
+  }
+  const alinhamentos=[6,28,50];
+  for(const x of alinhamentos) for(const y of alinhamentos) {
+    if((x===6&&y===6)||(x===6&&y===50)||(x===50&&y===6)) continue;
+    for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++) {
+      atribuir(x+dx,y+dy,Math.max(Math.abs(dx),Math.abs(dy))!==1);
+    }
+  }
+  function versao() {
+    let rem=10;
+    for(let i=0;i<12;i++) rem=(rem<<1)^((rem>>>11)*0x1f25);
+    const v=(10<<12)|rem;
+    for(let i=0;i<18;i++) {
+      const b=((v>>>i)&1)!==0;
+      const a=tam-11+i%3;
+      const c=Math.floor(i/3);
+      atribuir(a,c,b);
+      atribuir(c,a,b);
+    }
+  }
+  versao();
+  function formato(mask) {
+    // EC-L corresponde ao identificador de formato '01'.
+    const data=(1<<3)|mask;
+    let rem=data;
+    for(let i=0;i<10;i++) rem=(rem<<1)^((rem>>>9)*0x537);
+    const v=((data<<10)|rem)^0x5412;
+    const bit=i=>((v>>>i)&1)!==0;
+    for(let i=0;i<=5;i++) atribuir(8,i,bit(i));
+    atribuir(8,7,bit(6));atribuir(8,8,bit(7));atribuir(7,8,bit(8));
+    for(let i=9;i<15;i++) atribuir(14-i,8,bit(i));
+    for(let i=0;i<8;i++) atribuir(tam-1-i,8,bit(i));
+    for(let i=8;i<15;i++) atribuir(8,tam-15+i,bit(i));
+    atribuir(8,tam-8,true);
+  }
+  formato(0);
+  let indice=0;
+  const totalBits=saida.length*8;
+  for(let x=tam-1;x>=1;x-=2) {
+    if(x===6) x=5;
+    for(let vert=0;vert<tam;vert++) {
+      const y=((x+1)&2)===0 ? tam-1-vert : vert;
+      for(let col=0;col<2;col++) {
+        const cx=x-col;
+        if(fixo[y][cx]) continue;
+        let bit=false;
+        if(indice<totalBits) bit=((saida[indice>>>3]>>>(7-(indice&7)))&1)!==0;
+        indice++;
+        if((cx+y)%2===0) bit=!bit; // Mascara 0.
+        mod[y][cx]=bit;
+      }
+    }
+  }
+  return mod;
+}
+function QC_desenharQR275(elemento, texto) {
+  const matriz=QC_matrizQR275(texto);
+  const tamanho=matriz.length;
+  const svgNS="http://www.w3.org/2000/svg";
+  const svg=document.createElementNS(svgNS,"svg");
+  svg.setAttribute("viewBox",`0 0 ${tamanho+8} ${tamanho+8}`);
+  svg.setAttribute("width","252");
+  svg.setAttribute("height","252");
+  svg.setAttribute("role","img");
+  svg.setAttribute("aria-label","QR Code de transferencia QuintosCoin");
+  const fundo=document.createElementNS(svgNS,"rect");
+  fundo.setAttribute("width",String(tamanho+8));
+  fundo.setAttribute("height",String(tamanho+8));
+  fundo.setAttribute("fill","white");
+  svg.appendChild(fundo);
+  let path="";
+  for(let y=0;y<tamanho;y++) for(let x=0;x<tamanho;x++) {
+    if(matriz[y][x]) path+=`M${x+4},${y+4}h1v1h-1z`;
+  }
+  const pontos=document.createElementNS(svgNS,"path");
+  pontos.setAttribute("d",path);
+  pontos.setAttribute("fill","black");
+  svg.appendChild(pontos);
+  elemento.replaceChildren(svg);
+}
+
+
+// PASSO 275 - UM BOTAO TRANSFERIR, COM ENVIAR E RECEBER NA MESMA JANELA.
+// Nenhum QR ou codigo secreto passa por site de QR: gerar inteiramente local.
+const qcBotaoTransferir275 = document.createElement("button");
+qcBotaoTransferir275.type = "button";
+qcBotaoTransferir275.id = "btnTransferir";
+qcBotaoTransferir275.textContent = "Transferir QC";
+qcBotaoTransferir275.disabled = true;
+const qcAcoes275 = document.querySelector("#telaCarteira .acoes");
+if (qcAcoes275) qcAcoes275.appendChild(qcBotaoTransferir275);
+
+const qcModalTransferir275 = document.createElement("div");
+qcModalTransferir275.id = "qcModalTransferir275";
+qcModalTransferir275.className = "qc-modal-overlay";
+qcModalTransferir275.style.display = "none";
+qcModalTransferir275.innerHTML = `
+  <div class="qc-modal-card" role="dialog" aria-modal="true"
+    aria-labelledby="qcTituloTransf275">
+    <div class="qc-modal-topo">
+      <h3 id="qcTituloTransf275">Transferir QuintosCoin</h3>
+      <button id="qcFecharTransf275" type="button" class="qc-modal-fechar"
+        aria-label="Fechar">×</button>
+    </div>
+    <div style="display:flex;gap:8px;margin:10px 0 18px">
+      <button type="button" id="qcAbaEnviar275" class="qc-btn-modal-principal"
+        style="flex:1">Enviar</button>
+      <button type="button" id="qcAbaReceber275" class="qc-btn-modal-secundario"
+        style="flex:1">Receber</button>
+    </div>
+    <div id="qcPainelEnviar275">
+      <label for="qcValorEnviar275" class="qc-label-modal">Quanto deseja transferir?</label>
+      <input id="qcValorEnviar275" class="qc-input-modal"
+        type="number" min="2" step="1" inputmode="numeric" placeholder="Exemplo: 8">
+      <button type="button" id="qcEnviar275" class="qc-btn-modal-principal"
+        style="margin:10px 0;width:100%">Continuar</button>
+      <div id="qcResultadoEnvio275" hidden style="text-align:center">
+        <p>Mostre o QR Code ao destinatário:</p>
+        <div id="qcImagemQR275" style="display:flex;justify-content:center;margin:12px 0"></div>
+        <button type="button" id="qcCopiarTransf275" class="qc-btn-modal-secundario">
+          Copiar código
+        </button>
+        <button type="button" id="qcConferirTransf275" class="qc-btn-modal-secundario"
+          style="margin-left:5px">Verificar recebimento</button>
+        <p style="font-size:12px;opacity:.8">Compartilhe somente com quem deve receber.
+          O código permite resgatar os QCs.</p>
+      </div>
+    </div>
+    <div id="qcPainelReceber275" hidden>
+      <p class="qc-modal-texto">Leia o QR Code do outro irmão ou cole o código recebido.</p>
+      <button id="qcLerQR275" type="button" class="qc-btn-modal-secundario"
+        style="margin-bottom:10px">Ler QR pela câmera</button>
+      <div id="qcVideoQR275" hidden style="margin:8px auto;text-align:center"></div>
+      <label for="qcCodigoReceber275" class="qc-label-modal">Código da transferência</label>
+      <textarea id="qcCodigoReceber275" class="qc-input-modal" rows="3"
+        style="width:100%;box-sizing:border-box;resize:vertical"
+        placeholder="Cole aqui o código QC1|..."></textarea>
+      <button type="button" id="qcReceber275" class="qc-btn-modal-principal"
+        style="width:100%;margin-top:10px">Receber QC</button>
+    </div>
+    <p id="qcAvisoTransferir275" role="status" class="qc-modal-mensagem"></p>
+  </div>`;
+document.body.appendChild(qcModalTransferir275);
+
+const qcValorEnviar275 = document.getElementById("qcValorEnviar275");
+const qcValorReceber275 = document.getElementById("qcCodigoReceber275");
+const qcAvisoTransferir275 = document.getElementById("qcAvisoTransferir275");
+const qcResultadoEnvio275 = document.getElementById("qcResultadoEnvio275");
+const qcImagemQR275 = document.getElementById("qcImagemQR275");
+const qcEnviar275 = document.getElementById("qcEnviar275");
+const qcReceber275 = document.getElementById("qcReceber275");
+let qcCodigoCompartilhar275 = "";
+let qcTrabalhando275 = false;
+let qcStream275 = null;
+let qcLeituraAtiva275 = false;
+
+function QC_pararCamera275() {
+  qcLeituraAtiva275 = false;
+  if (qcStream275) qcStream275.getTracks().forEach(trilha => trilha.stop());
+  qcStream275 = null;
+  const area = document.getElementById("qcVideoQR275");
+  area.replaceChildren();
+  area.hidden = true;
+}
+function QC_fecharTransferencia275() {
+  if (qcTrabalhando275) return;
+  QC_pararCamera275();
+  qcCodigoCompartilhar275 = "";
+  qcImagemQR275.replaceChildren();
+  qcModalTransferir275.style.display = "none";
+}
+function QC_mostrarAbaTransferencia275(aba) {
+  QC_pararCamera275();
+  const enviar = aba === "enviar";
+  document.getElementById("qcPainelEnviar275").hidden = !enviar;
+  document.getElementById("qcPainelReceber275").hidden = enviar;
+  document.getElementById("qcAbaEnviar275").className =
+    enviar ? "qc-btn-modal-principal" : "qc-btn-modal-secundario";
+  document.getElementById("qcAbaReceber275").className =
+    enviar ? "qc-btn-modal-secundario" : "qc-btn-modal-principal";
+  qcAvisoTransferir275.textContent = "";
+  if (!enviar && typeof window.QC_resgatePendente275 === "function" &&
+      window.QC_resgatePendente275()) {
+    qcValorReceber275.value = "";
+    qcValorReceber275.disabled = true;
+    qcReceber275.textContent = "Retomar recebimento";
+    qcAvisoTransferir275.textContent =
+      "Recebimento anterior pendente. Toque em Retomar recebimento.";
+  } else if (!enviar) {
+    qcValorReceber275.disabled = false;
+    qcReceber275.textContent = "Receber QC";
+  }
+}
+qcBotaoTransferir275.addEventListener("click", () => {
+  if (!sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")) return;
+  qcCodigoCompartilhar275 = "";
+  qcResultadoEnvio275.hidden = true;
+  qcImagemQR275.replaceChildren();
+  qcValorEnviar275.value = "";
+  qcValorReceber275.value = "";
+  const pendente = typeof window.QC_transferenciaPendente275 === "function" &&
+    window.QC_transferenciaPendente275();
+  qcValorEnviar275.disabled = !!pendente;
+  qcEnviar275.textContent = pendente ? "Retomar envio" : "Continuar";
+  QC_mostrarAbaTransferencia275("enviar");
+  if (pendente) qcAvisoTransferir275.textContent =
+    "Uma transferencia anterior foi preservada. Retome para exibir o QR Code.";
+  qcModalTransferir275.style.display = "flex";
+  if (!pendente) qcValorEnviar275.focus();
+});
+document.getElementById("qcFecharTransf275")
+  .addEventListener("click", QC_fecharTransferencia275);
+qcModalTransferir275.addEventListener("click", e => {
+  if (e.target === qcModalTransferir275) QC_fecharTransferencia275();
+});
+document.getElementById("qcAbaEnviar275")
+  .addEventListener("click", () => QC_mostrarAbaTransferencia275("enviar"));
+document.getElementById("qcAbaReceber275")
+  .addEventListener("click", () => QC_mostrarAbaTransferencia275("receber"));
+function QC_mostrarCodigo275(retorno) {
+  qcCodigoCompartilhar275 = String(retorno.codigoQR || "");
+  if (!/^QC1\|[0-9a-f-]{36}\|[0-9a-f]{64}$/i.test(qcCodigoCompartilhar275)) {
+    throw Error("Codigo de transferencia inesperado.");
+  }
+  QC_desenharQR275(qcImagemQR275, qcCodigoCompartilhar275);
+  qcResultadoEnvio275.hidden = false;
+  qcValorEnviar275.disabled = true;
+  qcEnviar275.textContent = "Retomar envio";
+  qcAvisoTransferir275.textContent =
+    "Transferencia preparada. Mostre o QR Code ou copie o codigo.";
+}
+qcEnviar275.addEventListener("click", async () => {
+  if (qcTrabalhando275) return;
+  if (typeof window.QC_transferirCriar275 !== "function") {
+    qcAvisoTransferir275.textContent = "Atualize a pagina; modulo de fichas nao carregado.";
+    return;
+  }
+  const pendente = typeof window.QC_transferenciaPendente275 === "function" &&
+    window.QC_transferenciaPendente275();
+  const valor = pendente ? 0 : Number(qcValorEnviar275.value);
+  if (!pendente && (!Number.isSafeInteger(valor) || valor < 2 || valor === 3)) {
+    qcAvisoTransferir275.textContent = "Informe valor inteiro maior ou igual a 2, exceto 3 QC.";
+    return;
+  }
+  qcTrabalhando275 = true;
+  qcEnviar275.disabled = true;
+  qcAvisoTransferir275.textContent = "Preparando transferencia protegida...";
+  try {
+    const retorno = await window.QC_transferirCriar275(valor);
+    if (retorno.status === "PRONTA") QC_mostrarCodigo275(retorno);
+    else if (retorno.status === "CANCELADO") qcAvisoTransferir275.textContent="Operacao cancelada.";
+    else qcAvisoTransferir275.textContent = String(retorno.status);
+  } catch (err) {
+    qcAvisoTransferir275.textContent = "⚠️ " + String(err.message || err);
+  } finally {
+    qcTrabalhando275 = false;
+    qcEnviar275.disabled = false;
+  }
+});
+qcValorEnviar275.addEventListener("keydown", e => {
+  if (e.key === "Enter") {e.preventDefault();qcEnviar275.click();}
+});
+document.getElementById("qcCopiarTransf275")
+  .addEventListener("click", async () => {
+    if (!qcCodigoCompartilhar275) return;
+    try {
+      await navigator.clipboard.writeText(qcCodigoCompartilhar275);
+      qcAvisoTransferir275.textContent="Codigo copiado. Envie somente ao destinatario.";
+    } catch(_) {
+      window.prompt("Copie o codigo para o destinatario:", qcCodigoCompartilhar275);
+    }
+  });
+document.getElementById("qcConferirTransf275")
+  .addEventListener("click", async () => {
+    if (qcTrabalhando275) return;
+    qcTrabalhando275 = true;
+    qcAvisoTransferir275.textContent = "Consultando transferencia...";
+    try {
+      const r = await window.QC_transferirConsultar275();
+      if (r.status === "CONCLUIDA") {
+        qcResultadoEnvio275.hidden = true;
+        qcCodigoCompartilhar275 = "";
+        qcImagemQR275.replaceChildren();
+        qcValorEnviar275.disabled = false;
+        qcEnviar275.textContent = "Continuar";
+        qcAvisoTransferir275.textContent =
+          "✅ " + r.valorEnviado + " QC recebidos pelo destinatario. Nova transferencia liberada.";
+      } else {
+        qcAvisoTransferir275.textContent =
+          "Aguardando recebimento pelo destinatario (" + r.status + ").";
+      }
+    } catch(err) {
+      qcAvisoTransferir275.textContent="⚠️ " + String(err.message||err);
+    } finally {qcTrabalhando275=false;}
+  });
+qcReceber275.addEventListener("click", async () => {
+  if (qcTrabalhando275) return;
+  if (typeof window.QC_transferirResgatar275 !== "function") {
+    qcAvisoTransferir275.textContent = "Atualize a pagina; modulo de fichas nao carregado.";
+    return;
+  }
+  QC_pararCamera275();
+  qcTrabalhando275=true;
+  qcReceber275.disabled=true;
+  qcAvisoTransferir275.textContent = "Conferindo transferencia e preparando as fichas...";
+  try {
+    const retorno = await window.QC_transferirResgatar275(qcValorReceber275.value);
+    if (retorno.status === "RECEBIDA") {
+      qcAvisoTransferir275.textContent =
+        "✅ Recebidos " + retorno.valorRecebido + " QC. Atualize seu saldo.";
+      const mensagem=document.getElementById("mensagem");
+      if (mensagem) mensagem.textContent=qcAvisoTransferir275.textContent;
+      qcValorReceber275.value="";
+      qcValorReceber275.disabled=false;
+      qcReceber275.textContent="Receber QC";
+    } else if (retorno.status === "CANCELADO") {
+      qcAvisoTransferir275.textContent = "Recebimento cancelado.";
+    } else {
+      qcAvisoTransferir275.textContent = retorno.status;
+    }
+  } catch(err) {
+    qcAvisoTransferir275.textContent = "⚠️ " + String(err.message||err);
+  } finally {qcTrabalhando275=false;qcReceber275.disabled=false;}
+});
+qcValorReceber275.addEventListener("paste", () => {
+  qcAvisoTransferir275.textContent = "";
+});
+document.getElementById("qcLerQR275").addEventListener("click", async () => {
+  if (qcLeituraAtiva275 || qcTrabalhando275) return;
+  if (typeof BarcodeDetector !== "function" || !navigator.mediaDevices?.getUserMedia) {
+    qcAvisoTransferir275.textContent =
+      "Seu navegador nao oferece leitura direta. Copie e cole o codigo no campo.";
+    return;
+  }
+  let detector;
+  try {detector=new BarcodeDetector({formats:["qr_code"]});}
+  catch(_) {qcAvisoTransferir275.textContent="Use copiar/colar neste navegador.";return;}
+  const area=document.getElementById("qcVideoQR275");
+  const video=document.createElement("video");
+  video.autoplay=true;video.muted=true;video.playsInline=true;
+  video.style.cssText="width:100%;max-height:270px;border-radius:10px";
+  try {
+    const stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:{ideal:"environment"}},audio:false
+    });
+    qcStream275=stream;
+    video.srcObject=stream;
+    area.replaceChildren(video);
+    area.hidden=false;
+    await video.play();
+    qcLeituraAtiva275=true;
+    qcAvisoTransferir275.textContent="Aponte a camera para o QR Code.";
+    const capturar=async () => {
+      if (!qcLeituraAtiva275) return;
+      try {
+        const codigos=await detector.detect(video);
+        if (codigos.length) {
+          const valor=String(codigos[0].rawValue||"");
+          if (/^QC1\|[0-9a-f-]{36}\|[0-9a-f]{64}$/i.test(valor)) {
+            qcValorReceber275.value=valor;
+            QC_pararCamera275();
+            qcAvisoTransferir275.textContent="Codigo lido. Toque em Receber QC.";
+            return;
+          }
+        }
+      } catch(_) { /* Camera ainda nao pronta; proxima leitura. */ }
+      if (qcLeituraAtiva275) setTimeout(capturar,350);
+    };
+    capturar();
+  } catch(err) {
+    QC_pararCamera275();
+    qcAvisoTransferir275.textContent = "Nao foi possivel abrir a camera: " +
+      String(err.message||err) + ". Use copiar/colar.";
+  }
+});
+
 QC_atualizarTela();
 
 const QC_ID_LOCAL = "QC_ID_CARTEIRA";
@@ -694,6 +1146,7 @@ if (resultado.status === "OK") {
   // Manter operações financeiras desabilitadas
   document.getElementById("btnReceber").disabled = false;
   document.getElementById("btnDoar").disabled = false;
+  document.getElementById("btnTransferir").disabled = false;
 
   document.getElementById("mensagem").textContent =
     "✅ Login e sessão validados! " +
@@ -1247,6 +1700,8 @@ if (!token || !idCarteira) {
         .disabled = false;
 
       document.getElementById("btnDoar")
+        .disabled = false;
+      document.getElementById("btnTransferir")
         .disabled = false;
 
       document.getElementById("mensagem")
