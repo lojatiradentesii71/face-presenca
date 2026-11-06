@@ -159,80 +159,95 @@
     return fichas;
   }
 
+  // PASSO 282 - Planejador sem teto por numero de fichas.
+  // Agrupa denominacoes identicas: tempo proporcional ao saldo total,
+  // nao ao quadrado do numero de fichas da carteira.
   function QC_planejarComposicao267(valoresDisponiveis, valorSolicitado) {
-    const valor = Number(valorSolicitado);
-    if (!Number.isSafeInteger(valor) || valor < 2 || valor === 3) {
-      return {status:"VALOR_NAO_PERMITIDO", mensagem:"O valor deve ser inteiro, a partir de 2 QC, exceto 3 QC."};
+    const valor=Number(valorSolicitado);
+    if (!Number.isSafeInteger(valor) || valor<2 || valor===3) {
+      return {status:"VALOR_NAO_PERMITIDO",
+        mensagem:"O valor deve ser inteiro, a partir de 2 QC, exceto 3 QC."};
     }
     if (!Array.isArray(valoresDisponiveis)) {
       return {status:"CARTEIRA_INDISPONIVEL"};
     }
-    const itens = valoresDisponiveis.map((v, indice) => ({
-      valor:Number(v), indice
-    }));
-    if (itens.some(item => ![2,5,10].includes(item.valor))) {
-      return {status:"DENOMINACAO_INVALIDA"};
+    const grupos=new Map([[2,[]],[5,[]],[10,[]]]);
+    for (let i=0;i<valoresDisponiveis.length;i++) {
+      const n=Number(valoresDisponiveis[i]);
+      if (!grupos.has(n)) return {status:"DENOMINACAO_INVALIDA"};
+      grupos.get(n).push(i);
     }
-    const saldo = itens.reduce((soma, i) => soma + i.valor, 0);
+    const saldo=valoresDisponiveis.reduce((a,b)=>a+Number(b),0);
     if (!Number.isSafeInteger(saldo)) {
-      return {status:"SALDO_INVALIDO", mensagem:"O saldo informado nao e um numero inteiro seguro."};
+      return {status:"SALDO_INVALIDO"};
     }
-    if (valor > saldo) {
-      return {status:"SALDO_INSUFICIENTE", saldoDisponivel:saldo};
+    if (valor>saldo) return {status:"SALDO_INSUFICIENTE",saldoDisponivel:saldo};
+    // Cada grupo binario de fichas so pode ser utilizado uma vez.
+    // Um no imutavel armazena a composicao para posterior reconstrucao.
+    const gruposBinarios=[];
+    for (const [denom, indices] of grupos) {
+      let restantes=indices.length, parte=1;
+      while (restantes>0) {
+        const q=Math.min(parte,restantes);
+        gruposBinarios.push({denom,quantidade:q,peso:denom*q});
+        restantes-=q;
+        parte*=2;
+      }
     }
-
-    // As fichas sao indivisiveis: para cada soma, guardar a selecao
-    // que utiliza menos fichas. Isso evita a explosao de combinacoes.
-    const estados = new Map([[0, []]]);
-    for (const item of itens) {
-      const anteriores = [...estados.entries()];
-      for (const [soma, indices] of anteriores) {
-        if (indices.length >= 50) continue;
-        const proximaSoma = soma + item.valor;
-        const selecionadas = estados.get(proximaSoma);
-        if (!selecionadas || indices.length + 1 < selecionadas.length) {
-          estados.set(proximaSoma, [...indices, item.indice]);
+    // Bounded knapsack. No maximum coin count; the real resource constraint
+    // is the actual balance and device memory.
+    const custo=new Float64Array(saldo+1);
+    custo.fill(Infinity);
+    const caminho=Array(saldo+1).fill(null);
+    custo[0]=0;
+    for (const grupo of gruposBinarios) {
+      for (let s=saldo;s>=grupo.peso;s--) {
+        const anterior=custo[s-grupo.peso];
+        if (!Number.isFinite(anterior)) continue;
+        const novo=anterior+grupo.quantidade;
+        if (novo<custo[s]) {
+          custo[s]=novo;
+          caminho[s]={anterior:caminho[s-grupo.peso],
+            denominacao:grupo.denom,quantidade:grupo.quantidade};
         }
       }
     }
-
-    let melhor = null;
-    for (const [soma, indices] of estados) {
-      if (soma < valor) continue;
-      const valorTroco = soma - valor;
-      const fichasTroco = QC_decomporTroco267(valorTroco);
-      if (!fichasTroco || fichasTroco.length > 50) continue;
-      const candidato = {soma, indices, valorTroco, fichasTroco};
-      if (!melhor ||
-          candidato.valorTroco < melhor.valorTroco ||
-          (candidato.valorTroco === melhor.valorTroco &&
-            candidato.indices.length < melhor.indices.length) ||
-          (candidato.valorTroco === melhor.valorTroco &&
-            candidato.indices.length === melhor.indices.length &&
-            candidato.fichasTroco.length < melhor.fichasTroco.length)) {
-        melhor = candidato;
-      }
+    let escolhido=-1, fichasTroco=null;
+    // Menor troco primeiro. Nao gera arrays para valores nao escolhidos.
+    for (let s=valor;s<=saldo;s++) {
+      if (!Number.isFinite(custo[s])) continue;
+      if (s-valor===1 || s-valor===3) continue;
+      const decomposicao=QC_decomporTroco267(s-valor);
+      if (!decomposicao) continue;
+      escolhido=s; fichasTroco=decomposicao;
+      break;
     }
-
-    if (!melhor) {
-      return {
-        status:"TROCO_IMPOSSIVEL",
-        saldoDisponivel:saldo,
-        mensagem:"Nenhuma combinacao preserva o valor restante com fichas de 2, 5 e 10 QC. Nenhuma ficha foi usada."
-      };
+    if (escolhido<0) {
+      return {status:"TROCO_IMPOSSIVEL",saldoDisponivel:saldo,
+        mensagem:"Nenhuma combinacao preserva o valor restante com fichas de 2, 5 e 10 QC. Nenhuma ficha foi usada."};
     }
-    if (melhor.soma !== valor + melhor.valorTroco) {
-      throw Error("Plano de fichas inconsistente.");
+    const contagens=new Map([[2,0],[5,0],[10,0]]);
+    for (let passo=caminho[escolhido];passo;passo=passo.anterior) {
+      contagens.set(passo.denominacao,
+        contagens.get(passo.denominacao)+passo.quantidade);
     }
-    return {
-      status:"OK", valorSolicitado:valor, saldoDisponivel:saldo,
-      tipo:melhor.valorTroco === 0 ? "EXATA" : "COM_TROCO",
-      indicesSelecionados:melhor.indices.slice(),
-      valoresSelecionados:melhor.indices.map(i => itens[i].valor),
-      totalFichasSelecionadas:melhor.soma,
-      valorTroco:melhor.valorTroco,
-      fichasTroco:melhor.fichasTroco.slice()
-    };
+    const indicesSelecionados=[];
+    // A escolha e estavel, selecionando as primeiras fichas de cada valor.
+    for (const denom of [10,5,2]) {
+      const q=contagens.get(denom);
+      if (q>grupos.get(denom).length) throw Error("Plano inconsistente.");
+      indicesSelecionados.push(...grupos.get(denom).slice(0,q));
+    }
+    const valoresSelecionados=indicesSelecionados.map(i=>Number(valoresDisponiveis[i]));
+    const totalFichasSelecionadas=valoresSelecionados.reduce((s,n)=>s+n,0);
+    if (totalFichasSelecionadas!==escolhido ||
+        escolhido!==valor+fichasTroco.reduce((s,n)=>s+n,0)) {
+      throw Error("Conservacao de valor inconsistente no planejador.");
+    }
+    return {status:"OK",valorSolicitado:valor,saldoDisponivel:saldo,
+      tipo:fichasTroco.length?"COM_TROCO":"EXATA",
+      indicesSelecionados,valoresSelecionados,totalFichasSelecionadas,
+      valorTroco:escolhido-valor,fichasTroco};
   }
 
   // Disponibilizar apenas o PLANO matematico ao botao original Doar QC.
@@ -484,6 +499,43 @@
     }
     localStorage.setItem(chave,JSON.stringify(registros));
   }
+  // PASSO 282 - Operacoes exatas com muitas fichas usam lotes de 20.
+  // Todas as parcelas fazem parte do MESMO idOperacao ja cifrado na carteira.
+  async function QC_doarExataEmLotes282(operacao) {
+    const id=operacao.idOperacao;
+    const fichas=operacao.fichasEntrada;
+    const abrir=await QC_postAnonimo271("qc_lote_abrir",{
+      idOperacao:id,valorSolicitado:operacao.valorDoacao,
+      quantidadeEntradas:fichas.length
+    });
+    let etapa=abrir.status;
+    if (etapa==="RECEBENDO") {
+      for (let pos=0;pos<fichas.length;pos+=20) {
+        const parte=await QC_postAnonimo271("qc_lote_parte",{
+          idOperacao:id,indiceInicial:pos+1,
+          fichas:fichas.slice(pos,pos+20)
+        });
+        if (parte.status!=="RECEBENDO") {
+          throw Error(parte.mensagem||"Parcela da doacao nao confirmada: "+parte.status);
+        }
+      }
+      const pronto=await QC_postAnonimo271("qc_lote_pronto",{idOperacao:id});
+      etapa=pronto.status;
+    }
+    if (!["PRONTO","PROCESSANDO","CONCLUIDO"].includes(etapa)) {
+      throw Error(abrir.mensagem||"Doacao em lotes pendente: "+etapa);
+    }
+    const resposta=await QC_postAnonimo271("qc_lote_concluir",{idOperacao:id});
+    if (resposta.status!=="DOACAO_REGISTRADA" ||
+        resposta.idOperacao!==id ||
+        Number(resposta.valor)!==operacao.valorDoacao ||
+        Number(resposta.quantidadeFichas)!==fichas.length) {
+      throw Error(resposta.mensagem||"Doacao aguardando confirmacao: "+resposta.status);
+    }
+    return {status:"DOACAO_REGISTRADA",idOperacao:id,
+      valor:resposta.valor,recuperada:!!resposta.recuperada};
+  }
+
   async function QC_retomar271(operacao,senha) {
     const dados=operacao.tipo==="EXATA" ?
       {acao:"qc_doar_lote",idOperacao:operacao.idOperacao,
@@ -492,7 +544,11 @@
         valorDoacao:operacao.valorDoacao,
         fichasEntrada:operacao.fichasEntrada,saidasCegas:operacao.saidasCegas};
     const {acao,...payload}=dados;
-    const resposta=await QC_postAnonimo271(acao,payload);
+    const usarLotes282=operacao.tipo==="EXATA" &&
+      operacao.fichasEntrada.length>50;
+    const resposta=usarLotes282
+      ? await QC_doarExataEmLotes282(operacao)
+      : await QC_postAnonimo271(acao,payload);
     const ok=operacao.tipo==="EXATA" ? resposta.status==="DOACAO_REGISTRADA" :
       resposta.status==="TROCO_ASSINADO";
     if (!ok) {
@@ -540,7 +596,7 @@
       if (plano.status!=="OK") throw Error(plano.mensagem||plano.status);
       const aceito=window.confirm(
         "Confirmar doacao anonima de "+plano.valorSolicitado+" QC?\n\n"+
-        "Fichas utilizadas: "+plano.valoresSelecionados.join(" + ")+" QC\n"+
+        "Fichas utilizadas: "+plano.valoresSelecionados.length+" (total "+plano.totalFichasSelecionadas+" QC)\n"+
         (plano.valorTroco ? "Troco automatico: "+plano.valorTroco+" QC\n" : "Sem necessidade de troco.\n")+
         "\nNao sera exibida sua identidade ao tesoureiro.");
       if (!aceito) return {status:"CANCELADO"};
