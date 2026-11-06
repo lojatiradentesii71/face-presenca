@@ -1,4 +1,4 @@
-// QUINTOSCOIN - INTERFACE LIMPA, PLANEJAMENTO E DOACAO ANONIMA - Passo 271
+// QUINTOSCOIN - INTERFACE LIMPA, PLANEJAMENTO E DOACAO ANONIMA - Passo 275
 // Mantem saldo, backup, recuperacao e a consulta de fichas gastas.
 // Doacoes: rotas anonimas + fila local criptografada. Transferencias ainda nao integradas.
 // Servidor conserva os bloqueios de doacao e troco ate liberacao final.
@@ -568,6 +568,245 @@
       return await QC_retomar271(op,segredo);
     } finally {
       movimentando271=false;
+    }
+  };
+
+  // PASSO 275 - TRANSFERIR / RECEBER POR CODIGO PORTADOR.
+  // As fichas sao invalidadas na origem pelo servidor; o destinatario
+  // recebe novas fichas com assinatura cega e seus proprios numeros aleatorios.
+  // Nenhum identificador de carteira ou tokenSessao segue nestes POSTs.
+  const CHAVE_TX275 = "QC_TRANSFERENCIA_ENVIO_V1_";
+  const CHAVE_RX275 = "QC_TRANSFERENCIA_RESGATE_V1_";
+  let transferindo275 = false;
+
+  function QC_codificarTransferencia275(id, codigo) {
+    return "QC1|" + id + "|" + codigo;
+  }
+  function QC_lerCodigo275(texto) {
+    const partes = /^QC1\|([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\|([0-9a-f]{64})$/i
+      .exec(String(texto || "").trim());
+    if (!partes) {
+      throw Error("Codigo invalido. Escaneie ou cole o codigo completo da transferencia.");
+    }
+    return {id:partes[1].toLowerCase(),codigo:partes[2].toLowerCase()};
+  }
+  function QC_chaveTX275() {return CHAVE_TX275 + dadosDaSessao().id;}
+  function QC_chaveRX275() {return CHAVE_RX275 + dadosDaSessao().id;}
+  async function QC_lerPendente275(chave, senha) {
+    const raw = localStorage.getItem(chave);
+    if (!raw) return null;
+    const decifrado = await abrir(JSON.parse(raw), senha);
+    if (!decifrado || decifrado.versao !== 1 ||
+        !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(decifrado.idTransferencia || "") ||
+        !/^[0-9a-f]{64}$/.test(decifrado.codigo || "")) {
+      throw Error("Transferencia pendente inconsistente. Preserve os dados do navegador.");
+    }
+    return decifrado;
+  }
+  async function QC_salvarPendente275(chave, operacao, senha) {
+    const antes = localStorage.getItem(chave);
+    if (antes) throw Error("Ja existe operacao pendente neste celular. Retome primeiro.");
+    const cifrado = await QC_cifrar271(operacao, senha);
+    if (localStorage.getItem(chave)) throw Error("Outra operacao foi iniciada. Nao continuar.");
+    localStorage.setItem(chave, JSON.stringify(cifrado));
+  }
+  async function QC_concluirAssinaturas275(idLocal, privadas, assinaturas,
+                                           valorOriginal, valorTroco, senha) {
+    if (!privadas.length) {
+      if (!Array.isArray(assinaturas) || assinaturas.length) {
+        throw Error("O servidor enviou troco inesperado.");
+      }
+      return;
+    }
+    // Reutiliza as comprovacoes criptograficas e o salvamento idempotente
+    // implementados no Passo 271. Prefixos TX/RX impedem colisao local.
+    await QC_concluirTroco271(
+      {idOperacao:idLocal, valorDoacao:valorOriginal,
+       valorTroco:valorTroco, privadas:privadas},
+      {status:"TROCO_ASSINADO", idTroca:idLocal,
+       valorDoacao:valorOriginal, valorTroco:valorTroco,
+       assinaturasCegas:assinaturas},
+      senha
+    );
+  }
+  async function QC_retomarEnvio275(op, senha) {
+    const resp = await QC_postAnonimo271("qc_transferir_criar", {
+      idTransferencia:op.idTransferencia,
+      codigo:op.codigo,
+      valorEnviado:op.valorEnviado,
+      fichasEntrada:op.fichasEntrada,
+      trocoCego:op.saidasCegas
+    });
+    if (resp.status !== "TRANSFERENCIA_PRONTA") {
+      throw Error(resp.mensagem ||
+        (resp.status === "TRANSFERENCIAS_BLOQUEADAS" ?
+         "Transferencias ainda nao liberadas pelo tesoureiro." :
+         "Transferencia pendente: " + resp.status + ". Retome a mesma operacao."));
+    }
+    if (resp.idTransferencia !== op.idTransferencia ||
+        Number(resp.valorEnviado) !== op.valorEnviado ||
+        Number(resp.valorTroco) !== op.valorTroco) {
+      throw Error("Confirmacao do servidor diverge. Nao compartilhe o codigo.");
+    }
+    await QC_concluirAssinaturas275("TX-"+op.idTransferencia,
+      op.privadasTroco, resp.assinaturasTroco,
+      op.valorEnviado, op.valorTroco, senha);
+    memoria = null;
+    renderizar();
+    return {
+      status:"PRONTA", idTransferencia:op.idTransferencia,
+      valorEnviado:op.valorEnviado,
+      codigoQR:QC_codificarTransferencia275(op.idTransferencia,op.codigo)
+    };
+  }
+  window.QC_transferenciaPendente275 = function() {
+    const {id} = dadosDaSessao();
+    return !!id && !!localStorage.getItem(CHAVE_TX275+id);
+  };
+  window.QC_resgatePendente275 = function() {
+    const {id} = dadosDaSessao();
+    return !!id && !!localStorage.getItem(CHAVE_RX275+id);
+  };
+  window.QC_transferirCriar275 = async function(valorSolicitado) {
+    if (transferindo275) throw Error("Ja existe operacao de transferencia em andamento.");
+    transferindo275 = true;
+    try {
+      const inicio = dadosDaSessao();
+      if (!inicio.id || !inicio.token) throw Error("Entre na sua carteira primeiro.");
+      const senha = await obterSenha265();
+      if (!senha) return {status:"CANCELADO"};
+      memorizarSenha265(senha,inicio);
+      const chave = QC_chaveTX275();
+      const pendente = await QC_lerPendente275(chave,senha);
+      if (pendente) {
+        // Nunca gerar novos blocos cegos para a mesma transferencia.
+        return await QC_retomarEnvio275(pendente,senha);
+      }
+      const valor = Number(valorSolicitado);
+      if (!Number.isSafeInteger(valor) || valor < 2 || valor === 3 || valor > 10000) {
+        throw Error("Informe valor inteiro entre 2 e 10.000 QC, exceto 3 QC.");
+      }
+      const disponiveis = await QC_fichasAtuais271(senha);
+      const plano = QC_planejarComposicao267(disponiveis.map(f=>f.valor),valor);
+      if (plano.status !== "OK") throw Error(plano.mensagem || plano.status);
+      if (!window.confirm(
+        "Transferir " + valor + " QC?\n\n" +
+        "O sistema utilizara " + plano.valoresSelecionados.join(" + ") + " QC.\n" +
+        (plano.valorTroco ? "Troco automatico: "+plano.valorTroco+" QC.\n" : "") +
+        "\nDepois compartilhe o QR Code com o destinatario.")) {
+        return {status:"CANCELADO"};
+      }
+      const atual = dadosDaSessao();
+      if (atual.id !== inicio.id || atual.token !== inicio.token) {
+        throw Error("Sessao alterada. Transferencia nao iniciada.");
+      }
+      const troco = await QC_prepararTroco271(plano);
+      const op = {
+        versao:1, idTransferencia:crypto.randomUUID().toLowerCase(),
+        codigo:QC_hex271(crypto.getRandomValues(new Uint8Array(32))),
+        valorEnviado:valor, valorTroco:plano.valorTroco,
+        fichasEntrada:plano.indicesSelecionados.map(i=>({
+          mensagemHex:disponiveis[i].mensagemHex,
+          assinaturaHex:disponiveis[i].assinaturaHex
+        })),
+        saidasCegas:troco.saidasCegas,
+        privadasTroco:troco.privadas
+      };
+      // Guardar material e codigo cifrados ANTES do primeiro POST.
+      await QC_salvarPendente275(chave,op,senha);
+      return await QC_retomarEnvio275(op,senha);
+    } finally {
+      transferindo275=false;
+    }
+  };
+  window.QC_transferirConsultar275 = async function() {
+    const {id,token}=dadosDaSessao();
+    if (!id || !token) throw Error("Entre na carteira primeiro.");
+    const senha=await obterSenha265();
+    if (!senha) return {status:"CANCELADO"};
+    const op=await QC_lerPendente275(QC_chaveTX275(),senha);
+    if (!op) return {status:"NENHUMA_PENDENTE"};
+    const resp=await QC_postAnonimo271("qc_transferir_consultar",{
+      idTransferencia:op.idTransferencia,codigo:op.codigo
+    });
+    if (resp.status==="CONCLUIDA") {
+      // Ja foi recebido por outro aparelho. O troco do remetente deve
+      // existir localmente antes de liberar o envio de outra transferencia.
+      await QC_retomarEnvio275(op,senha);
+      localStorage.removeItem(QC_chaveTX275());
+      return {status:"CONCLUIDA",valorEnviado:op.valorEnviado};
+    }
+    return {status:resp.status,valorEnviado:op.valorEnviado,
+      codigoQR:QC_codificarTransferencia275(op.idTransferencia,op.codigo)};
+  };
+  async function QC_retomarResgate275(op,senha) {
+    const resp=await QC_postAnonimo271("qc_transferir_resgatar",{
+      idTransferencia:op.idTransferencia,
+      codigo:op.codigo, saidasCegas:op.saidasCegas
+    });
+    if (resp.status !== "TRANSFERENCIA_RESGATADA") {
+      throw Error(resp.mensagem ||
+        (resp.status === "TRANSFERENCIAS_BLOQUEADAS" ?
+         "Resgate ainda nao liberado." :
+         "Resgate pendente: "+resp.status+". Retome esta operacao."));
+    }
+    if (resp.idTransferencia !== op.idTransferencia ||
+        Number(resp.valorRecebido) !== op.valorRecebido) {
+      throw Error("Servidor devolveu valor de resgate divergente.");
+    }
+    await QC_concluirAssinaturas275("RX-"+op.idTransferencia,
+      op.privadas,resp.assinaturasCegas,0,op.valorRecebido,senha);
+    localStorage.removeItem(QC_chaveRX275());
+    memoria=null;
+    renderizar();
+    return {status:"RECEBIDA",valorRecebido:op.valorRecebido};
+  }
+  window.QC_transferirResgatar275 = async function(codigoColado) {
+    if (transferindo275) throw Error("Ja existe operacao em andamento.");
+    transferindo275=true;
+    try {
+      const inicio=dadosDaSessao();
+      if (!inicio.id || !inicio.token) throw Error("Entre na sua carteira primeiro.");
+      const senha=await obterSenha265();
+      if (!senha) return {status:"CANCELADO"};
+      memorizarSenha265(senha,inicio);
+      const pendente=await QC_lerPendente275(QC_chaveRX275(),senha);
+      if (pendente) {
+        // Evita novo resgate com outros blocos caso tenha havido interrupcao.
+        if (String(codigoColado||"").trim()) {
+          const info=QC_lerCodigo275(codigoColado);
+          if (pendente.idTransferencia!==info.id || pendente.codigo!==info.codigo) {
+            throw Error("Outro resgate ja esta pendente. Retome-o primeiro.");
+          }
+        }
+        return await QC_retomarResgate275(pendente,senha);
+      }
+      const info=QC_lerCodigo275(codigoColado);
+      const consulta=await QC_postAnonimo271("qc_transferir_consultar",{
+        idTransferencia:info.id,codigo:info.codigo
+      });
+      if (consulta.status!=="PRONTA") {
+        throw Error(consulta.mensagem||(
+          consulta.status==="CONCLUIDA" ? "Essa transferencia ja foi recebida." :
+          "Transferencia indisponivel: "+consulta.status));
+      }
+      const valor=Number(consulta.valorEnviado);
+      if (!Number.isSafeInteger(valor)||valor<2||valor===3||valor>10000) {
+        throw Error("Valor recebido invalido.");
+      }
+      const valores=QC_decomporTroco267(valor);
+      if (!valores || valores.length>50) throw Error("Nao e possivel compor o recebimento.");
+      if (!window.confirm("Receber "+valor+" QC nesta carteira?")) {
+        return {status:"CANCELADO"};
+      }
+      const preparadas=await QC_prepararTroco271({fichasTroco:valores});
+      const op={versao:1,idTransferencia:info.id,codigo:info.codigo,
+        valorRecebido:valor,saidasCegas:preparadas.saidasCegas,
+        privadas:preparadas.privadas};
+      await QC_salvarPendente275(QC_chaveRX275(),op,senha);
+      return await QC_retomarResgate275(op,senha);
+    } finally {
+      transferindo275=false;
     }
   };
 
