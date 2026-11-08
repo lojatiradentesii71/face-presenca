@@ -4,6 +4,84 @@
 // Doacoes e transferencias anonimas continuam com fetch proprio.
 const QC_URL_191 = "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
 
+// PASSO 295 - Indicador unico de espera para operacoes da carteira.
+// Acompanha todas as chamadas ao Apps Script e as operacoes locais demoradas.
+const QC_ESPERA295 = (() => {
+  const estilo = document.createElement("style");
+  estilo.textContent = `
+    @keyframes qc-girar295 { to { transform: rotate(360deg); } }
+    #qcEspera295 { position:fixed;inset:0;z-index:2147483000;
+      display:none;align-items:center;justify-content:center;
+      background:rgba(5,14,29,.78);backdrop-filter:blur(2px); }
+    #qcEspera295 .qc-espera-conteudo { display:flex;flex-direction:column;
+      align-items:center;gap:15px;color:#fff;text-align:center;
+      background:#172b47;border:1px solid #e6c36366;
+      border-radius:16px;padding:26px 32px;max-width:85%;
+      box-shadow:0 14px 35px #0007; }
+    #qcEspera295 .qc-espera-roda { width:39px;height:39px;border-radius:50%;
+      border:4px solid #e6c36355;border-top-color:#e6c363;
+      animation:qc-girar295 .8s linear infinite; }
+    @media (prefers-reduced-motion:reduce) {
+      #qcEspera295 .qc-espera-roda {animation-duration:2s;}
+    }
+  `;
+  document.head.appendChild(estilo);
+  const camada = document.createElement("div");
+  camada.id = "qcEspera295";
+  camada.setAttribute("role", "status");
+  camada.setAttribute("aria-live", "polite");
+  camada.setAttribute("aria-label", "Operacao em andamento");
+  camada.innerHTML =
+    '<div class="qc-espera-conteudo">' +
+    '<span class="qc-espera-roda" aria-hidden="true"></span>' +
+    '<strong id="qcEsperaTexto295">Processando...</strong></div>';
+  document.body.appendChild(camada);
+  const texto = document.getElementById("qcEsperaTexto295");
+  let abertos = 0;
+  let atraso = null;
+  function iniciar(mensagem = "Consultando o sistema...") {
+    abertos++;
+    texto.textContent = mensagem;
+    if (atraso !== null) clearTimeout(atraso);
+    atraso = setTimeout(() => {
+      atraso = null;
+      if (abertos > 0) camada.style.display = "flex";
+    }, 170); // Evita piscar em operacoes muito rapidas.
+    let encerrado = false;
+    return () => {
+      if (encerrado) return;
+      encerrado = true;
+      abertos = Math.max(0, abertos - 1);
+      if (abertos === 0) {
+        if (atraso !== null) clearTimeout(atraso);
+        atraso = null;
+        camada.style.display = "none";
+      }
+    };
+  }
+  return {iniciar};
+})();
+window.QC_iniciarEspera295 = QC_ESPERA295.iniciar;
+
+// Abrange consultas, login, saldo, pedidos, doacoes e recebimentos.
+// Nunca altera parametros, corpo, token nem resposta das requisicoes.
+const QC_fetchOriginal295 = window.fetch.bind(window);
+window.fetch = function(...argumentos) {
+  const destino = typeof argumentos[0] === "string"
+    ? argumentos[0] : (argumentos[0]?.url || "");
+  if (!/^https:\/\/script\.google\.com\/macros\/s\//i.test(destino)) {
+    return QC_fetchOriginal295(...argumentos);
+  }
+  const finalizar = QC_ESPERA295.iniciar("Consultando o QuintosCoin...");
+  try {
+    return Promise.resolve(QC_fetchOriginal295(...argumentos)).finally(finalizar);
+  } catch (erro) {
+    finalizar();
+    throw erro;
+  }
+};
+
+
 async function QC_post191(acao, parametros = {}) {
   if (typeof acao !== "string" || !/^qc_[a-z0-9_]+$/.test(acao)) {
     throw new Error("Acao do QuintosCoin invalida.");
@@ -127,22 +205,195 @@ qcConfirmacaoReceber293.style.cssText =
   "justify-content:center;gap:14px;text-align:center;min-height:300px";
 qcCartaoReceber293.appendChild(qcConfirmacaoReceber293);
 
-function QC_abrirModalReceber() {
-  // Uma nova abertura sempre mostra o formulario, nunca a confirmacao antiga.
-  qcFormularioReceber293.forEach(elemento => {
-    elemento.style.display = "";
+// PASSO 295 - Pedidos autorizados dentro do proprio modal Receber Qc$.
+// Os identificadores do pedido sao obtidos pelo token autenticado da carteira.
+const qcPedidosReceber295 = document.createElement("div");
+qcPedidosReceber295.id = "qcPedidosReceber295";
+qcPedidosReceber295.setAttribute("role", "region");
+qcPedidosReceber295.setAttribute("aria-label", "Solicitacoes de recebimento");
+qcPedidosReceber295.style.display = "none";
+qcCartaoReceber293.insertBefore(
+  qcPedidosReceber295, qcConfirmacaoReceber293
+);
+let qcConsultaReceber295 = 0;
+
+function QC_mostrarFormularioReceber295() {
+  qcPedidosReceber295.style.display = "none";
+  qcFormularioReceber293.forEach(elemento => {elemento.style.display = "";});
+  qcConfirmacaoReceber293.style.display = "none";
+}
+function QC_mostrarListaReceber295() {
+  qcFormularioReceber293.forEach((elemento, indice) => {
+    elemento.style.display = indice === 0 ? "" : "none";
   });
   qcConfirmacaoReceber293.style.display = "none";
+  qcPedidosReceber295.style.display = "block";
+}
+function QC_avisoReceber295(texto) {
+  const p = document.createElement("p");
+  p.setAttribute("role", "status");
+  p.style.cssText = "color:#e6c363;font-size:13px;line-height:1.5;margin:10px 0";
+  p.textContent = texto;
+  return p;
+}
+function QC_botaoReceber295(texto, primario = false) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = primario ? "qc-btn-modal-principal" : "qc-btn-modal-secundario";
+  b.textContent = texto;
+  b.style.cssText = "width:100%;margin-top:10px";
+  return b;
+}
+function QC_valorReceber295(valor) {
+  return "Qc$ " + Number(valor).toLocaleString("pt-BR", {
+    minimumFractionDigits:2,maximumFractionDigits:2
+  });
+}
+
+async function QC_carregarPedidosReceber295() {
+  const consulta = ++qcConsultaReceber295;
+  QC_mostrarListaReceber295();
+  qcPedidosReceber295.replaceChildren(
+    QC_avisoReceber295("Consultando seus pedidos de recebimento...")
+  );
+  try {
+    const dados = await QC_post191("qc_minhas_solicitacoes");
+    if (consulta !== qcConsultaReceber295 ||
+        qcModalReceber.style.display !== "flex") return;
+    if (!dados || dados.status !== "OK") {
+      throw Error(dados?.mensagem || "Consulta de solicitações indisponível.");
+    }
+    const pedidos = Array.isArray(dados.solicitacoes) ? dados.solicitacoes
+      : Array.isArray(dados.pedidos) ? dados.pedidos
+      : Array.isArray(dados.itens) ? dados.itens : null;
+    if (!pedidos) {
+      throw Error("A resposta do servidor não contém a lista de solicitações.");
+    }
+    const autorizados = pedidos.filter(p =>
+      String(p?.status || p?.Status || "").trim().toUpperCase() === "AUTORIZADA");
+    const pendentes = pedidos.filter(p =>
+      String(p?.status || p?.Status || "").trim().toUpperCase() === "PENDENTE");
+    qcPedidosReceber295.replaceChildren();
+
+    if (autorizados.length) {
+      const intro = document.createElement("p");
+      intro.textContent = "Você tem " + autorizados.length +
+        (autorizados.length===1 ? " solicitação autorizada." : " solicitações autorizadas.");
+      intro.style.cssText = "margin:10px 0 14px";
+      qcPedidosReceber295.appendChild(intro);
+      for (const p of autorizados) {
+        const valor = Number(p.valor ?? p.Valor);
+        if (!Number.isSafeInteger(valor) || valor <= 0) continue;
+        const cartao = document.createElement("section");
+        cartao.style.cssText = "background:#1d3554;border:1px solid #e6c36355;" +
+          "border-radius:12px;padding:15px;margin-bottom:12px";
+        const titulo = document.createElement("strong");
+        titulo.textContent = QC_valorReceber295(valor) + " — AUTORIZADO";
+        titulo.style.cssText = "color:#e6c363;display:block;margin-bottom:6px";
+        const descricao = document.createElement("p");
+        descricao.textContent = "Autorizado pelo tesoureiro. Ainda não creditado.";
+        descricao.style.cssText = "font-size:13px;line-height:1.4;margin:6px 0";
+        const botao = QC_botaoReceber295("Receber " + QC_valorReceber295(valor),true);
+        const mensagem = document.createElement("p");
+        mensagem.setAttribute("role", "status");
+        mensagem.style.cssText = "font-size:13px;line-height:1.5;margin-top:8px";
+        const acoes = document.createElement("div");
+        cartao.append(titulo,descricao,botao,mensagem,acoes);
+        qcPedidosReceber295.appendChild(cartao);
+        botao.addEventListener("click", async () => {
+          botao.disabled = true;
+          const encerrar = QC_ESPERA295.iniciar("Preparando o recebimento...");
+          try {
+            let idEmissao = String(p.idEmissao || p.IdEmissao || "").trim();
+            if (!idEmissao) {
+              const idAutorizacao = String(p.idAutorizacao || p.IdAutorizacao || "").trim();
+              if (!idAutorizacao) {
+                throw Error("O pedido autorizado não possui identificador para emissão.");
+              }
+              const preparado = await QC_post191("qc_preparar_emissao",{idAutorizacao});
+              idEmissao = String(preparado?.idEmissao || preparado?.emissao?.idEmissao || "").trim();
+              if (!/^QC-EM-[0-9a-f-]{36}$/i.test(idEmissao)) {
+                throw Error(preparado?.mensagem || "A emissão ainda não pôde ser preparada.");
+              }
+            }
+            if (!/^QC-EM-[0-9a-f-]{36}$/i.test(idEmissao)) {
+              throw Error("Identificador de emissão inválido.");
+            }
+            const pedidoPronto = {...p, valor, status:"AUTORIZADA",idEmissao};
+            if (typeof window.QC_inserirAcao195 !== "function" ||
+                typeof window.QC_inserirRecebimento198 !== "function") {
+              throw Error("Módulo de recebimento não carregado. Atualize a página.");
+            }
+            acoes.replaceChildren();
+            window.QC_inserirAcao195(acoes,pedidoPronto);
+            window.QC_inserirRecebimento198(acoes,pedidoPronto);
+            // Uma senha de login ativa permite preparar automaticamente.
+            // A assinatura só ocorre quando o irmão confirmar a conclusão.
+            const preparar = acoes.querySelector("button");
+            if (preparar && preparar.textContent.startsWith("Preparar recebimento") &&
+                typeof window.QC_senhaFichas291 === "function" &&
+                window.QC_senhaFichas291()) {
+              preparar.click();
+            }
+            botao.style.display="none";
+            mensagem.textContent = "Continue o recebimento abaixo. As fichas serão verificadas antes de integrar o saldo.";
+          } catch (erro) {
+            mensagem.textContent="⚠️ " + erro.message +
+              " Se houve falha na comunicação, abra novamente esta janela antes de repetir.";
+            botao.disabled=false;
+          } finally {
+            encerrar();
+          }
+        });
+      }
+    } else {
+      QC_mostrarFormularioReceber295();
+    }
+    if (pendentes.length) {
+      const linha = QC_avisoReceber295(
+        pendentes.length === 1
+          ? "Você também tem uma solicitação aguardando autorização do tesoureiro."
+          : "Você também tem " + pendentes.length +
+            " solicitações aguardando autorização do tesoureiro."
+      );
+      qcPedidosReceber295.appendChild(linha);
+      if (!autorizados.length) {
+        qcPedidosReceber295.style.display="block";
+      }
+    }
+    if (autorizados.length) {
+      const novo = QC_botaoReceber295("+ Solicitar novos Qc$");
+      novo.addEventListener("click",QC_mostrarFormularioReceber295);
+      qcPedidosReceber295.appendChild(novo);
+    }
+  } catch (erro) {
+    if (consulta !== qcConsultaReceber295 ||
+        qcModalReceber.style.display !== "flex") return;
+    QC_mostrarListaReceber295();
+    qcPedidosReceber295.replaceChildren(
+      QC_avisoReceber295("⚠️ Não foi possível consultar os pedidos: " + erro.message)
+    );
+    const repetir = QC_botaoReceber295("Tentar novamente");
+    repetir.addEventListener("click",QC_carregarPedidosReceber295);
+    qcPedidosReceber295.appendChild(repetir);
+  }
+}
+
+
+function QC_abrirModalReceber() {
   document.getElementById("qcMensagemReceber").textContent = "";
   qcModalReceber.style.display = "flex";
+  QC_carregarPedidosReceber295();
 }
 
 function QC_fecharModalReceber() {
+  qcConsultaReceber295++; // descarta resposta de consultas encerradas
   qcModalReceber.style.display = "none";
   document.getElementById("qcMensagemReceber").textContent = "";
 }
 
 function QC_exibirConfirmacaoReceber(quantidade) {
+  qcPedidosReceber295.style.display = "none";
   // Substituir visualmente o formulario pela confirmacao dentro do modal.
   qcFormularioReceber293.forEach(elemento => {
     elemento.style.display = "none";
