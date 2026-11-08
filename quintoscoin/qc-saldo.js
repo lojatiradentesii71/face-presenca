@@ -1514,7 +1514,7 @@
   detalhes.style.cssText = "margin-top:12px;border-top:1px solid #ffffff24;" +
     "padding-top:10px";
   const resumo = document.createElement("summary");
-  resumo.textContent = "Seguranca e recuperacao";
+  resumo.textContent = "Segurança e recuperação";
   resumo.style.cssText = "cursor:pointer;font-size:14px;opacity:.9";
   detalhes.append(
     resumo, backup,
