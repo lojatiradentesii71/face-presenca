@@ -1288,6 +1288,8 @@ function QC_exibirTelaAcesso() {
 
   if (areaTesoureiro) {
     areaTesoureiro.style.display = "none";
+    const detalhes = document.getElementById("qcDetalhesTesoureiro294");
+    if (detalhes) detalhes.open = false;
   }
 }
 
@@ -2477,7 +2479,11 @@ qcAreaTesoureiro.className = "qc-area-tesoureiro";
 qcAreaTesoureiro.style.display = "none";
 
 qcAreaTesoureiro.innerHTML = `
-  <h3>ÁREA DO TESOUREIRO</h3>
+  <details id="qcDetalhesTesoureiro294" style="margin:0">
+    <summary style="cursor:pointer;font-weight:700;color:#e5bf62;list-style-position:inside;padding:4px 2px">
+      ÁREA DO TESOUREIRO
+    </summary>
+    <div id="qcConteudoTesoureiro294" style="margin-top:12px">
 
   <section id="qcPainelCirculacao276" style="margin:14px 0 18px;padding:14px;border:1px solid #ffffff29;border-radius:12px">
     <h4 style="margin:0 0 12px">📊 Circulação e lastro</h4>
@@ -2521,6 +2527,8 @@ qcAreaTesoureiro.innerHTML = `
     class="qc-lista-pedidos"
     hidden
   ></div>
+    </div>
+  </details>
 `;
 
 document.getElementById("telaCarteira")
@@ -2565,23 +2573,31 @@ async function QC_carregarPainelTesoureiro276(tokenSessao) {
       lastro.textContent = Number(dados.lastroReservadoBRL)
         .toLocaleString("pt-BR", {style:"currency", currency:"BRL"});
     }
-    resumo.textContent =
-      "Emitidos: " + formato(dados.emitidos) + " QC" +
-      " · Doacoes extintas: " +
-      (Number.isSafeInteger(dados.doacoesExtintas) ?
-        formato(dados.doacoesExtintas) + " QC" : "a conferir") +
-      " · Resgates confirmados: " +
-      (Number.isSafeInteger(dados.resgatesEmDinheiro) ?
-        formato(dados.resgatesEmDinheiro) + " QC" : "a conferir") +
-      " · Atualizado: " + dados.atualizadoEm;
+    const linhas = [
+      "Emitidos: " + formato(dados.emitidos) + " QC",
+      "Doações extintas: " +
+        (Number.isSafeInteger(dados.doacoesExtintas) ?
+          formato(dados.doacoesExtintas) + " QC" : "a conferir"),
+      "Resgates confirmados: " +
+        (Number.isSafeInteger(dados.resgatesEmDinheiro) ?
+          formato(dados.resgatesEmDinheiro) + " QC" : "a conferir"),
+      "Atualizado: " + (dados.atualizadoEm || "a conferir")
+    ];
     if (dados.conferencia !== "CONFERIDO") {
-      aviso.textContent = "⚠️ Conferencia necessaria: " +
+      aviso.textContent = "⚠️ Conferência necessária: " +
         (Array.isArray(dados.avisos) && dados.avisos.length ?
-          dados.avisos.join(" ") : "lancamentos inconsistentes.");
-      resumo.textContent += " · Lastro ainda nao confirmado.";
+          dados.avisos.join(" ") : "lançamentos inconsistentes.");
+      linhas.push("Lastro ainda não confirmado.");
     } else {
-      aviso.textContent = "Valores contabeis calculados. Confira o saldo bancario separadamente.";
+      aviso.textContent = "Valores contábeis calculados. Confira o saldo bancário separadamente.";
     }
+    const linhasHTML = linhas.map(texto => {
+      const linha = document.createElement("span");
+      linha.textContent = texto;
+      linha.style.cssText = "display:block;line-height:1.5;margin:2px 0";
+      return linha;
+    });
+    resumo.replaceChildren(...linhasHTML);
   } catch (erro) {
     if (sessionStorage.getItem(QC_CHAVE_SESSAO) === tokenSessao) {
       circulacao.textContent = "—";
@@ -3258,15 +3274,33 @@ function QC_confirmarPagamentoPedido(nome, valor) {
   if(!area)return;
   const painel=document.createElement("details");
   painel.id="qcAreaResgatesTesoureiro278";
-  painel.style.cssText="margin:15px 0;border:1px solid #ffffff29;border-radius:12px;padding:12px";
+  painel.style.cssText="margin:15px 0 0";
   const titulo=document.createElement("summary");
-  titulo.textContent="💵 Resgates pendentes";
-  titulo.style.cssText="cursor:pointer;font-weight:600";
+  titulo.className="qc-botao-pedidos qc-resgate-resumo294";
+  titulo.style.cssText="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;list-style:none;width:100%;box-sizing:border-box";
+  const rotulo=document.createElement("span");
+  rotulo.textContent="💵 Resgates pendentes";
+  const indicador=document.createElement("span");
+  indicador.className="qc-indicador-pedidos";
+  const esfera=document.createElement("span");
+  esfera.className="qc-esfera-pedidos";
+  esfera.id="qcEsferaResgates294";
+  const contador=document.createElement("span");
+  contador.id="qcQuantidadeResgates294";
+  contador.textContent="Consultando...";
+  indicador.append(esfera,contador);
+  titulo.append(rotulo,indicador);
   const lista=document.createElement("div");
   lista.id="qcListaResgatesTesoureiro278";
   lista.style.marginTop="12px";
   painel.append(titulo,lista);
-  area.appendChild(painel);
+  (document.getElementById("qcConteudoTesoureiro294")||area).appendChild(painel);
+  const estilo294=document.createElement("style");
+  estilo294.textContent=
+    "#qcAreaResgatesTesoureiro278>summary::-webkit-details-marker{display:none}"+
+    "#qcAreaResgatesTesoureiro278>summary::marker{content:''}"+
+    "#qcAreaResgatesTesoureiro278>summary{min-height:64px}";
+  document.head.appendChild(estilo294);
   const URL_SCRIPT="https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
   async function postar(acao,params={}){
     const token=sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
@@ -3290,8 +3324,13 @@ function QC_confirmarPagamentoPedido(nome, valor) {
       const r=await postar("qc_resgate_pendentes_tesoureiro");
       if(r.status!=="OK"||!Array.isArray(r.pedidos))throw Error("Lista de resgates invalida.");
       lista.replaceChildren();
-      titulo.textContent="💵 Resgates pendentes"+(r.pedidos.length?" ("+r.pedidos.length+")":"");
-      if(!r.pedidos.length){lista.textContent="Nenhum resgate pendente.";return;}
+      const quantidade=r.pedidos.length;
+      esfera.className="qc-esfera-pedidos "+(quantidade ?
+        "qc-esfera-laranja" : "qc-esfera-verde");
+      contador.textContent=quantidade ?
+        quantidade+(quantidade===1 ? " pendente" : " pendentes") :
+        "Nenhum resgate";
+      if(!quantidade){lista.textContent="Nenhum resgate pendente.";return;}
       r.pedidos.forEach(p=>{
         const item=document.createElement("div");item.className="qc-resgate-linha278";
         const nome=document.createElement("strong");nome.textContent=p.nome;
@@ -3339,11 +3378,17 @@ function QC_confirmarPagamentoPedido(nome, valor) {
         }
         item.append(mensagem);lista.appendChild(item);
       });
-    }catch(e){lista.textContent="⚠️ "+String(e.message||e);}
+    }catch(e){
+      esfera.className="qc-esfera-pedidos";
+      contador.textContent="Indisponível";
+      lista.textContent="⚠️ "+String(e.message||e);
+    }
     finally{carregando=false;}
   }
   painel.addEventListener("toggle",()=>{if(painel.open)carregar();});
-  window.QC_atualizarResgatesTesoureiro278=()=>{if(painel.open)carregar();};
+  // Consultar a quantidade de resgates mesmo com os detalhes fechados.
+  // A API continua exigindo a sessão autenticada do tesoureiro.
+  window.QC_atualizarResgatesTesoureiro278=()=>{carregar();};
 })();
 
 
