@@ -327,9 +327,9 @@
 
     const botao = document.createElement("button");
     botao.type = "button";
-    botao.textContent = valores.length === 1
-      ? "Preparar ficha cega de " + total + " QC"
-      : "Preparar " + valores.length + " fichas cegas (" + total + " QC)";
+    botao.textContent = "Preparar recebimento de Qc$ " + total.toLocaleString("pt-BR", {
+      minimumFractionDigits:2,maximumFractionDigits:2
+    });
 
     try {
       if (pendencias()[idEmissao]) {
@@ -367,6 +367,8 @@
       botao.disabled = true;
       mensagem.textContent =
         "Preparando " + valores.length + " ficha(s) anonimamente neste celular...";
+      const fimEspera295 = typeof window.QC_iniciarEspera295 === "function"
+        ? window.QC_iniciarEspera295("Preparando suas fichas...") : null;
 
       try {
         if (!crypto?.subtle || typeof BigInt !== "function") {
@@ -458,10 +460,17 @@
         mensagem.textContent = registros.length +
           " ficha(s) cega(s) preparada(s) e protegida(s). " +
           "Nenhuma assinatura solicitada. Saldo inalterado.";
+        // PASSO 295: oferecer a etapa de assinatura na mesma janela.
+        // Nenhuma nova operacao e criada; reutiliza a emissao existente.
+        if (typeof window.QC_inserirRecebimento198 === "function") {
+          window.QC_inserirRecebimento198(item, pedido);
+        }
 
       } catch (erro) {
         mensagem.textContent = "Aviso: " + erro.message;
         botao.disabled = false;
+      } finally {
+        if (fimEspera295) fimEspera295();
       }
     });
   };
@@ -658,10 +667,10 @@ window.QC_inserirRecebimento198 = function(item, pedido) {
   senhaCampo.style.width = "100%";
   const botao = document.createElement("button");
   botao.type = "button";
-  botao.textContent = valoresEsperados.length === 1
-    ? "Assinar e receber " + valorAutorizado + " QC"
-    : "Assinar e receber " + valoresEsperados.length +
-      " fichas (" + valorAutorizado + " QC)";
+  botao.textContent = "Concluir recebimento de Qc$ " +
+    valorAutorizado.toLocaleString("pt-BR", {
+      minimumFractionDigits:2,maximumFractionDigits:2
+    });
   mensagem.textContent = "Fichas prontas. Assinatura depende da liberacao do servidor.";
   if (typeof window.QC_senhaFichas291 === "function" &&
       window.QC_senhaFichas291()) painel.append(botao, mensagem);
@@ -678,6 +687,8 @@ window.QC_inserirRecebimento198 = function(item, pedido) {
     }
     botao.disabled = true;
     let armazenadasNestaTentativa = 0;
+    const fimAssinatura295 = typeof window.QC_iniciarEspera295 === "function"
+      ? window.QC_iniciarEspera295("Conferindo e recebendo fichas...") : null;
 
     try {
       if (!crypto?.subtle || typeof BigInt !== "function") {
@@ -861,7 +872,16 @@ window.QC_inserirRecebimento198 = function(item, pedido) {
       delete restantes[idEmissao];
       localStorage.setItem(chaveArmazenamento(), JSON.stringify(restantes));
       mensagem.textContent = "✅ " + registrosValidados.length +
-        " ficha(s) assinada(s), verificada(s) e protegida(s).";
+        " ficha(s) assinada(s), verificada(s) e protegida(s). Atualizando saldo...";
+      try {
+        if (typeof window.QC_atualizarSaldoReal202 === "function") {
+          await window.QC_atualizarSaldoReal202();
+        }
+        mensagem.textContent = "✅ Recebimento concluído. Seu saldo foi atualizado.";
+      } catch (erroSaldo) {
+        mensagem.textContent = "✅ Fichas recebidas e protegidas. " +
+          "Não foi possível atualizar o saldo agora: " + erroSaldo.message;
+      }
       botao.remove();
       senhaCampo.remove();
     } catch (erro) {
@@ -870,6 +890,8 @@ window.QC_inserirRecebimento198 = function(item, pedido) {
           ? " Fichas ja gravadas foram preservadas; tente novamente com a mesma senha."
           : " Nenhuma ficha ja salva foi removida.");
       botao.disabled = false;
+    } finally {
+      if (fimAssinatura295) fimAssinatura295();
     }
   });
 };
