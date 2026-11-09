@@ -12,7 +12,8 @@
     #qcModalDoar301 .qc-doar-secao301 {display:flex;flex-direction:column;gap:13px;margin-top:14px}
     #qcModalDoar301 .qc-doar-entrada301 {display:flex;align-items:center;gap:8px}
     #qcModalDoar301 .qc-doar-entrada301 input {flex:1;min-width:0;margin:0;letter-spacing:1.5px}
-    #qcModalDoar301 .qc-doar-olho301 {flex:none;width:auto;min-width:50px;padding:11px 12px}
+    #qcModalDoar301 .qc-doar-olho301 {flex:none;width:auto;min-width:50px;padding:11px 12px;display:inline-flex;align-items:center;justify-content:center}
+    #qcModalDoar301 .qc-doar-olho301 svg {display:block;width:22px;height:22px;stroke:currentColor}
     #qcModalDoar301 .qc-doar-ajuda301 {margin:0;font-size:13px;line-height:1.5;color:#d7dce6}
     #qcModalDoar301 .qc-doar-icone301 {font-size:39px;line-height:1.3;text-align:center}
     #qcModalDoar301 .qc-doar-centro301 {align-items:center;text-align:center;padding:18px 3px 10px}
@@ -44,7 +45,7 @@
           <input id="qcValorDoar301" class="qc-input-modal" type="password"
              inputmode="numeric" autocomplete="off" placeholder="Valor em Qc$" aria-label="Valor da doação oculto">
           <button id="qcOlhoDoar301" type="button" class="qc-btn-modal-secundario qc-doar-olho301"
-             aria-label="Mostrar valor" aria-pressed="false" title="Mostrar ou ocultar valor">👁</button>
+             aria-label="Mostrar valor" aria-pressed="false" title="Mostrar ou ocultar valor"></button>
         </div>
         <button id="qcPrepararDoar301" class="qc-btn-modal-principal qc-doar-verde301" type="button">Preparar doação</button>
       </section>
@@ -90,6 +91,18 @@
   };
   const campo=$("qcValorDoar301");
   const aviso=$("qcAvisoDoar301");
+  // Icones vetoriais: independem da fonte/emoji do aparelho ou navegador.
+  const svgMostrar301 = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const svgOcultar301 = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.7 10.7 0 0 1 12 5c6.5 0 10 7 10 7a14 14 0 0 1-3.5 4.3"/><path d="M6.3 6.3C3.5 8.2 2 12 2 12s3.5 7 10 7c1.6 0 3.1-.4 4.4-1"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/></svg>';
+  function atualizarIconeOlho301() {
+    const visivel=campo.type==="text";
+    const botao=$("qcOlhoDoar301");
+    botao.innerHTML=visivel?svgOcultar301:svgMostrar301;
+    botao.setAttribute("aria-label",visivel?"Ocultar valor":"Mostrar valor");
+    botao.setAttribute("aria-pressed",String(visivel));
+    botao.title=visivel?"Ocultar valor":"Mostrar valor";
+  }
+  atualizarIconeOlho301();
   let ocupada=false,escaneando=false,stream=null,video=null,leitor=null;
   let ciclo=0;
 
@@ -112,8 +125,7 @@
     pararCamera();
     modal.style.display="none";
     campo.value="";campo.type="password";
-    $("qcOlhoDoar301").setAttribute("aria-pressed","false");
-    $("qcOlhoDoar301").setAttribute("aria-label","Mostrar valor");
+    atualizarIconeOlho301();
   }
   async function abrir() {
     if (ocupada) return;
@@ -131,11 +143,8 @@
   $("qcOkDoar301").addEventListener("click",fechar);
   modal.addEventListener("click",ev=>{if (ev.target===modal) fechar();});
   $("qcOlhoDoar301").addEventListener("click",()=>{
-    const mostrar=campo.type==="password";
-    campo.type=mostrar?"text":"password";
-    $("qcOlhoDoar301").textContent=mostrar?"🙈":"👁";
-    $("qcOlhoDoar301").setAttribute("aria-label",mostrar?"Ocultar valor":"Mostrar valor");
-    $("qcOlhoDoar301").setAttribute("aria-pressed",String(mostrar));
+    campo.type=campo.type==="password"?"text":"password";
+    atualizarIconeOlho301();
   });
 
   // Biblioteca local do navegador quando disponivel; fallback jsQR aberto
