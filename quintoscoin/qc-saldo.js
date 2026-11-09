@@ -647,61 +647,172 @@
     conferir.click();
     return {status:"OK",valorDoacao:operacao.valorDoacao,valorTroco:operacao.valorTroco};
   }
-  window.QC_doarValor271=async function(valor) {
-    if (movimentando271) throw Error("Ja existe uma doacao em andamento.");
+  // PASSO 301 - Fichas preparadas ANTES de a sacola passar.
+  // Primeiro prepara e cifra sem enviar gasto ao servidor.
+  // A leitura do QR Code da sacola aciona QC_retomar271 UMA UNICA VEZ
+  // por idOperacao. Se a rede falhar, retomar reaproveita o mesmo ID.
+  const CODIGO_SACOLA301 = "QUINTOSCOIN|SACOLA|V1|f1b1e87e-6fb6-4b41-b5f9-547d458d3ed1";
+
+  function QC_hojeBrasil301() {
+    const partes = new Intl.DateTimeFormat("en-US", {
+      timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"
+    }).formatToParts(new Date());
+    const campo = nome => partes.find(x=>x.type===nome)?.value;
+    return campo("year")+"-"+campo("month")+"-"+campo("day");
+  }
+
+  async function QC_lerPendenteQR301(segredo) {
+    const bruto=localStorage.getItem(QC_pendenteChave271());
+    if (!bruto) return null;
+    let op;
+    try {op=await abrir(JSON.parse(bruto),segredo);} catch(err) {
+      throw Error("Há uma doação anterior protegida que não foi possível abrir. Preserve os dados deste aparelho.");
+    }
+    if (op?.versao!==1 || !op.idOperacao ||
+        !Array.isArray(op.fichasEntrada) || !["EXATA","COM_TROCO"].includes(op.tipo)) {
+      throw Error("Doação anterior inconsistente. Preserve os dados locais.");
+    }
+    return op;
+  }
+
+  function QC_conferirSessaoQR301(inicio) {
+    const agora=dadosDaSessao();
+    if (agora.id!==inicio.id || agora.token!==inicio.token) {
+      throw Error("A carteira mudou. Entre novamente antes de doar.");
+    }
+  }
+
+  window.QC_estadoDoacaoQR301=async function() {
+    const inicio=dadosDaSessao();
+    if (!inicio.id || !inicio.token) throw Error("Entre na carteira.");
+    if (!localStorage.getItem(QC_pendenteChave271())) return {status:"NENHUMA"};
+    const segredo=await obterSenha265();
+    if (!segredo) return {status:"CANCELADO"};
+    const op=await QC_lerPendenteQR301(segredo);
+    return {status:op.etapaQR301==="PREPARADA"?"PREPARADA":"ACIONADA"};
+  };
+
+  window.QC_prepararDoacaoQR301=async function(valor) {
+    if (movimentando271) throw Error("Outra operação de doação está em andamento.");
     movimentando271=true;
     try {
       const inicio=dadosDaSessao();
       if (!inicio.id || !inicio.token) throw Error("Entre na carteira antes de doar.");
       const segredo=await obterSenha265();
       if (!segredo) return {status:"CANCELADO"};
-      const chavePendente=QC_pendenteChave271();
-      if (localStorage.getItem(chavePendente)) {
-        const pendente=await abrir(JSON.parse(localStorage.getItem(chavePendente)),segredo);
-        if (!pendente || pendente.versao!==1 || !pendente.idOperacao ||
-            !Array.isArray(pendente.fichasEntrada)) {
-          throw Error("Doacao pendente inconsistente. Preserve os dados locais.");
-        }
-        const retomar=window.confirm("Existe uma doacao anterior ainda sem confirmacao local. Deseja consultar e retomar essa operacao, sem criar outra?");
-        if (!retomar) return {status:"PENDENTE"};
-        return await QC_retomar271(pendente,segredo);
+      if (localStorage.getItem(QC_pendenteChave271())) {
+        const anterior=await QC_lerPendenteQR301(segredo);
+        return {status:anterior.etapaQR301==="PREPARADA"?"PREPARADA":"ACIONADA"};
+      }
+      if (!Number.isSafeInteger(valor) || valor<2 || valor===3) {
+        throw Error("Informe um valor inteiro a partir de 2 Qc$, exceto 3 Qc$.");
       }
       const disponiveis=await QC_fichasAtuais271(segredo);
       const plano=QC_planejarComposicao267(disponiveis.map(x=>x.valor),valor);
       if (plano.status!=="OK") throw Error(plano.mensagem||plano.status);
-      const aceito=window.confirm(
-        "Confirmar doacao anonima de "+plano.valorSolicitado+" QC?\n\n"+
-        "Fichas utilizadas: "+plano.valoresSelecionados.length+" (total "+plano.totalFichasSelecionadas+" QC)\n"+
-        (plano.valorTroco ? "Troco automatico: "+plano.valorTroco+" QC\n" : "Sem necessidade de troco.\n")+
-        "\nNao sera exibida sua identidade ao tesoureiro.");
-      if (!aceito) return {status:"CANCELADO"};
-      if (dadosDaSessao().id!==inicio.id || dadosDaSessao().token!==inicio.token) {
-        throw Error("Sessao alterada; operacao cancelada antes do gasto.");
+      // Conferir bloqueios e sessao ABERTA antes de reservar fichas locais.
+      // Esta consulta nao envia fichas, nome, ID nem token da carteira.
+      const pre=await QC_postAnonimo271("qc_preparar_doacao_qr301",{
+        tipo:plano.tipo,quantidadeEntradas:plano.indicesSelecionados.length,
+        quantidadeTroco:plano.fichasTroco.length
+      });
+      if (pre.status!=="PRONTA" || !pre.idSessao ||
+          !/^\d{4}-\d{2}-\d{2}$/.test(String(pre.dia||""))) {
+        throw Error(pre.mensagem||"A arrecadação ainda não está disponível.");
       }
-      const entradas=plano.indicesSelecionados.map(i => {
+      if (pre.dia!==QC_hojeBrasil301()) {
+        throw Error("A data da sessão não confere com a data deste aparelho.");
+      }
+      QC_conferirSessaoQR301(inicio);
+      const entradas=plano.indicesSelecionados.map(i=>{
         const f=disponiveis[i];
         return {mensagemHex:f.mensagemHex,assinaturaHex:f.assinaturaHex};
       });
       const op={versao:1,idOperacao:crypto.randomUUID().toLowerCase(),
         tipo:plano.tipo,valorDoacao:plano.valorSolicitado,
         valorTroco:plano.valorTroco,fichasEntrada:entradas,
-        saidasCegas:[],privadas:[]};
+        saidasCegas:[],privadas:[],etapaQR301:"PREPARADA",
+        idSessaoQR301:String(pre.idSessao),diaQR301:String(pre.dia)};
       if (plano.valorTroco) {
         const troco=await QC_prepararTroco271(plano);
         op.saidasCegas=troco.saidasCegas;
         op.privadas=troco.privadas;
       }
-      // Todo material de recuperacao fica cifrado ANTES do primeiro POST.
       const cifrado=await QC_cifrar271(op,segredo);
-      if (localStorage.getItem(chavePendente)) {
-        throw Error("Outra operacao foi preparada. Retome-a primeiro.");
+      QC_conferirSessaoQR301(inicio);
+      if (localStorage.getItem(QC_pendenteChave271())) {
+        throw Error("Já existe outra doação protegida. Não crie outra.");
       }
-      localStorage.setItem(chavePendente,JSON.stringify(cifrado));
+      // Esta gravação NAO movimenta nenhuma ficha nem altera saldo.
+      localStorage.setItem(QC_pendenteChave271(),JSON.stringify(cifrado));
+      memorizarSenha265(segredo,inicio);
+      return {status:"PREPARADA"};
+    } finally {movimentando271=false;}
+  };
+
+  window.QC_cancelarDoacaoQR301=async function() {
+    if (movimentando271) throw Error("Há uma doação sendo processada.");
+    movimentando271=true;
+    try {
+      const segredo=await obterSenha265();
+      if (!segredo) return {status:"CANCELADO"};
+      const op=await QC_lerPendenteQR301(segredo);
+      if (!op) return {status:"NENHUMA"};
+      if (op.etapaQR301!=="PREPARADA") {
+        throw Error("A leitura já acionou a doação. Use Recuperar operação, não cancelar.");
+      }
+      localStorage.removeItem(QC_pendenteChave271());
+      return {status:"CANCELADA"};
+    } finally {movimentando271=false;}
+  };
+
+  window.QC_efetivarDoacaoQR301=async function(codigoLido) {
+    if (String(codigoLido)!==CODIGO_SACOLA301) {
+      throw Error("O QR Code lido não é o da sacola de doações.");
+    }
+    if (movimentando271) throw Error("Doação já em processamento.");
+    movimentando271=true;
+    try {
+      const inicio=dadosDaSessao();
+      if (!inicio.id || !inicio.token) throw Error("Entre na carteira novamente.");
+      const segredo=await obterSenha265();
+      if (!segredo) return {status:"CANCELADO"};
+      const op=await QC_lerPendenteQR301(segredo);
+      if (!op) throw Error("Não existe doação preparada neste aparelho.");
+      if (op.etapaQR301!=="PREPARADA") {
+        throw Error("Esta doação já foi acionada. Recupere a mesma operação.");
+      }
+      if (op.diaQR301!==QC_hojeBrasil301()) {
+        throw Error("A doação foi preparada em outro dia. Cancele e prepare novamente.");
+      }
+      QC_conferirSessaoQR301(inicio);
+      // O ponto de não-retorno local é salvo ANTES do primeiro POST.
+      // Mesmo após queda de rede, a mesma operação será retomada.
+      op.etapaQR301="ACIONADA";
+      const cifrado=await QC_cifrar271(op,segredo);
+      QC_conferirSessaoQR301(inicio);
+      localStorage.setItem(QC_pendenteChave271(),JSON.stringify(cifrado));
       memorizarSenha265(segredo,inicio);
       return await QC_retomar271(op,segredo);
-    } finally {
-      movimentando271=false;
-    }
+    } finally {movimentando271=false;}
+  };
+
+  window.QC_recuperarDoacaoQR301=async function() {
+    if (movimentando271) throw Error("Outra doação está em andamento.");
+    movimentando271=true;
+    try {
+      const inicio=dadosDaSessao();
+      if (!inicio.id || !inicio.token) throw Error("Entre na carteira novamente.");
+      const segredo=await obterSenha265();
+      if (!segredo) return {status:"CANCELADO"};
+      const op=await QC_lerPendenteQR301(segredo);
+      if (!op) return {status:"NENHUMA"};
+      if (op.etapaQR301==="PREPARADA") {
+        throw Error("A sacola ainda não foi lida. Nenhuma doação foi enviada.");
+      }
+      // Recuperação posterior NÃO exige QR de novo e NÃO cria um segundo ID.
+      return await QC_retomar271(op,segredo);
+    } finally {movimentando271=false;}
   };
 
   // PASSO 275 - TRANSFERIR / RECEBER POR CODIGO PORTADOR.
