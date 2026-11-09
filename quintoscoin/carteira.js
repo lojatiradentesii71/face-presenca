@@ -1506,7 +1506,7 @@ async function QC_enviarAtivacaoV2(dados) {
 
 const QC_CHAVE_SESSAO = "QC_TOKEN_SESSAO_TESTE";
 
-// PASSO 303 — sessao temporaria restauravel, sem salvar senha legivel.
+// PASSOS 303/304 — sessao temporaria restauravel, sem salvar senha legivel.
 // Os dados cifrados permanecem nesta aba (sessionStorage). A chave AES
 // nao exportavel fica no IndexedDB do navegador. A restauracao EXIGE o
 // token ainda valido no Apps Script. Use apenas em dispositivos pessoais.
@@ -1753,17 +1753,37 @@ if (resultado.status === "OK") {
   campoSenha.value = "";
 
   QC_exibirTelaCarteira();
+  // PASSO 304: guardar a sessao logo apos o login validado pelo servidor.
+  // No 303 isto ocorria depois da consulta do saldo: qualquer falha na
+  // consulta impedia o cache, embora a carteira tivesse entrado.
+  // Confirmar a capacidade de salvar E restaurar antes de depender do cache.
+  let acessoTemporarioOK = false;
+  try {
+    if (await QC_AUTO303.salvar(senha)) {
+      acessoTemporarioOK = (await QC_AUTO303.recuperar()) === senha;
+    }
+  } catch (_) {
+    acessoTemporarioOK = false;
+  }
+  if (!acessoTemporarioOK) QC_AUTO303.limpar();
+
   try {
     if (typeof window.QC_aposLogin291 !== "function") {
       throw Error("Modulo do saldo nao carregado.");
     }
     await window.QC_aposLogin291(senha);
-    // O acesso automatico so e ativado se a senha abriu as fichas.
-    await QC_AUTO303.salvar(senha);
   } catch (erroFichas) {
     const msg=document.getElementById("mensagem");
     if(msg) msg.textContent="⚠️ Fichas protegidas: "+
       (erroFichas.message||erroFichas)+". Nenhuma ficha foi apagada.";
+  }
+  if (!acessoTemporarioOK) {
+    const msg = document.getElementById("mensagem");
+    if (msg) msg.textContent +=
+      (msg.textContent ? " " : "") +
+      "⚠️ O navegador nao conseguiu proteger a sessao temporaria. " +
+      "A carteira pedira a senha ao atualizar. Verifique se o armazenamento " +
+      "do site esta permitido no navegador.";
   }
 
   // Manter operações financeiras desabilitadas
@@ -2331,8 +2351,17 @@ async function QC_restaurarSessaoTeste() {
     QC_exibirTelaAcesso();
     QC_mostrarLogin();
     QC_carregarNome291();
+    // PASSO 304: informar a causa sem revelar senha, token ou ID.
+    const codigo = /sessao nao validada/i.test(String(erro.message || ""))
+      ? "VALIDACAO_SERVIDOR"
+      : /modulo das fichas/i.test(String(erro.message || ""))
+      ? "MODULO_FICHAS"
+      : /acesso temporario encerrado/i.test(String(erro.message || ""))
+      ? "CACHE_INDISPONIVEL"
+      : "CONFERENCIA_FICHAS";
     QC_mostrarMensagemAcesso(
-      "A sessao temporaria nao pode ser restaurada. Entre com sua senha.", "erro");
+      "Nao foi possivel restaurar o acesso automaticamente (" + codigo + "). " +
+      "Entre com sua senha. As fichas nao foram alteradas.", "erro");
   } finally {
     document.documentElement.classList.remove("qc-restaurando");
   }
