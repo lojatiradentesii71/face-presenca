@@ -302,6 +302,122 @@ qcCartaoReceber293.insertBefore(
 );
 let qcConsultaReceber295 = 0;
 
+// PASSO 300 - Indicador de valores disponiveis no botao RECEBER Qc$.
+// So conta pedidos efetivamente recebiveis; CONFERIR nao gera alerta.
+const qcIndicadorReceber300 = document.createElement("span");
+qcIndicadorReceber300.id = "qcIndicadorReceber300";
+qcIndicadorReceber300.className = "qc-indicador-receber300";
+qcIndicadorReceber300.setAttribute("aria-hidden", "true");
+qcIndicadorReceber300.hidden = true;
+qcBtnReceber.appendChild(qcIndicadorReceber300);
+const qcEstiloReceber300 = document.createElement("style");
+qcEstiloReceber300.textContent = `
+  #telaCarteira #btnReceber { position:relative; }
+  #telaCarteira #btnReceber .qc-indicador-receber300 {
+    position:absolute;top:5px;right:5px;min-width:10px;height:10px;
+    box-sizing:border-box;border-radius:20px;background:#ffd04f;
+    border:1px solid #15243b;box-shadow:0 0 0 1px #ffd04f66;
+    font-size:10px;font-weight:800;line-height:16px;text-align:center;
+    color:#18243a;padding:0;pointer-events:none;
+  }
+  #telaCarteira #btnReceber .qc-indicador-receber300.qc-com-numero300 {
+    min-width:19px;height:19px;top:3px;right:3px;line-height:17px;
+    padding:0 3px;
+  }
+  #telaCarteira #btnReceber .qc-indicador-receber300[hidden] {
+    display:none!important;
+  }
+`;
+document.head.appendChild(qcEstiloReceber300);
+let qcSequenciaIndicadorReceber300 = 0;
+function QC_contarDisponiveis300(pedidos) {
+  let quantidade = 0;
+  for (const p of pedidos) {
+    if (p.status !== "AUTORIZADA") continue;
+    if (p.situacao === "PRONTA") { quantidade++; continue; }
+    if (p.situacao !== "EM_ANDAMENTO") continue;
+    // Uma emissao ja completamente recebida pode continuar temporariamente
+    // como EM_ANDAMENTO no servidor. Nao sinalizar de novo neste aparelho.
+    let local;
+    try { local = QC_estadoLocalRecebimento296(String(p.idEmissao || "")); }
+    catch (_) { continue; }  // Armazenamento inconsistente: nao oferecer credito.
+    const iniciada = Number(p.quantidadeAssinada) > 0 ||
+      Number(p.operacoesExistentes) > 0 || local.armazenadas > 0;
+    if (local.pendente || !iniciada) quantidade++;
+  }
+  return quantidade;
+}
+function QC_mostrarIndicadorReceber300(quantidade) {
+  const n = Number(quantidade) || 0;
+  qcIndicadorReceber300.hidden = n < 1;
+  qcIndicadorReceber300.classList.toggle("qc-com-numero300", n > 1);
+  qcIndicadorReceber300.textContent = n > 1 ? String(n > 99 ? "99+" : n) : "";
+  qcBtnReceber.setAttribute("aria-label", n > 0
+    ? "Receber Qc$ — " + n + " recebimento(s) disponivel(is)"
+    : "Receber Qc$");
+  qcIndicadorReceber300.title = n > 0
+    ? n + " recebimento(s) disponivel(is)" : "";
+}
+async function QC_atualizarIndicadorReceber300(pedidosConsultados) {
+  const atual = ++qcSequenciaIndicadorReceber300;
+  const token = sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
+  if (!token) { QC_mostrarIndicadorReceber300(0); return; }
+  try {
+    const dados = pedidosConsultados
+      ? {status:"OK", solicitacoes:pedidosConsultados}
+      : await QC_post191("qc_pedidos_receber_296");
+    if (atual !== qcSequenciaIndicadorReceber300 ||
+        token !== sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")) return;
+    if (dados?.status !== "OK" || !Array.isArray(dados.solicitacoes)) {
+      QC_mostrarIndicadorReceber300(0);
+      return;
+    }
+    QC_mostrarIndicadorReceber300(QC_contarDisponiveis300(dados.solicitacoes));
+  } catch (_) {
+    // Uma falha de comunicacao nao significa que haja novos creditos.
+    if (atual === qcSequenciaIndicadorReceber300) QC_mostrarIndicadorReceber300(0);
+  }
+}
+window.QC_atualizarIndicadorReceber300 = QC_atualizarIndicadorReceber300;
+
+// PASSO 300 - Confirmacao curta, no proprio modal, somente apos
+// todas as fichas terem sido salvas e verificadas e o saldo atualizado.
+window.QC_mostrarRecebimentoConcluido300 = function(dados) {
+  const valor = Number(dados?.valor);
+  if (!Number.isSafeInteger(valor) || valor <= 0 ||
+      qcModalReceber.style.display !== "flex") return;
+  qcFormularioReceber293.forEach(el => { el.style.display="none"; });
+  qcPedidosReceber295.style.display = "none";
+  qcConfirmacaoReceber293.replaceChildren();
+  qcConfirmacaoReceber293.style.cssText =
+    "display:flex;flex-direction:column;align-items:center;"+
+    "justify-content:center;gap:14px;text-align:center;min-height:260px";
+  const icone=document.createElement("div");
+  icone.textContent="✓";
+  icone.style.cssText="width:54px;height:54px;border-radius:50%;"+
+    "background:#168258;color:#fff;font-size:32px;display:grid;"+
+    "place-items:center;font-weight:bold";
+  const titulo=document.createElement("h3");
+  titulo.textContent="Recebimento concluído!";
+  titulo.style.cssText="margin:0;color:#f0cd72;font-size:22px";
+  const montante=document.createElement("strong");
+  montante.textContent=QC_valorReceber295(valor)+" recebidos";
+  montante.style.cssText="font-size:24px;color:#fff";
+  const mensagem=document.createElement("p");
+  mensagem.textContent="Seu saldo foi atualizado com sucesso.";
+  mensagem.style.cssText="margin:0;font-size:14px;line-height:1.5";
+  const ok=document.createElement("button");
+  ok.type="button";
+  ok.className="qc-btn-modal-principal";
+  ok.textContent="OK";
+  ok.style.cssText="min-width:145px;max-width:220px;width:70%;margin-top:10px";
+  ok.addEventListener("click", QC_fecharModalReceber);
+  qcConfirmacaoReceber293.append(icone,titulo,montante,mensagem,ok);
+  qcConfirmacaoReceber293.focus();
+  // Retirar o aviso imediatamente. Reconsultar o estado sem atrasar o OK.
+  QC_atualizarIndicadorReceber300();
+};
+
 function QC_mostrarFormularioReceber295() {
   qcPedidosReceber295.style.display = "none";
   qcFormularioReceber293.forEach(elemento => {elemento.style.display = "";});
@@ -372,6 +488,7 @@ async function QC_carregarPedidosReceber295() {
       throw Error(dados?.mensagem || "Consulta de emissões indisponível.");
     }
     const pedidos = dados.solicitacoes;
+    QC_atualizarIndicadorReceber300(pedidos);
     const ativos = pedidos.filter(p => p.status === "AUTORIZADA" &&
       ["PRONTA","EM_ANDAMENTO","CONFERIR"].includes(p.situacao));
     const assinados = pedidos.filter(p => p.status === "AUTORIZADA" &&
@@ -380,9 +497,12 @@ async function QC_carregarPedidosReceber295() {
     qcPedidosReceber295.replaceChildren();
     const titulo = document.createElement("p");
     titulo.style.cssText="margin:10px 0 12px;line-height:1.5";
-    titulo.textContent = ativos.length
-      ? "Solicitações disponíveis ou em acompanhamento: " + ativos.length
-      : "Nenhum recebimento novo aguardando emissão.";
+    const disponiveis300 = QC_contarDisponiveis300(pedidos);
+    titulo.textContent = disponiveis300 > 0
+      ? "Disponível para receber: " + disponiveis300
+      : ativos.some(p => p.situacao === "CONFERIR")
+        ? "Não há novos recebimentos disponíveis. Veja a pendência abaixo."
+        : "Nenhum recebimento novo disponível.";
     qcPedidosReceber295.appendChild(titulo);
 
     for (const p of ativos) {
@@ -421,13 +541,13 @@ async function QC_carregarPedidosReceber295() {
         descricao.textContent = "Esta emissão já tem operações iniciadas. " +
           "Para continuar, use o dispositivo onde as fichas foram preparadas " +
           "ou recupere o backup antes de tentar outra emissão.";
-      } else if (local.pendente) {
+      } else if (situacao === "EM_ANDAMENTO" && local.pendente) {
         descricao.textContent = "Fichas preparadas neste aparelho. " +
           "Continue o recebimento sem gerar novas fichas.";
       } else if (situacao === "EM_ANDAMENTO") {
         descricao.textContent = "Emissão preparada, aguardando assinatura das fichas.";
       } else {
-        descricao.textContent = "Autorizado pelo tesoureiro. Aguardando emissão das fichas.";
+        descricao.textContent = "Autorizado pelo tesoureiro. Pronto para receber.";
       }
       cartao.append(tituloPedido,info,descricao);
       if (permitir) {
@@ -479,15 +599,6 @@ async function QC_carregarPedidosReceber295() {
         cartao.append(mensagem);
       }
       qcPedidosReceber295.appendChild(cartao);
-    }
-    if (assinados.length) {
-      const nota = QC_avisoReceber295(
-        assinados.length + (assinados.length === 1
-          ? " emissão anterior já assinada foi retirada da lista de recebimento. "
-          : " emissões anteriores já assinadas foram retiradas da lista de recebimento. ") +
-        "Se as fichas não aparecerem no saldo, confira Segurança e recuperação."
-      );
-      qcPedidosReceber295.appendChild(nota);
     }
     if (aguardando.length) {
       qcPedidosReceber295.appendChild(QC_avisoReceber295(
@@ -1658,6 +1769,8 @@ if (localStorage.getItem(QC_ID_LOCAL)) {
 }
 
 function QC_exibirTelaAcesso() {
+  qcSequenciaIndicadorReceber300++;
+  QC_mostrarIndicadorReceber300(0);
 
   document.getElementById("telaAcesso")
     .style.display = "block";
@@ -1687,6 +1800,8 @@ function QC_exibirTelaCarteira() {
     .style.display = "block";
 
     QC_atualizarTela();
+  // Sinalizar valores autorizados assim que entrar na carteira.
+  QC_atualizarIndicadorReceber300();
 
   // Consultar se esta carteira pertence ao tesoureiro.
   QC_atualizarAreaTesoureiro();
@@ -3792,6 +3907,8 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     if(!botao) continue;
     const svg='<svg aria-hidden="true" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+desenho[id]+'</svg>';
     botao.innerHTML=svg+'<span>'+rotulos[id]+'</span>';
+    // O icone do botao e gerado no final do script: preservar o indicador.
+    if (id === "btnReceber") botao.appendChild(qcIndicadorReceber300);
     botao.setAttribute('aria-label',rotulos[id]);
   }
   const estilo=document.createElement('style');
