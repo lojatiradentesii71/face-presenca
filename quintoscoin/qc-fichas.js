@@ -368,7 +368,7 @@
       mensagem.textContent =
         "Preparando " + valores.length + " ficha(s) anonimamente neste celular...";
       const fimEspera295 = typeof window.QC_iniciarEspera295 === "function"
-        ? window.QC_iniciarEspera295("Preparando suas fichas...") : null;
+        ? window.QC_iniciarEspera295("Preparando suas fichas...", botao, mensagem) : null;
 
       try {
         if (!crypto?.subtle || typeof BigInt !== "function") {
@@ -688,7 +688,7 @@ window.QC_inserirRecebimento198 = function(item, pedido) {
     botao.disabled = true;
     let armazenadasNestaTentativa = 0;
     const fimAssinatura295 = typeof window.QC_iniciarEspera295 === "function"
-      ? window.QC_iniciarEspera295("Conferindo e recebendo fichas...") : null;
+      ? window.QC_iniciarEspera295("Conferindo e recebendo fichas...", botao, mensagem) : null;
 
     try {
       if (!crypto?.subtle || typeof BigInt !== "function") {
