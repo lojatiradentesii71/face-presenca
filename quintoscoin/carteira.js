@@ -4,59 +4,144 @@
 // Doacoes e transferencias anonimas continuam com fetch proprio.
 const QC_URL_191 = "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
 
-// PASSO 295 - Indicador unico de espera para operacoes da carteira.
-// Acompanha todas as chamadas ao Apps Script e as operacoes locais demoradas.
+// PASSO 297 - Espera discreta JUNTO ao botao ou mensagem da operacao.
+// Nao bloqueia, nao escurece nem cobre a tela. Nao altera requisicoes.
 const QC_ESPERA295 = (() => {
   const estilo = document.createElement("style");
   estilo.textContent = `
-    @keyframes qc-girar295 { to { transform: rotate(360deg); } }
-    #qcEspera295 { position:fixed;inset:0;z-index:2147483000;
-      display:none;align-items:center;justify-content:center;
-      background:rgba(5,14,29,.78);backdrop-filter:blur(2px); }
-    #qcEspera295 .qc-espera-conteudo { display:flex;flex-direction:column;
-      align-items:center;gap:15px;color:#fff;text-align:center;
-      background:#172b47;border:1px solid #e6c36366;
-      border-radius:16px;padding:26px 32px;max-width:85%;
-      box-shadow:0 14px 35px #0007; }
-    #qcEspera295 .qc-espera-roda { width:39px;height:39px;border-radius:50%;
-      border:4px solid #e6c36355;border-top-color:#e6c363;
-      animation:qc-girar295 .8s linear infinite; }
+    @keyframes qc-girar297 { to { transform: rotate(360deg); } }
+    .qc-espera-roda297 {
+      display:inline-block;width:15px;height:15px;flex:none;
+      box-sizing:border-box;border:2px solid #e2ba60aa;
+      border-top-color:#fff;border-radius:50%;vertical-align:-3px;
+      animation:qc-girar297 .8s linear infinite;
+    }
+    button > .qc-espera-roda297 { margin-left:8px; }
+    .qc-espera-inline297 {
+      display:inline-flex;gap:7px;align-items:center;
+      margin-left:8px;vertical-align:middle;
+    }
+    .qc-espera-mensagem297 {
+      display:flex;align-items:center;gap:8px;min-height:20px;
+      font-size:12px;color:#e2ba60;margin:8px 0;
+    }
+    .qc-espera-mensagem297 > .qc-espera-roda297 { margin:0; }
     @media (prefers-reduced-motion:reduce) {
-      #qcEspera295 .qc-espera-roda {animation-duration:2s;}
+      .qc-espera-roda297 { animation-duration:2s; }
     }
   `;
   document.head.appendChild(estilo);
-  const camada = document.createElement("div");
-  camada.id = "qcEspera295";
-  camada.setAttribute("role", "status");
-  camada.setAttribute("aria-live", "polite");
-  camada.setAttribute("aria-label", "Operacao em andamento");
-  camada.innerHTML =
-    '<div class="qc-espera-conteudo">' +
-    '<span class="qc-espera-roda" aria-hidden="true"></span>' +
-    '<strong id="qcEsperaTexto295">Processando...</strong></div>';
-  document.body.appendChild(camada);
-  const texto = document.getElementById("qcEsperaTexto295");
-  let abertos = 0;
-  let atraso = null;
-  function iniciar(mensagem = "Consultando o sistema...") {
-    abertos++;
-    texto.textContent = mensagem;
-    if (atraso !== null) clearTimeout(atraso);
-    atraso = setTimeout(() => {
-      atraso = null;
-      if (abertos > 0) camada.style.display = "flex";
-    }, 170); // Evita piscar em operacoes muito rapidas.
-    let encerrado = false;
-    return () => {
-      if (encerrado) return;
-      encerrado = true;
-      abertos = Math.max(0, abertos - 1);
-      if (abertos === 0) {
-        if (atraso !== null) clearTimeout(atraso);
-        atraso = null;
-        camada.style.display = "none";
+
+  let ultimoBotao = null;
+  let instanteClique = 0;
+  document.addEventListener("click", evento => {
+    const botao = evento.target?.closest?.("button");
+    if (botao) {
+      ultimoBotao = botao;
+      instanteClique = Date.now();
+    }
+  }, true);
+
+  const ativos = new WeakMap();
+  function visivel(el) {
+    if (!(el instanceof HTMLElement) || !el.isConnected) return false;
+    if (!el.getClientRects().length) return false;
+    let pai = el;
+    while (pai && pai instanceof HTMLElement) {
+      const css = getComputedStyle(pai);
+      if (css.display === "none" || css.visibility === "hidden") return false;
+      pai = pai.parentElement;
+    }
+    return true;
+  }
+  function modalVisivel() {
+    return [...document.querySelectorAll(".qc-modal-overlay, [role=dialog]")]
+      .reverse().find(visivel) || null;
+  }
+  function alvoMensagem(modal) {
+    const raiz = modal || document;
+    const seletores = modal
+      ? "#qcPedidosReceber295 [role=status], [role=status], .qc-modal-mensagem"
+      : "#qcMensagemAcesso, #qcMensagemTesoureiro, #qcMensagemTrocaSenha, " +
+        "#mensagem, #qcMensagemCopia, [role=status]";
+    const candidatos = [...raiz.querySelectorAll(seletores)].filter(visivel);
+    return candidatos.find(el =>
+      /consult|aguard|process|carreg|prepar|assin|verific/i.test(el.textContent)) ||
+      candidatos[0] || null;
+  }
+  // Uma unica roldana por elemento, mesmo com varias chamadas simultaneas.
+  function ocupar(el, tipo, mensagem) {
+    let registro = ativos.get(el);
+    if (registro) {
+      registro.quantidade++;
+      return () => liberar(el);
+    }
+    const roda = document.createElement("span");
+    roda.className = "qc-espera-roda297";
+    roda.setAttribute("aria-hidden", "true");
+    roda.title = mensagem;
+    const elemento = tipo === "botao" ? roda : document.createElement("span");
+    if (tipo !== "botao") {
+      elemento.className = "qc-espera-inline297";
+      elemento.append(roda);
+    }
+    const ocupadoAntes = el.getAttribute("aria-busy");
+    el.setAttribute("aria-busy", "true");
+    el.appendChild(elemento);
+    ativos.set(el, {quantidade:1,elemento,ocupadoAntes});
+    return () => liberar(el);
+  }
+  function liberar(el) {
+    const reg = ativos.get(el);
+    if (!reg) return;
+    reg.quantidade--;
+    if (reg.quantidade > 0) return;
+    reg.elemento.remove();
+    if (reg.ocupadoAntes === null) el.removeAttribute("aria-busy");
+    else el.setAttribute("aria-busy", reg.ocupadoAntes);
+    ativos.delete(el);
+  }
+
+  // Chamadas explicitas podem passar (mensagem, botao, campoDaMensagem).
+  // Chamadas de fetch sem alvo usam o botao acionado ou a mensagem visivel.
+  function iniciar(mensagem = "Consultando o QuintosCoin...", botao, campo) {
+    const acionado = botao instanceof HTMLButtonElement ? botao :
+      (Date.now() - instanteClique < 1300 ? ultimoBotao : null);
+    const liberacoes = [];
+    let avisoTemporario = null;
+    let terminou = false;
+    const atraso = setTimeout(() => {
+      if (terminou) return;
+      const modal = modalVisivel();
+      const botaoVisivel = acionado && visivel(acionado) &&
+        (!modal || modal.contains(acionado)) ? acionado : null;
+      if (botaoVisivel) liberacoes.push(ocupar(botaoVisivel,"botao",mensagem));
+      const campoVisivel = campo && visivel(campo) ? campo :
+        (!botaoVisivel ? alvoMensagem(modal) : null);
+      if (campoVisivel && campoVisivel !== botaoVisivel) {
+        liberacoes.push(ocupar(campoVisivel,"mensagem",mensagem));
       }
+      if (!botaoVisivel && !campoVisivel) {
+        // Se nao existe uma mensagem apropriada, cria uma no proprio contexto.
+        const container = (modal && modal.querySelector(".qc-modal-card")) ||
+          [...document.querySelectorAll("#telaCarteira, #telaAcesso")]
+            .find(visivel);
+        if (container) {
+          avisoTemporario = document.createElement("p");
+          avisoTemporario.className = "qc-espera-mensagem297";
+          avisoTemporario.setAttribute("role","status");
+          avisoTemporario.textContent = mensagem;
+          container.appendChild(avisoTemporario);
+          liberacoes.push(ocupar(avisoTemporario,"mensagem",mensagem));
+        }
+      }
+    }, 160); // Operacoes rapidas nao ficam piscando.
+    return () => {
+      if (terminou) return;
+      terminou = true;
+      clearTimeout(atraso);
+      liberacoes.forEach(soltar => soltar());
+      if (avisoTemporario) avisoTemporario.remove();
     };
   }
   return {iniciar};
@@ -352,7 +437,7 @@ async function QC_carregarPedidosReceber295() {
         cartao.append(botao,mensagem,acoes);
         botao.addEventListener("click",async () => {
           botao.disabled = true;
-          const encerrar = QC_ESPERA295.iniciar("Preparando o recebimento...");
+          const encerrar = QC_ESPERA295.iniciar("Preparando o recebimento...", botao, mensagem);
           try {
             let emissao = idEmissao;
             if (!emissao) {
