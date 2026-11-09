@@ -10,6 +10,15 @@
  
 <link rel="stylesheet" href="style.css?v=291">
 
+<style>
+  html.qc-restaurando #telaAcesso,
+  html.qc-restaurando #telaCarteira { visibility:hidden; }
+  html.qc-restaurando main.carteira::before {
+    content:"Restaurando acesso à carteira...";
+    display:block; padding:28px 14px; text-align:center;
+    color:#e2ba60; font-size:14px;
+  }
+</style>
 <script>
   if (
     sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") &&
@@ -327,7 +336,7 @@ style="display:none;">
 
   
  <script src="qc-criptografia.js?v=1"></script>
- <script src="carteira.js?v=301"></script>
+ <script src="carteira.js?v=303"></script>
  <script src="qc-fichas.js?v=300"></script>
  <script src="qc-saldo.js?v=301"></script>
  <script src="qc-doacao-qr301.js?v=301"></script>
