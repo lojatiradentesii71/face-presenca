@@ -878,6 +878,11 @@ window.QC_inserirRecebimento198 = function(item, pedido) {
           await window.QC_atualizarSaldoReal202();
         }
         mensagem.textContent = "✅ Recebimento concluído. Seu saldo foi atualizado.";
+        if (typeof window.QC_mostrarRecebimentoConcluido300 === "function") {
+          window.QC_mostrarRecebimentoConcluido300({
+            valor: valorAutorizado, idEmissao
+          });
+        }
       } catch (erroSaldo) {
         mensagem.textContent = "✅ Fichas recebidas e protegidas. " +
           "Não foi possível atualizar o saldo agora: " + erroSaldo.message;
