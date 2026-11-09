@@ -1294,6 +1294,7 @@ async function QC_carregarNome291() {
     try {
       const conta=await QC_localizarConta291({idCadastro});
       // Nunca remover registros com outras carteiras; apenas selecionar o ID.
+      QC_AUTO303.limpar();
       sessionStorage.removeItem("QC_TOKEN_SESSAO_TESTE");
       if (window.QC_limparSenhaSessao291) window.QC_limparSenhaSessao291();
       localStorage.setItem(QC_ID_LOCAL,conta.idCarteira);
@@ -1505,6 +1506,142 @@ async function QC_enviarAtivacaoV2(dados) {
 
 const QC_CHAVE_SESSAO = "QC_TOKEN_SESSAO_TESTE";
 
+// PASSO 303 — sessao temporaria restauravel, sem salvar senha legivel.
+// Os dados cifrados permanecem nesta aba (sessionStorage). A chave AES
+// nao exportavel fica no IndexedDB do navegador. A restauracao EXIGE o
+// token ainda valido no Apps Script. Use apenas em dispositivos pessoais.
+const QC_AUTO303 = (() => {
+  "use strict";
+  const NOME = "QC_ACESSO_TEMPORARIO_303";
+  const BASE = "QC_CHAVES_TEMPORARIAS_303";
+  const LOJA = "chaves";
+  const INATIVIDADE = 30 * 60 * 1000;
+  const MAXIMO = 30 * 60 * 1000; // alinhado ao TTL atual do servidor
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  let ultimoToque = 0;
+
+  function abrirBD() {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB || !window.crypto?.subtle) {
+        reject(Error("Armazenamento seguro indisponivel."));
+        return;
+      }
+      const req = indexedDB.open(BASE, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(LOJA)) db.createObjectStore(LOJA);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error || Error("Falha no IndexedDB."));
+      req.onblocked = () => reject(Error("IndexedDB bloqueado."));
+    });
+  }
+  async function banco(acao, chave, valor) {
+    const db = await abrirBD();
+    return new Promise((resolve, reject) => {
+      let resultado;
+      let transacao;
+      try {
+        transacao = db.transaction(LOJA, acao === "ler" ? "readonly" : "readwrite");
+        const loja = transacao.objectStore(LOJA);
+        const req = acao === "salvar" ? loja.put(valor, chave)
+          : acao === "excluir" ? loja.delete(chave) : loja.get(chave);
+        req.onsuccess = () => { resultado = req.result; };
+        transacao.oncomplete = () => { db.close(); resolve(resultado); };
+        transacao.onerror = () => { db.close(); reject(transacao.error || Error("Falha ao acessar a chave.")); };
+        transacao.onabort = () => { db.close(); reject(transacao.error || Error("Operacao de chave cancelada.")); };
+      } catch (e) { db.close(); reject(e); }
+    });
+  }
+  const codificar = bytes => btoa(Array.from(bytes, b => String.fromCharCode(b)).join(""));
+  const decodificar = texto => Uint8Array.from(atob(texto), c => c.charCodeAt(0));
+  function ler() {
+    try { return JSON.parse(sessionStorage.getItem(NOME) || "null"); }
+    catch (_) { return null; }
+  }
+  function limpar() {
+    const antigo = ler();
+    sessionStorage.removeItem(NOME);
+    if (antigo?.chaveId) banco("excluir", antigo.chaveId).catch(() => {});
+  }
+  function expirou(dados) {
+    const agora = Date.now();
+    return !dados || dados.versao !== 1 ||
+      !Number.isFinite(dados.ultimoUso) || !Number.isFinite(dados.limite) ||
+      dados.ultimoUso > agora + 60_000 ||
+      agora - dados.ultimoUso > INATIVIDADE || agora > dados.limite;
+  }
+  async function salvar(senha) {
+    limpar();
+    const id = localStorage.getItem("QC_ID_CARTEIRA");
+    const token = sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
+    if (!id || !token || typeof senha !== "string" || !senha) return false;
+    let chaveId = null;
+    try {
+      chaveId = crypto.randomUUID();
+      const chave = await crypto.subtle.generateKey(
+        {name:"AES-GCM", length:256}, false, ["encrypt", "decrypt"]);
+      await banco("salvar", chaveId, chave);
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const limite = Date.now() + MAXIMO;
+      const contexto = encoder.encode(id + "|" + token + "|" + limite);
+      const cifrado = await crypto.subtle.encrypt(
+        {name:"AES-GCM", iv, additionalData:contexto}, chave, encoder.encode(senha));
+      if (id !== localStorage.getItem("QC_ID_CARTEIRA") ||
+          token !== sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")) {
+        await banco("excluir", chaveId);
+        return false;
+      }
+      sessionStorage.setItem(NOME, JSON.stringify({
+        versao:1, id, chaveId, iv:codificar(iv), dados:codificar(new Uint8Array(cifrado)),
+        limite, ultimoUso:Date.now()
+      }));
+      return true;
+    } catch (_) {
+      sessionStorage.removeItem(NOME);
+      if (chaveId) banco("excluir", chaveId).catch(() => {});
+      return false; // Uma falha no cache NUNCA bloqueia o login.
+    }
+  }
+  async function recuperar() {
+    const dados = ler();
+    if (!dados) return null;
+    const id = localStorage.getItem("QC_ID_CARTEIRA");
+    const token = sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
+    if (!id || !token || id !== dados.id || expirou(dados)) {
+      limpar();
+      return null;
+    }
+    try {
+      const chave = await banco("ler", dados.chaveId);
+      if (!chave) { limpar(); return null; }
+      const contexto = encoder.encode(id + "|" + token + "|" + dados.limite);
+      const claro = await crypto.subtle.decrypt(
+        {name:"AES-GCM", iv:decodificar(dados.iv), additionalData:contexto},
+        chave, decodificar(dados.dados));
+      if (id !== localStorage.getItem("QC_ID_CARTEIRA") ||
+          token !== sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")) return null;
+      return decoder.decode(claro);
+    } catch (_) { limpar(); return null; }
+  }
+  function atividade() {
+    const agora = Date.now();
+    if (agora - ultimoToque < 10_000) return;
+    ultimoToque = agora;
+    const dados = ler();
+    if (!dados || expirou(dados)) return;
+    if (dados.id !== localStorage.getItem("QC_ID_CARTEIRA") ||
+      !sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")) return;
+    dados.ultimoUso = agora;
+    sessionStorage.setItem(NOME, JSON.stringify(dados));
+  }
+  document.addEventListener("pointerdown", atividade, {passive:true});
+  document.addEventListener("keydown", atividade);
+  return {salvar, recuperar, limpar, atividade};
+})();
+
+
 
 async function QC_validarSessaoServidor(tokenSessao) {
 
@@ -1621,6 +1758,8 @@ if (resultado.status === "OK") {
       throw Error("Modulo do saldo nao carregado.");
     }
     await window.QC_aposLogin291(senha);
+    // O acesso automatico so e ativado se a senha abriu as fichas.
+    await QC_AUTO303.salvar(senha);
   } catch (erroFichas) {
     const msg=document.getElementById("mensagem");
     if(msg) msg.textContent="⚠️ Fichas protegidas: "+
@@ -1918,6 +2057,7 @@ document.getElementById("qcBtnContinuar")
         );
 
         // Apagar o token local, caso exista.
+        QC_AUTO303.limpar();
         sessionStorage.removeItem(
           QC_CHAVE_SESSAO
         );
@@ -2107,6 +2247,7 @@ document.getElementById("btnSairCarteira")
       }
 
       // Remover somente o token de sessão.
+      QC_AUTO303.limpar();
       sessionStorage.removeItem(QC_CHAVE_SESSAO);
       if (window.QC_limparSenhaSessao291) window.QC_limparSenhaSessao291();
 
@@ -2145,19 +2286,60 @@ document.getElementById("btnSairCarteira")
 /* QUINTOSCOIN - RESTAURAR SESSÃO AO ABRIR */
 
 async function QC_restaurarSessaoTeste() {
-  // Senha unica = login. Nao persistir a senha em localStorage/sessionStorage.
-  // Por isso, apos recarregar a pagina, pedir novamente o login.
-  sessionStorage.removeItem(QC_CHAVE_SESSAO);
-  document.documentElement.classList.remove("qc-restaurando");
-  QC_exibirTelaAcesso();
-  QC_mostrarLogin();
-  QC_carregarNome291();
+  const token = sessionStorage.getItem(QC_CHAVE_SESSAO);
+  const id = localStorage.getItem(QC_ID_LOCAL);
+  const recuperacao = new URLSearchParams(location.search).has("testeRecuperacao");
+  try {
+    if (!token || !id || recuperacao) {
+      QC_exibirTelaAcesso();
+      QC_mostrarLogin();
+      QC_carregarNome291();
+      return;
+    }
+    // Nunca reabrir a carteira somente pela existencia do token local.
+    const senha = await QC_AUTO303.recuperar();
+    if (!senha) throw Error("Acesso temporario encerrado.");
+    const validacao = await QC_validarSessaoServidor(token);
+    if (validacao.status !== "OK" || String(validacao.idCarteira) !== id) {
+      throw Error("Sessao nao validada pelo servidor.");
+    }
+    if (sessionStorage.getItem(QC_CHAVE_SESSAO) !== token ||
+      localStorage.getItem(QC_ID_LOCAL) !== id) return;
+    if (typeof window.QC_aposLogin291 !== "function") {
+      throw Error("Modulo das fichas indisponivel.");
+    }
+    // Somente mostrar o saldo como verificado APOS conferir as fichas gastas.
+    await window.QC_aposLogin291(senha);
+    if (sessionStorage.getItem(QC_CHAVE_SESSAO) !== token ||
+      localStorage.getItem(QC_ID_LOCAL) !== id) return;
+    QC_exibirTelaCarteira();
+    for (const nome of ["btnReceber", "btnDoar", "btnTransferir"]) {
+      const botao = document.getElementById(nome);
+      if (botao) botao.disabled = false;
+    }
+    if (window.QC_habilitarResgate278) window.QC_habilitarResgate278();
+    QC_AUTO303.atividade();
+    const msg = document.getElementById("mensagem");
+    if (msg && !msg.textContent.startsWith("⚠️")) msg.textContent = "";
+  } catch (erro) {
+    // Nao toca em saldos/fichas/backups; apenas solicita novo login.
+    QC_AUTO303.limpar();
+    if (sessionStorage.getItem(QC_CHAVE_SESSAO) === token) {
+      sessionStorage.removeItem(QC_CHAVE_SESSAO);
+    }
+    if (window.QC_limparSenhaSessao291) window.QC_limparSenhaSessao291();
+    QC_exibirTelaAcesso();
+    QC_mostrarLogin();
+    QC_carregarNome291();
+    QC_mostrarMensagemAcesso(
+      "A sessao temporaria nao pode ser restaurada. Entre com sua senha.", "erro");
+  } finally {
+    document.documentElement.classList.remove("qc-restaurando");
+  }
 }
 
-
-// Verificar a sessão ao abrir a página.
-QC_restaurarSessaoTeste();
-
+// Aguardar todos os modulos do navegador, inclusive qc-saldo.js.
+document.addEventListener("DOMContentLoaded", QC_restaurarSessaoTeste, {once:true});
 
 
 // QUINTOSCOIN - INTERFACE DE ALTERAÇÃO DE SENHA
@@ -2308,7 +2490,8 @@ document.getElementById("btnConfirmarTrocaSenha")
           console.warn("Migracao local pendente:",migracaoErro.message);
         }
 
-        // Remover token da sessão anterior
+        // Remover token da sessão anterior e acesso automatico.
+        QC_AUTO303.limpar();
         sessionStorage.removeItem(QC_CHAVE_SESSAO);
 
         // Limpar dados do formulário
@@ -2336,6 +2519,7 @@ document.getElementById("btnConfirmarTrocaSenha")
       } else {
 
         if (resultado.status === "SESSAO_INVALIDA") {
+          QC_AUTO303.limpar();
           sessionStorage.removeItem(QC_CHAVE_SESSAO);
 
           QC_exibirTelaAcesso();
