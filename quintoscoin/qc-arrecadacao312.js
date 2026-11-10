@@ -1,4 +1,4 @@
-/* QuintosCoin - Passo 312 - Arrecadacao pelo QR FIXO da mesa.
+/* QuintosCoin - Passo 314 - Conferencia do TS, leitura obrigatoria pelo QR FIXO da mesa.
    A leitura do QR e a autorizacao para ENTRAR no fechamento.
    O tesoureiro autenticado e o unico capaz de corrigir um total encerrado.
    Nunca usa o QR da sacola nem altera fichas da carteira. */
@@ -28,7 +28,7 @@
   const area=document.createElement('details');
   area.id='qcArrec312';
   area.innerHTML=`
-    <summary>Arrecadação</summary>
+    <summary>Conferência do TS</summary>
     <div class="qc-ar-corpo312">
       <button type="button" id="qcArLer312" class="qc-btn-modal-principal qc-ar-bot312">Ler QR Code do fechamento</button>
       <button type="button" id="qcArConsultar312" class="qc-btn-modal-secundario qc-ar-bot312">Consultar arrecadação encerrada</button>
@@ -117,13 +117,17 @@
     return {tipo:'imagem'};
   }
   async function reconheceu(texto){
-    if (!lendo || !/^QUINTOSCOIN\|FECHAMENTO\|V1\|/.test(texto)){
+    if (!lendo || !area.open || !/^QUINTOSCOIN\|FECHAMENTO\|V1\|/.test(texto)){
       status('Este não é o QR Code do fechamento QuintosCoin.',true);return;
     }
     parar();ocupada=true;
+    // Se a seção for recolhida antes de o servidor responder, a tela antiga
+    // não pode reaparecer ao reabrir a seção.
+    const requisicaoAtual=seq;
     status('Conferindo a sessão e a autorização do QR Code...');
     try {
       const r=await requisitar('qc_arrec_ler_qr312',{codigoQR:texto});
+      if (seq!==requisicaoAtual || !area.open) return;
       if (!['OK','FECHANDO'].includes(r.status))throw Error(r.mensagem||'Não há sessão aberta para conferir.');
       leitura={qr:texto,idSessao:r.idSessao,restauracao:r.status==='FECHANDO',totalQC:Number(r.totalQC||0)};
       $('qcArTitulo312').textContent='Sessão de '+(r.dataSessao||'hoje');
@@ -134,22 +138,44 @@
       $('qcArModo312').textContent=r.simulacao?'MODO DE TESTE: a conferência será simulada e não gravará na TS.':'';
       calcular();paineis('qcArConferir312');
       status(r.status==='FECHANDO'?'Há um fechamento anterior incompleto. Retome sem alterar os valores.':'QR Code aceito. Confira o dinheiro físico antes de encerrar.');
-    }catch(e){paineis(null);status('⚠️ '+(e.message||e),true);}
-    finally{ocupada=false;}
+    }catch(e){
+      if(seq===requisicaoAtual && area.open){paineis(null);status('⚠️ '+(e.message||e),true);}
+    }
+    finally{if(seq===requisicaoAtual)ocupada=false;}
   }
   $('qcArLer312').addEventListener('click',async()=>{
     if (ocupada||lendo)return;
-    ocupada=true;status('Abrindo câmera...');
+    ocupada=true;
+    // A abertura da câmera nunca deve deixar o cartão anterior visível.
+    // Apenas a leitura validada pelo servidor pode abrir a conferência.
+    leitura=null;
+    $('qcArDinheiro312').value='';
+    $('qcArTotal312').textContent='R$ —';
+    $('qcArEncerrar312').disabled=true;
+    $('qcArModo312').textContent='';
+    paineis('qcArScanner312');
+    status('Abrindo câmera...');
+    const tentativa=++seq;
     try{
-      leitor=leitor||await escolherLeitor();
-      cam=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+      if (!navigator.mediaDevices?.getUserMedia) throw Error('Câmera indisponível neste navegador.');
+      // Prioriza abrir e mostrar a câmera. O leitor de QR é carregado depois.
+      const novaCam=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+      if(seq!==tentativa || !area.open){novaCam.getTracks().forEach(t=>t.stop());return;}
+      cam=novaCam;
       video=document.createElement('video');video.playsInline=true;video.autoplay=true;video.muted=true;video.className='qc-ar-video312';
-      video.srcObject=cam;$('qcArVideoArea312').replaceChildren(video);paineis('qcArScanner312');
-      await video.play();lendo=true;const atual=++seq;
+      video.srcObject=cam;
+      $('qcArVideoArea312').replaceChildren(video);
+      await video.play();
+      if(seq!==tentativa || !area.open)return;
+      status('Preparando leitor do QR Code...');
+      leitor=leitor||await escolherLeitor();
+      if(seq!==tentativa || !area.open)return;
+      lendo=true;
       status('Aponte para o QR Code fixo da mesa.');
+      const atual=tentativa;
       const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d',{willReadFrequently:true});
       async function verificar(){
-        if (!lendo||seq!==atual||!video)return;
+        if (!lendo||seq!==atual||!video||!area.open)return;
         try{
           let texto='';
           if(leitor.tipo==='nativo'){
@@ -161,6 +187,8 @@
             const im=ctx.getImageData(0,0,w,h);
             texto=String(window.jsQR(im.data,w,h,{inversionAttempts:'dontInvert'})?.data||'');
           }
+          // Outra ação pode ter cancelado a leitura durante a detecção assíncrona.
+          if(!lendo||seq!==atual||!area.open)return;
           if(texto){
             if(/^QUINTOSCOIN\|FECHAMENTO\|V1\|/.test(texto)){
               await reconheceu(texto);return;
@@ -168,13 +196,20 @@
             status('Este QR Code não é o da mesa de fechamento.',true);
           }
         }catch(_){}
-        if(lendo&&seq===atual)setTimeout(verificar,300);
+        if(lendo&&seq===atual&&area.open)setTimeout(verificar,300);
       }
-      verificar();
-    }catch(e){parar();paineis(null);status('⚠️ '+(e.message||e),true);}
-    finally{ocupada=false;}
+      // Libera o controle da inicialização antes do primeiro quadro lido.
+      ocupada=false;
+      setTimeout(verificar,0);
+    }catch(e){
+      if(seq===tentativa){
+        parar();ocupada=false;paineis(null);status('⚠️ '+(e.message||e),true);
+      }
+    }finally{
+      if(seq===tentativa && !lendo)ocupada=false;
+    }
   });
-  $('qcArParar312').addEventListener('click',()=>{parar();paineis(null);status('Leitura cancelada. Nenhum fechamento foi realizado.');});
+  $('qcArParar312').addEventListener('click',()=>{parar();ocupada=false;paineis(null);status('Leitura cancelada. Nenhum fechamento foi realizado.');});
   function calcular(){
     const v=dinheiroValor($('qcArDinheiro312').value);
     const valido=!!leitura&&v!==null;
@@ -216,11 +251,16 @@
   }
   $('qcArConsultar312').addEventListener('click',async()=>{
     if(ocupada)return;
-    ocupada=true;status('Consultando arrecadações encerradas...');
+    if(lendo||cam)parar();
+    leitura=null;paineis(null);
+    ocupada=true;
+    const consultaAtual=++seq;
+    status('Consultando arrecadações encerradas...');
     try{
       const token=sessionStorage.getItem('QC_TOKEN_SESSAO_TESTE');
       if(!token)throw Error('Entre novamente na carteira para consultar.');
       const r=await requisitar('qc_arrec_consultar312',{tokenSessao:token});
+      if(seq!==consultaAtual || !area.open)return;
       if(r.status!=='OK')throw Error(r.mensagem||'Consulta indisponível.');
       registros=Array.isArray(r.sessoes)?r.sessoes:[];
       tesoureiroAutorizado=r.tesoureiro===true;
@@ -233,8 +273,8 @@
       sel.hidden=registros.length<2;sel.value='0';
       mostrarRegistro(registros[0]);
       status('Total disponível para consulta e anúncio.');
-    }catch(e){paineis(null);status('⚠️ '+(e.message||e),true);}
-    finally{ocupada=false;}
+    }catch(e){if(seq===consultaAtual && area.open){paineis(null);status('⚠️ '+(e.message||e),true);}}
+    finally{if(seq===consultaAtual)ocupada=false;}
   });
   $('qcArHistorico312').addEventListener('change',ev=>{
     const i=Number(ev.target.value);
@@ -261,6 +301,13 @@
     }catch(e){status('⚠️ '+(e.message||e),true);}
     finally{ocupada=false;$('qcArCorrigir312').disabled=false;}
   });
-  // Nao deixar a camera ligada se a secao for recolhida.
-  area.addEventListener('toggle',()=>{if(!area.open&&lendo){parar();paineis(null);}});
+  paineis(null);
+  // Recolher a secao cancela qualquer leitura ou consulta pendente,
+  // e nunca deixa valores da conferencia abertos ao reexpandir.
+  area.addEventListener('toggle',()=>{
+    if(!area.open){
+      parar();leitura=null;ocupada=false;
+      paineis(null);status('');
+    }
+  });
 })();
