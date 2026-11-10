@@ -106,6 +106,40 @@
   let ocupada=false,escaneando=false,stream=null,video=null,leitor=null;
   let ciclo=0;
 
+  // Passo 311: sinal sonoro discreto ao ler o QR Code correto da sacola.
+  // O som confirma a LEITURA, nao a conclusao do registro no servidor.
+  let contextoSom311=null;
+  function prepararSom311() {
+    try {
+      const Audio=window.AudioContext||window.webkitAudioContext;
+      if (!Audio) return; // Navegadores sem Web Audio funcionam normalmente, sem som.
+      if (!contextoSom311 || contextoSom311.state==="closed") {
+        contextoSom311=new Audio();
+      }
+      if (contextoSom311.state==="suspended") {
+        contextoSom311.resume().catch(()=>{});
+      }
+    } catch (_) { /* Som opcional: nunca impedir a doacao. */ }
+  }
+  function tocarSomLeitura311() {
+    try {
+      if (!contextoSom311 || contextoSom311.state!=="running") return;
+      const t=contextoSom311.currentTime;
+      const oscilador=contextoSom311.createOscillator();
+      const ganho=contextoSom311.createGain();
+      oscilador.type="sine";
+      oscilador.frequency.setValueAtTime(880,t);
+      ganho.gain.setValueAtTime(0.0001,t);
+      ganho.gain.exponentialRampToValueAtTime(0.07,t+0.025);
+      ganho.gain.exponentialRampToValueAtTime(0.0001,t+0.18);
+      oscilador.connect(ganho);
+      ganho.connect(contextoSom311.destination);
+      oscilador.onended=()=>{oscilador.disconnect();ganho.disconnect();};
+      oscilador.start(t);
+      oscilador.stop(t+0.19);
+    } catch (_) { /* Som opcional: nunca impedir a doacao. */ }
+  }
+
   function modo(nome) {
     for (const [chave,elemento] of Object.entries(secoes)) elemento.hidden=chave!==nome;
     aviso.textContent="";
@@ -214,6 +248,7 @@
   async function registrarQR(texto) {
     if (!escaneando || texto!==QR_SACOLA || ocupada) return false;
     pararCamera();
+    tocarSomLeitura311(); // Uma unica vez, imediatamente apos a leitura valida.
     ocupada=true;
     modo("processando");
     try {
@@ -232,6 +267,7 @@
 
   $("qcLerSacola301").addEventListener("click",async()=>{
     if (ocupada || escaneando) return;
+    prepararSom311(); // Desbloqueia audio no gesto do usuario, inclusive no Android.
     ocupada=true;
     try {
       leitor=leitor||await escolherLeitor();
