@@ -3857,6 +3857,12 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     .qc-resgate-linha278 p {margin:5px 0;font-size:13px;overflow-wrap:anywhere}
     .qc-resgate-linha278 button {margin:5px 5px 0 0;padding:9px 12px;border-radius:8px}
     .qc-resgate-status278 {opacity:.85;font-size:12px}
+    #qcLimiteResgate333 {background:#ffffff0c;border:1px solid #e8c66b65;
+      border-radius:11px;padding:13px 14px;margin:10px 0 14px;
+      display:flex;flex-direction:column;gap:6px}
+    #qcLimiteResgate333 .qc-resgate-rotulo333 {font-size:13px;opacity:.9}
+    #qcMaximoResgate333 {font-size:24px;line-height:1.3;color:#e8c66b;font-weight:750}
+    #qcLimiteResgate333 .qc-resgate-nota333 {font-size:12px;opacity:.78;line-height:1.45}
   `;
   document.head.appendChild(estilo);
   const modal=document.createElement("div");
@@ -3868,6 +3874,11 @@ function QC_confirmarPagamentoPedido(nome, valor) {
       <div class="qc-modal-topo"><h3 id="qcTituloResgate278">Resgatar QuintosCoin</h3>
         <button type="button" id="qcFecharResgate278" class="qc-modal-fechar" aria-label="Fechar">×</button></div>
       <p class="qc-modal-texto">Informe quanto deseja resgatar. O pagamento sera combinado com o tesoureiro.</p>
+      <div id="qcLimiteResgate333" role="status" aria-live="polite">
+        <span class="qc-resgate-rotulo333">Saldo máximo disponível para resgate</span>
+        <strong id="qcMaximoResgate333">Conferindo saldo...</strong>
+        <small class="qc-resgate-nota333" id="qcNotaResgate333">Calculado pelas fichas disponíveis e verificadas desta carteira.</small>
+      </div>
       <label for="qcValorResgate278" class="qc-label-modal">Valor em QC</label>
       <input id="qcValorResgate278" class="qc-input-modal" type="number" min="2" step="1"
         inputmode="numeric" placeholder="Exemplo: 20">
@@ -3886,8 +3897,56 @@ function QC_confirmarPagamentoPedido(nome, valor) {
   const campo=document.getElementById("qcValorResgate278");
   const enviar=document.getElementById("qcSolicitarResgate278");
   const lista=document.getElementById("qcListaMeusResgates278");
+  const maximoVisivel333=document.getElementById("qcMaximoResgate333");
+  const notaMaximo333=document.getElementById("qcNotaResgate333");
   let ocupado=false;
-  function fechar() {if(!ocupado) modal.style.display="none";}
+  let maximoResgate333=null;
+  let observarSaldo333=null;
+
+  function atualizarMaximoResgate333() {
+    maximoResgate333=null;
+    campo.removeAttribute("max");
+    let plano;
+    try {
+      if(typeof window.QC_planejarMovimento267!=="function") {
+        throw Error("Rotina de saldo indisponível.");
+      }
+      // Consulta apenas memória de fichas já verificadas; nenhuma transação.
+      plano=window.QC_planejarMovimento267(2);
+      const saldo=plano && plano.saldoDisponivel;
+      if(!Number.isSafeInteger(saldo) || saldo<0) {
+        throw Error("Saldo ainda não verificado nesta sessão.");
+      }
+      if(saldo>0) {
+        // O total deve ser componível sem troco para ser chamado de máximo.
+        const total=window.QC_planejarMovimento267(saldo);
+        if(!total || total.status!=="OK") {
+          throw Error("Não foi possível conferir o valor máximo resgatável.");
+        }
+      }
+      maximoResgate333=saldo;
+      maximoVisivel333.textContent="Qc$ "+saldo.toLocaleString("pt-BR");
+      notaMaximo333.textContent=saldo===0
+        ? "Nenhuma ficha disponível para resgate."
+        : "Limite baseado nas fichas verificadas. O servidor confirma a disponibilidade ao solicitar.";
+      if(saldo>0) campo.max=String(saldo);
+    } catch(_) {
+      maximoVisivel333.textContent="Saldo não conferido";
+      notaMaximo333.textContent=
+        "Entre na carteira e aguarde a verificação do saldo antes de solicitar.";
+    }
+    if(!ocupado) enviar.disabled=maximoResgate333===0;
+  }
+
+  function pararObservacaoSaldo333() {
+    if(observarSaldo333) observarSaldo333.disconnect();
+    observarSaldo333=null;
+  }
+  function fechar() {
+    if(ocupado)return;
+    pararObservacaoSaldo333();
+    modal.style.display="none";
+  }
   function rotuloEstado(st) {
     return ({PENDENTE:"Aguardando tesoureiro",
       CRIANDO:"Preparando",
@@ -3949,6 +4008,17 @@ function QC_confirmarPagamentoPedido(nome, valor) {
   resgatar.addEventListener("click",()=>{
     if(!sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")) return;
     status.textContent="";campo.value="";modal.style.display="flex";
+    atualizarMaximoResgate333();
+    // Se o saldo terminar de carregar enquanto a janela está aberta,
+    // atualizamos o valor exibido, sem recarregar o navegador.
+    pararObservacaoSaldo333();
+    const elSaldo=document.getElementById("saldo");
+    if(elSaldo && typeof MutationObserver==="function") {
+      observarSaldo333=new MutationObserver(()=>{
+        if(modal.style.display==="flex" && !ocupado) atualizarMaximoResgate333();
+      });
+      observarSaldo333.observe(elSaldo,{subtree:true,childList:true,characterData:true});
+    }
   });
   document.getElementById("qcFecharResgate278").addEventListener("click",fechar);
   document.getElementById("qcCancelarTelaResgate278").addEventListener("click",fechar);
@@ -3959,6 +4029,10 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     if(!campo.value.trim()||!Number.isSafeInteger(valor)||valor<2||valor===3){
       status.textContent="Informe valor inteiro a partir de 2 QC, exceto 3 QC.";return;
     }
+    atualizarMaximoResgate333();
+    if(maximoResgate333!==null && valor>maximoResgate333) {
+      status.textContent="O valor informado supera o saldo disponível para resgate.";return;
+    }
     ocupado=true;enviar.disabled=true;status.textContent="Preparando resgate seguro...";
     try{
       if(typeof window.QC_solicitarResgate278!=="function")throw Error("Modulo de resgate nao carregado.");
@@ -3967,13 +4041,19 @@ function QC_confirmarPagamentoPedido(nome, valor) {
       else if(r.status==="PENDENTE" && r.situacao){
         status.textContent="✅ Resgate registrado. Combine o pagamento com o tesoureiro. " +
           "Os QCs permanecem reservados.";
-        campo.value="";await atualizarMeus();
+        campo.value="";
+        maximoResgate333=null;
+        maximoVisivel333.textContent="Rever saldo";
+        notaMaximo333.textContent=
+          "As fichas solicitadas permanecem reservadas. Confira novamente o saldo disponível.";
+        campo.removeAttribute("max");
+        await atualizarMeus();
       } else {
         status.textContent=r.mensagem||"Operacao pendente. Preserve este aparelho e retome o pedido.";
         await atualizarMeus();
       }
     }catch(e){status.textContent="⚠️ "+String(e.message||e)+" Se a conexao caiu, preserve os dados deste aparelho.";}
-    finally{ocupado=false;enviar.disabled=false;}
+    finally{ocupado=false;enviar.disabled=maximoResgate333===0;}
   });
   campo.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();enviar.click();}});
   document.getElementById("qcMeusResgates278").addEventListener("toggle",e=>{
