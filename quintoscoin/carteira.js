@@ -1,3 +1,4 @@
+// QUINTOSCOIN - PASSO 331 - PAINEL DO TESOUREIRO (base 291)
 // QUINTOSCOIN - PASSO 291 - LOGIN, NOME E INTERFACE SIMPLIFICADA
 // Mantem as funcoes do Passo 278 e acrescenta o cliente de API ausente.
 // IMPORTANTE: esta funcao e somente para rotas autenticadas.
@@ -3104,11 +3105,11 @@ qcAreaTesoureiro.innerHTML = `
     <h4 style="margin:0 0 12px">📊 Circulação e lastro</h4>
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
       <div style="padding:10px;border-radius:10px;background:#ffffff10">
-        <small style="display:block;opacity:.8">QCs em circulação</small>
+        <small style="display:block;opacity:.8">Qc$ em circulação</small>
         <strong id="qcCirculacao276" style="font-size:21px">—</strong>
       </div>
       <div style="padding:10px;border-radius:10px;background:#ffffff10">
-        <small style="display:block;opacity:.8">Lastro mínimo a reservar</small>
+        <small style="display:block;opacity:.8">Lastro bancário indisponível</small>
         <strong id="qcLastro276" style="font-size:21px">—</strong>
       </div>
     </div>
@@ -3150,7 +3151,10 @@ document.getElementById("telaCarteira")
   .appendChild(qcAreaTesoureiro);
 
 
-// PASSO 276 - Dados financeiros visiveis apenas apos validacao no servidor.
+// PASSO 331 - Diagnostico seguro da circulacao e do lastro.
+// Os numeros somente aparecem como confirmados se a auditoria do servidor
+// retornar CONFERIDO. Erros e registros de testes nao viram "saldo zero".
+let qcConsultaPainel331 = 0;
 async function QC_carregarPainelTesoureiro276(tokenSessao) {
   const painel = document.getElementById("qcPainelCirculacao276");
   if (!painel) return;
@@ -3158,70 +3162,97 @@ async function QC_carregarPainelTesoureiro276(tokenSessao) {
   const lastro = document.getElementById("qcLastro276");
   const resumo = document.getElementById("qcResumoLastro276");
   const aviso = document.getElementById("qcAvisoLastro276");
+  const consultaAtual = ++qcConsultaPainel331;
+  const sessaoAtual = () =>
+    sessionStorage.getItem(QC_CHAVE_SESSAO) === tokenSessao &&
+    consultaAtual === qcConsultaPainel331;
+  const formato = n => Number(n).toLocaleString("pt-BR");
+  const inteiro = n => typeof n === "number" &&
+    Number.isSafeInteger(n) && n >= 0;
+  const valorQC = n => inteiro(n) ? "Qc$ " + formato(n) : "a conferir";
+
   circulacao.textContent = "—";
   lastro.textContent = "—";
-  resumo.textContent = "Conferindo registros...";
+  resumo.textContent = "Consultando o livro de emissões, doações e resgates...";
   aviso.textContent = "";
+  if (!tokenSessao) {
+    resumo.textContent = "Entre na carteira para consultar.";
+    return;
+  }
+
   try {
-    const URL_SCRIPT =
-      "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-    const resposta = await fetch(URL_SCRIPT, {
+    const resposta = await fetch(QC_URL_191, {
       method: "POST",
       redirect: "follow",
-      headers: {"Content-Type": "text/plain;charset=utf-8"},
+      headers: {"Content-Type":"text/plain;charset=utf-8"},
       body: JSON.stringify({
         acao: "qc_painel_tesoureiro",
         tokenSessao: tokenSessao
       })
     });
-    if (!resposta.ok) throw new Error("Falha na comunicacao.");
+    if (!resposta.ok) throw new Error("Falha na comunicação (HTTP " + resposta.status + ").");
     const dados = await resposta.json();
-    if (sessionStorage.getItem(QC_CHAVE_SESSAO) !== tokenSessao) return;
-    if (dados.status !== "OK" || dados.tesoureiro !== true) {
-      throw new Error("Painel financeiro indisponivel.");
+    if (!sessaoAtual()) return;
+    if (!dados || dados.status !== "OK" || dados.tesoureiro !== true) {
+      throw new Error(dados?.mensagem || (
+        dados?.status === "NAO_AUTORIZADO"
+          ? "Acesso restrito ao tesoureiro autenticado."
+          : "A rota qc_painel_tesoureiro não retornou os dados esperados. " +
+            "Verifique o encaminhamento da rota no doPost do Apps Script."
+      ));
     }
-    const formato = n => Number(n).toLocaleString("pt-BR");
-    if (dados.conferencia === "CONFERIDO" &&
-        Number.isSafeInteger(dados.circulacao) &&
-        Number.isSafeInteger(dados.lastroReservadoBRL)) {
-      circulacao.textContent = formato(dados.circulacao) + " QC";
-      lastro.textContent = Number(dados.lastroReservadoBRL)
-        .toLocaleString("pt-BR", {style:"currency", currency:"BRL"});
-    }
+
     const linhas = [
-      "Emitidos: " + formato(dados.emitidos) + " QC",
-      "Doações extintas: " +
-        (Number.isSafeInteger(dados.doacoesExtintas) ?
-          formato(dados.doacoesExtintas) + " QC" : "a conferir"),
-      "Resgates confirmados: " +
-        (Number.isSafeInteger(dados.resgatesEmDinheiro) ?
-          formato(dados.resgatesEmDinheiro) + " QC" : "a conferir"),
+      "Emitidos: " + valorQC(dados.emitidos),
+      "Doações extintas: " + valorQC(dados.doacoesExtintas),
+      "Resgates confirmados: " + valorQC(dados.resgatesEmDinheiro),
       "Atualizado: " + (dados.atualizadoEm || "a conferir")
     ];
-    if (dados.conferencia !== "CONFERIDO") {
-      aviso.textContent = "⚠️ Conferência necessária: " +
-        (Array.isArray(dados.avisos) && dados.avisos.length ?
-          dados.avisos.join(" ") : "lançamentos inconsistentes.");
-      linhas.push("Lastro ainda não confirmado.");
-    } else {
-      aviso.textContent = "Valores contábeis calculados. Confira o saldo bancário separadamente.";
-    }
-    const linhasHTML = linhas.map(texto => {
+    resumo.replaceChildren(...linhas.map(texto => {
       const linha = document.createElement("span");
       linha.textContent = texto;
       linha.style.cssText = "display:block;line-height:1.5;margin:2px 0";
       return linha;
-    });
-    resumo.replaceChildren(...linhasHTML);
-  } catch (erro) {
-    if (sessionStorage.getItem(QC_CHAVE_SESSAO) === tokenSessao) {
-      circulacao.textContent = "—";
-      lastro.textContent = "—";
-      resumo.textContent = "Nao foi possivel conferir o lastro.";
-      aviso.textContent = "Acesso ou registros indisponiveis.";
+    }));
+
+    if (dados.conferencia === "CONFERIDO" &&
+        inteiro(dados.circulacao) &&
+        inteiro(dados.lastroReservadoBRL) &&
+        dados.lastroReservadoBRL === dados.circulacao) {
+      circulacao.textContent = "Qc$ " + formato(dados.circulacao);
+      lastro.textContent = Number(dados.lastroReservadoBRL)
+        .toLocaleString("pt-BR", {style:"currency",currency:"BRL"});
+      aviso.textContent = "Valores calculados a partir dos registros. " +
+        "Confira separadamente o saldo bancário.";
+    } else {
+      // Nunca apresenta um lastro hipotético como confirmado.
+      circulacao.textContent = "A conferir";
+      lastro.textContent = "A conferir";
+      const motivos = Array.isArray(dados.avisos)
+        ? dados.avisos.filter(x => typeof x === "string" && x.trim()).slice(0,8)
+        : [];
+      aviso.textContent = "⚠️ Conferência financeira pendente. " +
+        (motivos.length ? motivos.join(" | ") :
+          "O servidor não confirmou a consistência dos totais.");
     }
+  } catch (erro) {
+    if (!sessaoAtual()) return;
+    circulacao.textContent = "Indisponível";
+    lastro.textContent = "Indisponível";
+    resumo.textContent = "A consulta financeira não foi concluída.";
+    aviso.textContent = "⚠️ " + (erro?.message || String(erro));
+    console.error("QuintosCoin — painel financeiro 331:", erro);
   }
 }
+
+// Ao expandir a Area do Tesoureiro, reconsulta automaticamente os totais.
+// Apenas altera a consulta, nao cria movimentacao nem escreve em planilhas.
+document.getElementById("qcDetalhesTesoureiro294")
+  .addEventListener("toggle", function() {
+    if (!this.open || qcAreaTesoureiro.style.display !== "block") return;
+    const token = sessionStorage.getItem(QC_CHAVE_SESSAO);
+    if (token) QC_carregarPainelTesoureiro276(token);
+  });
 
 // Consultar autorização e pedidos no Apps Script.
 async function QC_atualizarAreaTesoureiro(abrirLista = false) {
