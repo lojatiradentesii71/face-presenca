@@ -3857,6 +3857,9 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     .qc-resgate-linha278 p {margin:5px 0;font-size:13px;overflow-wrap:anywhere}
     .qc-resgate-linha278 button {margin:5px 5px 0 0;padding:9px 12px;border-radius:8px}
     .qc-resgate-status278 {opacity:.85;font-size:12px}
+    #qcChavePixResgate334 {width:100%;box-sizing:border-box;margin-top:6px}
+    #qcAjudaPix334 {font-size:12px;line-height:1.4;opacity:.8;margin:5px 0 12px}
+    .qc-campo-pix334 {margin:0 0 10px;display:block}
     #qcLimiteResgate333 {background:#ffffff0c;border:1px solid #e8c66b65;
       border-radius:11px;padding:13px 14px;margin:10px 0 14px;
       display:flex;flex-direction:column;gap:6px}
@@ -3882,6 +3885,12 @@ function QC_confirmarPagamentoPedido(nome, valor) {
       <label for="qcValorResgate278" class="qc-label-modal">Valor em QC</label>
       <input id="qcValorResgate278" class="qc-input-modal" type="number" min="2" step="1"
         inputmode="numeric" placeholder="Exemplo: 20">
+      <label for="qcChavePixResgate334" class="qc-label-modal qc-campo-pix334">Sua chave Pix para receber o pagamento
+        <input id="qcChavePixResgate334" class="qc-input-modal" type="text" inputmode="email"
+          autocomplete="off" autocapitalize="off" spellcheck="false"
+          maxlength="90" placeholder="CPF, e-mail, celular ou chave aleatória" required>
+      </label>
+      <p id="qcAjudaPix334">A chave será enviada somente ao tesoureiro para realizar o pagamento. Confira-a antes de solicitar.</p>
       <div class="qc-modal-botoes">
         <button id="qcSolicitarResgate278" type="button" class="qc-btn-modal-principal">Solicitar resgate</button>
         <button id="qcCancelarTelaResgate278" type="button" class="qc-btn-modal-secundario">Voltar</button>
@@ -3895,6 +3904,7 @@ function QC_confirmarPagamentoPedido(nome, valor) {
   document.body.appendChild(modal);
   const status=document.getElementById("qcMensagemResgate278");
   const campo=document.getElementById("qcValorResgate278");
+  const campoPix=document.getElementById("qcChavePixResgate334");
   const enviar=document.getElementById("qcSolicitarResgate278");
   const lista=document.getElementById("qcListaMeusResgates278");
   const maximoVisivel333=document.getElementById("qcMaximoResgate333");
@@ -4007,7 +4017,7 @@ function QC_confirmarPagamentoPedido(nome, valor) {
   }
   resgatar.addEventListener("click",()=>{
     if(!sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")) return;
-    status.textContent="";campo.value="";modal.style.display="flex";
+    status.textContent="";campo.value="";campoPix.value="";modal.style.display="flex";
     atualizarMaximoResgate333();
     // Se o saldo terminar de carregar enquanto a janela está aberta,
     // atualizamos o valor exibido, sem recarregar o navegador.
@@ -4029,6 +4039,8 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     if(!campo.value.trim()||!Number.isSafeInteger(valor)||valor<2||valor===3){
       status.textContent="Informe valor inteiro a partir de 2 QC, exceto 3 QC.";return;
     }
+    const chavePix=campoPix.value.trim();
+    if(!chavePix) {status.textContent="Informe sua chave Pix antes de solicitar o resgate.";campoPix.focus();return;}
     atualizarMaximoResgate333();
     if(maximoResgate333!==null && valor>maximoResgate333) {
       status.textContent="O valor informado supera o saldo disponível para resgate.";return;
@@ -4036,12 +4048,12 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     ocupado=true;enviar.disabled=true;status.textContent="Preparando resgate seguro...";
     try{
       if(typeof window.QC_solicitarResgate278!=="function")throw Error("Modulo de resgate nao carregado.");
-      const r=await window.QC_solicitarResgate278(valor);
+      const r=await window.QC_solicitarResgate278(valor,chavePix);
       if(r.status==="CANCELADO_PELO_USUARIO") status.textContent="Operacao cancelada.";
-      else if(r.status==="PENDENTE" && r.situacao){
-        status.textContent="✅ Resgate registrado. Combine o pagamento com o tesoureiro. " +
-          "Os QCs permanecem reservados.";
-        campo.value="";
+      else if(r.status==="PENDENTE" && r.situacao && r.pixRegistrado===true){
+        status.textContent="✅ Resgate e chave Pix registrados. Aguarde o pagamento do tesoureiro. " +
+          "Os Qc$ permanecem reservados.";
+        campo.value="";campoPix.value="";
         maximoResgate333=null;
         maximoVisivel333.textContent="Rever saldo";
         notaMaximo333.textContent=
@@ -4049,10 +4061,10 @@ function QC_confirmarPagamentoPedido(nome, valor) {
         campo.removeAttribute("max");
         await atualizarMeus();
       } else {
-        status.textContent=r.mensagem||"Operacao pendente. Preserve este aparelho e retome o pedido.";
+        status.textContent=r.mensagem||"Operação ainda em andamento; não solicite outro resgate. Retome o mesmo pedido.";
         await atualizarMeus();
       }
-    }catch(e){status.textContent="⚠️ "+String(e.message||e)+" Se a conexao caiu, preserve os dados deste aparelho.";}
+    }catch(e){status.textContent="⚠️ "+String(e.message||e)+" Se a conexão caiu, preserve o pedido neste aparelho e retome-o; não crie outro resgate.";}
     finally{ocupado=false;enviar.disabled=maximoResgate333===0;}
   });
   campo.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();enviar.click();}});
@@ -4137,9 +4149,29 @@ function QC_confirmarPagamentoPedido(nome, valor) {
         const item=document.createElement("div");item.className="qc-resgate-linha278";
         const nome=document.createElement("strong");nome.textContent=p.nome;
         const info=document.createElement("p");
-        info.textContent=p.valor+" QC · "+p.solicitadoEm+" · "+p.status;
+        info.textContent="Qc$ "+Number(p.valor).toLocaleString("pt-BR")+
+          " · Pix R$ "+Number(p.valor).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+
+          " · "+p.solicitadoEm+" · "+p.status;
         const mensagem=document.createElement("p");mensagem.setAttribute("role","status");
         item.append(nome,info);
+        const pix=document.createElement("p");
+        const chavePix=String(p.chavePix||"").trim();
+        pix.textContent=chavePix ? "Chave Pix para pagamento: "+chavePix :
+          "Chave Pix não informada neste pedido. Consulte o irmão antes de pagar.";
+        pix.style.cssText="overflow-wrap:anywhere;color:#e8ca74;font-size:13px";
+        item.append(pix);
+        if(chavePix){
+          const copiar=document.createElement("button");
+          copiar.type="button";copiar.className="qc-btn-modal-secundario";
+          copiar.textContent="Copiar chave Pix";
+          copiar.addEventListener("click",async()=>{
+            try{
+              await navigator.clipboard.writeText(chavePix);
+              mensagem.textContent="Chave Pix copiada. Confirme o destinatário e o valor no banco antes de pagar.";
+            }catch(_){mensagem.textContent="Não foi possível copiar automaticamente. Selecione a chave exibida acima.";}
+          });
+          item.append(copiar);
+        }
         function botao(texto,acao,mensagemConfirmacao){
           const b=document.createElement("button");b.type="button";
           b.className="qc-btn-modal-secundario";b.textContent=texto;
