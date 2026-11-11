@@ -971,10 +971,6 @@
     const {id} = dadosDaSessao();
     return !!id && !!localStorage.getItem(CHAVE_RX275+id);
   };
-
-  // PASSO 332 - Confirmacao de transferencia no visual do aplicativo.
-// Inserir DENTRO do IIFE do arquivo qc-saldo.js, imediatamente antes de:
-// window.QC_transferirCriar275 = async function(valorSolicitado) {
 function QC_confirmarTransferencia332(opcoes) {
   return new Promise((resolver) => {
     if (document.getElementById("qcConfirmacaoTransferencia332")) {
@@ -1059,7 +1055,7 @@ function QC_confirmarTransferencia332(opcoes) {
   });
 }
 
-  window.QC_transferirCriar275 = async function(valorSolicitado) {
+    window.QC_transferirCriar275 = async function(valorSolicitado) {
     if (transferindo275) throw Error("Ja existe operacao de transferencia em andamento.");
     transferindo275 = true;
     try {
@@ -1541,7 +1537,40 @@ function QC_confirmarTransferencia332(opcoes) {
     return {status:"PENDENTE",valor:op.valorResgate,
       situacao:resposta.status};
   }
-  window.QC_solicitarResgate278 = async function(valor) {
+  // Passo 334 - Chave Pix validada localmente, guardada somente no
+  // material cifrado da operacao e enviada pelo token autenticado.
+  function QC_pixNormalizar334(bruto) {
+    if(typeof bruto!=="string") throw Error("Informe a chave Pix.");
+    let chave=bruto.trim();
+    if(!chave || chave.length>90 || /[\r\n<>]/.test(chave)) {
+      throw Error("Informe uma chave Pix valida.");
+    }
+    if(/^[\d.\-/\s]+$/.test(chave)) chave=chave.replace(/[^0-9]/g,"");
+    else if(/^\+55[\d\s().-]+$/.test(chave))
+      chave="+"+chave.slice(1).replace(/[^0-9]/g,"");
+    const ok=/^\d{11}$|^\d{14}$/.test(chave) ||
+      /^\+55\d{10,11}$/.test(chave) ||
+      (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(chave)&&chave.length<=77) ||
+      /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(chave);
+    if(!ok) throw Error("Chave Pix invalida. Use CPF, CNPJ, e-mail, celular +55 ou chave aleatoria.");
+    return chave;
+  }
+  async function QC_salvarPixResgate334(op, resposta) {
+    if(!op.chavePix || !resposta || resposta.status!=="PENDENTE") return resposta;
+    // Em preparacoes incompletas, a linha ainda pode nao existir; a
+    // mesma operacao local sera retomada sem duplicar a reserva.
+    if(!["RESGATE_PENDENTE","RESGATE_CANCELAMENTO_SOLICITADO"].includes(
+        String(resposta.situacao||""))) return resposta;
+    const r=await QC_postResgate278("qc_resgate_pix_salvar",{
+      idResgate:op.idResgate,chavePix:op.chavePix
+    });
+    if(!r || r.status!=="PIX_REGISTRADO") {
+      throw Error(r?.mensagem || "O pedido existe, mas a chave Pix nao foi confirmada no servidor. Retome o MESMO resgate sem solicitar outro.");
+    }
+    return {...resposta,pixRegistrado:true};
+  }
+
+  window.QC_solicitarResgate278 = async function(valor,chavePix) {
     if (ocupadaResgate278) throw Error("Outra operacao de resgate esta em andamento.");
     ocupadaResgate278=true;
     try {
@@ -1550,18 +1579,24 @@ function QC_confirmarTransferencia332(opcoes) {
       if (!Number.isSafeInteger(Number(valor)) || Number(valor)<2 || Number(valor)===3) {
         throw Error("Informe um valor inteiro a partir de 2 QC, exceto 3 QC.");
       }
+      const pix=QC_pixNormalizar334(chavePix);
       const senha=await obterSenha265();
       if (!senha) return {status:"CANCELADO_PELO_USUARIO"};
       memorizarSenha265(senha,inicio);
       const fichas=await QC_fichasAtuais271(senha);
       const plano=QC_planejarComposicao267(fichas.map(f=>f.valor), Number(valor));
       if (plano.status!=="OK") throw Error(plano.mensagem||plano.status);
-      const confirmar=window.confirm(
-        "Solicitar resgate de " + plano.valorSolicitado + " QC?\n\n" +
-        "As fichas ficarao reservadas ate o pagamento ou cancelamento " +
-        "autorizado pelo tesoureiro.\n" +
-        (plano.valorTroco ? "Troco automatico: "+plano.valorTroco+" QC.\n" : "")+
-        "O pagamento sera combinado diretamente com o tesoureiro.");
+      const confirmar=await QC_confirmarTransferencia332({
+        titulo:"Confirmar resgate",
+        destaque:"Qc$ "+plano.valorSolicitado.toLocaleString("pt-BR"),
+        linhas:[
+          "Chave Pix para receber: "+pix,
+          "As fichas ficarão reservadas até o pagamento ou cancelamento autorizado pelo tesoureiro.",
+          plano.valorTroco ? "Troco automático: "+plano.valorTroco+" Qc$." : "Sem necessidade de troco.",
+          "O Pix será feito fora do aplicativo. Este pedido não confirma que você recebeu dinheiro."
+        ],
+        rotulo:"Solicitar resgate"
+      });
       if (!confirmar) return {status:"CANCELADO_PELO_USUARIO"};
       if (inicio.id!==dadosDaSessao().id || inicio.token!==dadosDaSessao().token) {
         throw Error("Sessao alterada. Resgate nao iniciado.");
@@ -1577,6 +1612,7 @@ function QC_confirmarTransferencia332(opcoes) {
       const op={versao:1,idResgate:crypto.randomUUID().toLowerCase(),
         metodo:lotes?"LOTE285":"DIRETO277",
         valorResgate:plano.valorSolicitado,valorTroco:plano.valorTroco,
+        chavePix:pix,
         fichasEntrada:plano.indicesSelecionados.map(i=>({
           mensagemHex:fichas[i].mensagemHex,
           assinaturaHex:fichas[i].assinaturaHex
@@ -1589,7 +1625,7 @@ function QC_confirmarTransferencia332(opcoes) {
       // Material para recuperar a devolucao e armazenado ANTES da primeira
       // chamada ao Apps Script, nunca em texto puro no navegador.
       localStorage.setItem(chave,JSON.stringify(await QC_cifrar271(op,senha)));
-      return await QC_sincronizarResgate278(op,senha);
+      return await QC_salvarPixResgate334(op,await QC_sincronizarResgate278(op,senha));
     } finally {ocupadaResgate278=false;}
   };
   window.QC_meusResgates278 = async function() {
@@ -1611,7 +1647,7 @@ function QC_confirmarTransferencia332(opcoes) {
       const op=await QC_lerResgateLocal278(chave,senha);
       if (!op) throw Error("Os dados protegidos desta solicitacao nao estao neste aparelho. " +
         "Preserve a copia original da carteira e procure o tesoureiro.");
-      return await QC_sincronizarResgate278(op,senha);
+      return await QC_salvarPixResgate334(op,await QC_sincronizarResgate278(op,senha));
     } finally {ocupadaResgate278=false;}
   };
   window.QC_pedirCancelamentoResgate278 = async function(idResgate) {
