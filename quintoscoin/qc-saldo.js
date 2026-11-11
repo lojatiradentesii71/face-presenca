@@ -971,6 +971,94 @@
     const {id} = dadosDaSessao();
     return !!id && !!localStorage.getItem(CHAVE_RX275+id);
   };
+
+  // PASSO 332 - Confirmacao de transferencia no visual do aplicativo.
+// Inserir DENTRO do IIFE do arquivo qc-saldo.js, imediatamente antes de:
+// window.QC_transferirCriar275 = async function(valorSolicitado) {
+function QC_confirmarTransferencia332(opcoes) {
+  return new Promise((resolver) => {
+    if (document.getElementById("qcConfirmacaoTransferencia332")) {
+      resolver(false);
+      return;
+    }
+    const focoAnterior = document.activeElement;
+    const fundo = document.createElement("div");
+    fundo.id = "qcConfirmacaoTransferencia332";
+    fundo.className = "qc-modal-overlay";
+    fundo.style.display = "flex";
+    fundo.style.zIndex = "10002";
+    const cartao = document.createElement("div");
+    cartao.className = "qc-modal-card";
+    cartao.setAttribute("role", "dialog");
+    cartao.setAttribute("aria-modal", "true");
+    cartao.setAttribute("aria-labelledby", "qcTituloConfirmacao332");
+    cartao.style.maxHeight = "90vh";
+    cartao.style.overflowY = "auto";
+
+    const cab = document.createElement("div");
+    cab.className = "qc-modal-topo";
+    const titulo = document.createElement("h3");
+    titulo.id = "qcTituloConfirmacao332";
+    titulo.textContent = opcoes.titulo || "Confirmar operação";
+    cab.appendChild(titulo);
+    cartao.appendChild(cab);
+
+    const valor = document.createElement("div");
+    valor.textContent = opcoes.destaque || "";
+    valor.style.cssText = "text-align:center;color:#e7c76a;" +
+      "font-size:26px;font-weight:750;margin:12px 0 17px";
+    cartao.appendChild(valor);
+
+    for (const frase of opcoes.linhas || []) {
+      const texto = document.createElement("p");
+      texto.className = "qc-modal-texto";
+      texto.textContent = frase;
+      texto.style.marginBottom = "11px";
+      cartao.appendChild(texto);
+    }
+
+    const acoes = document.createElement("div");
+    acoes.className = "qc-modal-botoes";
+    acoes.style.marginTop = "18px";
+    const confirmar = document.createElement("button");
+    confirmar.type = "button";
+    confirmar.className = "qc-btn-modal-principal";
+    confirmar.textContent = opcoes.rotulo || "Confirmar";
+    const cancelar = document.createElement("button");
+    cancelar.type = "button";
+    cancelar.className = "qc-btn-modal-secundario";
+    cancelar.textContent = "Cancelar";
+    acoes.append(confirmar, cancelar);
+    cartao.appendChild(acoes);
+    fundo.appendChild(cartao);
+
+    let terminou = false;
+    function sair(aceito) {
+      if (terminou) return;
+      terminou = true;
+      document.removeEventListener("keydown", teclado, true);
+      fundo.remove();
+      if (focoAnterior && focoAnterior.isConnected &&
+          typeof focoAnterior.focus === "function") focoAnterior.focus();
+      resolver(aceito);
+    }
+    function teclado(evento) {
+      if (evento.key === "Escape") {
+        evento.preventDefault();
+        sair(false);
+      }
+    }
+    cancelar.addEventListener("click", () => sair(false));
+    confirmar.addEventListener("click", () => sair(true));
+    fundo.addEventListener("click", evento => {
+      if (evento.target === fundo) sair(false);
+    });
+    document.addEventListener("keydown", teclado, true);
+    document.body.appendChild(fundo);
+    confirmar.focus();
+  });
+}
+
   window.QC_transferirCriar275 = async function(valorSolicitado) {
     if (transferindo275) throw Error("Ja existe operacao de transferencia em andamento.");
     transferindo275 = true;
@@ -993,13 +1081,21 @@
       const disponiveis = await QC_fichasAtuais271(senha);
       const plano = QC_planejarComposicao267(disponiveis.map(f=>f.valor),valor);
       if (plano.status !== "OK") throw Error(plano.mensagem || plano.status);
-      if (!window.confirm(
-        "Transferir " + valor + " QC?\n\n" +
-        "O sistema utilizara " + plano.valoresSelecionados.join(" + ") + " QC.\n" +
-        (plano.valorTroco ? "Troco automatico: "+plano.valorTroco+" QC.\n" : "") +
-        "\nDepois compartilhe o QR Code com o destinatario.")) {
-        return {status:"CANCELADO"};
-      }
+      const confirmou332 = await QC_confirmarTransferencia332({
+        titulo: "Confirmar transferência",
+        destaque: "Qc$ " + valor.toLocaleString("pt-BR", {
+          minimumFractionDigits: 2, maximumFractionDigits: 2
+        }),
+        linhas: [
+          "Fichas utilizadas: " + plano.valoresSelecionados.join(" + ") + " Qc$.",
+          plano.valorTroco
+            ? "Troco automático: " + plano.valorTroco + " Qc$."
+            : "Não será necessário troco.",
+          "Depois compartilhe o QR Code somente com o destinatário."
+        ],
+        rotulo: "Confirmar transferência"
+      });
+      if (!confirmou332) return {status:"CANCELADO"};
       const atual = dadosDaSessao();
       if (atual.id !== inicio.id || atual.token !== inicio.token) {
         throw Error("Sessao alterada. Transferencia nao iniciada.");
@@ -1155,9 +1251,18 @@
       }
       const valores=QC_decomporTroco267(valor);
       if (!valores) throw Error("Nao e possivel compor o recebimento.");
-      if (!window.confirm("Receber "+valor+" QC nesta carteira?")) {
-        return {status:"CANCELADO"};
-      }
+      const aceitou332 = await QC_confirmarTransferencia332({
+        titulo: "Confirmar recebimento",
+        destaque: "Qc$ " + valor.toLocaleString("pt-BR", {
+          minimumFractionDigits: 2, maximumFractionDigits: 2
+        }),
+        linhas: [
+          "Deseja receber esta transferência na carteira atual?",
+          "O sistema conferirá os dados antes de registrar as fichas."
+        ],
+        rotulo: "Receber Qc$"
+      });
+      if (!aceitou332) return {status:"CANCELADO"};
       const preparadas=await QC_prepararTroco271({fichasTroco:valores});
       const op={versao:1,idTransferencia:info.id,codigo:info.codigo,
         metodo:preparadas.saidasCegas.length>50 ? "LOTE286" : "DIRETO273",
