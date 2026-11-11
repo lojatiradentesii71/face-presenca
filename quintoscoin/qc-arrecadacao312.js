@@ -1,4 +1,4 @@
-/* QuintosCoin - Passo 327 (base 314) - Conferencia do TS, leitura obrigatoria pelo QR FIXO da mesa.
+/* QuintosCoin - Passo 328 (base 327) - Conferencia do TS, leitura obrigatoria pelo QR FIXO da mesa.
    A leitura do QR e a autorizacao para ENTRAR no fechamento.
    O tesoureiro autenticado e o unico capaz de corrigir um total encerrado.
    Nunca usa o QR da sacola nem altera fichas da carteira. */
@@ -23,6 +23,15 @@
     #qcArrec312 [hidden] {display:none!important}
     #qcArrec312 label {display:block}
     #qcArrec312 .qc-ar-bot312:disabled {opacity:.6;cursor:wait}
+    /* Passo 328: confirmação própria, sem window.confirm / alert do navegador. */
+    #qcArModal327[hidden], #qcArModal327 [hidden] {display:none!important}
+    #qcArModal327 {position:fixed;inset:0;z-index:2147483000;background:#050c17d9;display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box}
+    #qcArModal327 .qc-ar-dialog327 {width:100%;max-width:430px;box-sizing:border-box;padding:23px;background:#172332;color:#f6f4ec;border:1px solid #d4b4667a;border-radius:16px;box-shadow:0 20px 65px #0009}
+    #qcArModal327 .qc-ar-titulo327 {margin:0 0 13px;color:#f2cd75;font-size:19px;font-weight:750}
+    #qcArModal327 .qc-ar-mensagem327 {margin:0;line-height:1.6;white-space:pre-line;font-size:14px}
+    #qcArModal327 .qc-ar-acoes327 {display:flex;gap:10px;margin-top:22px}
+    #qcArModal327 .qc-ar-acoes327 button {flex:1;min-height:44px;margin:0}
+    #qcArModal327 button:disabled {opacity:.6;cursor:wait}
   `;
   document.head.appendChild(estilo);
   const area=document.createElement('details');
@@ -69,6 +78,49 @@
   if (tesoureiro) tela.insertBefore(area,tesoureiro);
   else tela.appendChild(area);
   const $ = id => document.getElementById(id);
+  // Janela no mesmo padrão visual do QuintosCoin, também usada no sucesso.
+  const modal327=document.createElement('div');
+  modal327.id='qcArModal327';
+  modal327.hidden=true;
+  modal327.innerHTML=`
+    <div class="qc-ar-dialog327" role="dialog" aria-modal="true" aria-labelledby="qcArModalTitulo327" aria-describedby="qcArModalTexto327">
+      <h3 class="qc-ar-titulo327" id="qcArModalTitulo327"></h3>
+      <p class="qc-ar-mensagem327" id="qcArModalTexto327"></p>
+      <div class="qc-ar-acoes327">
+        <button type="button" class="qc-btn-modal-secundario" id="qcArModalCancelar327">Voltar</button>
+        <button type="button" class="qc-btn-modal-principal" id="qcArModalOk327">Confirmar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal327);
+  let fecharModalAtivo327=null;
+  function abrirModal327(titulo,mensagem,{botao='Entendi',cancelar=false}={}){
+    if(fecharModalAtivo327) return Promise.resolve(false);
+    return new Promise(resolve=>{
+      const cancelarBotao=$('qcArModalCancelar327');
+      const okBotao=$('qcArModalOk327');
+      $('qcArModalTitulo327').textContent=titulo;
+      $('qcArModalTexto327').textContent=mensagem;
+      cancelarBotao.hidden=!cancelar;
+      okBotao.textContent=botao;
+      function fechar(aceitou){
+        modal327.hidden=true;
+        fecharModalAtivo327=null;
+        cancelarBotao.onclick=null;
+        okBotao.onclick=null;
+        resolve(aceitou);
+      }
+      fecharModalAtivo327=fechar;
+      cancelarBotao.onclick=()=>fechar(false);
+      okBotao.onclick=()=>fechar(true);
+      modal327.hidden=false;
+      (cancelar?cancelarBotao:okBotao).focus();
+    });
+  }
+  document.addEventListener('keydown',ev=>{
+    if(ev.key==='Escape' && !modal327.hidden && fecharModalAtivo327 && !$('qcArModalCancelar327').hidden){
+      ev.preventDefault();fecharModalAtivo327(false);
+    }
+  });
   const moeda = v => 'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
   const qc = v => 'Qc$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
   function dinheiroValor(s){
@@ -294,32 +346,65 @@
   });
   $('qcArCorrigir312').addEventListener('click',async()=>{
     if(ocupada||!tesoureiroAutorizado||!registroAtual)return;
+    const registro=registroAtual;
     const novoDinheiro=dinheiroValor($('qcArNovoTotal312').value);
     if(novoDinheiro===null){status('Informe o novo valor contado em dinheiro físico.',true);return;}
-    const totalPrevisto=Math.round((Number(registroAtual.totalQC)+novoDinheiro)*100)/100;
-    if(!window.confirm('Corrigir somente o dinheiro físico da sessão de '+registroAtual.dataSessao+
-      ' para '+moeda(novoDinheiro)+'?\nNovo total: '+moeda(totalPrevisto)+' (Qc$ inalterados).'))return;
-    ocupada=true;$('qcArCorrigir312').disabled=true;
-    status('Corrigindo o dinheiro físico e atualizando o mesmo lançamento na TS...');
+    const totalPrevisto=Math.round((Number(registro.totalQC)+novoDinheiro)*100)/100;
+
+    // A confirmação usa uma janela do aplicativo, não a janela do navegador.
+    const confirmou=await abrirModal327(
+      'Confirmar correção do dinheiro',
+      'Sessão de '+registro.dataSessao+'\n'+
+      'Novo dinheiro físico: '+moeda(novoDinheiro)+'\n'+
+      'Novo total arrecadado: '+moeda(totalPrevisto)+'\n'+
+      'As doações em Qc$ não serão alteradas.',
+      {botao:'Confirmar correção',cancelar:true}
+    );
+    if(!confirmou||!area.open||registroAtual!==registro||!tesoureiroAutorizado)return;
+
+    ocupada=true;
+    $('qcArCorrigir312').disabled=true;
+    // A tela de edição não reaparece após o OK; em caso de falha é restaurada.
+    $('qcArCorrigirArea312').hidden=true;
+    status('Salvando correção do dinheiro físico na TS...');
     try{
       // A rota de transporte usa a chave legada `novoTotal`; o Apps Script 327
       // a interpreta exclusivamente como o NOVO DINHEIRO FÍSICO.
       const r=await requisitar('qc_arrec_corrigir312',{
         tokenSessao:sessionStorage.getItem('QC_TOKEN_SESSAO_TESTE'),
-        idSessao:registroAtual.idSessao,novoTotal:novoDinheiro
+        idSessao:registro.idSessao,novoTotal:novoDinheiro
       });
       if(r.status!=='CORRIGIDA')throw Error(r.mensagem||'Correção não realizada.');
-      Object.assign(registroAtual,{totalQC:r.totalQC,dinheiroFisico:r.dinheiroFisico,totalGeral:r.totalGeral});
-      mostrarRegistro(registroAtual);
+      Object.assign(registro,{totalQC:r.totalQC,dinheiroFisico:r.dinheiroFisico,totalGeral:r.totalGeral});
+      mostrarRegistro(registro);
+      $('qcArCorrigirArea312').hidden=true; // mostrarRegistro normalmente exibe a edição.
       status('Dinheiro físico corrigido. Total recalculado e mesma linha da TS atualizada.');
-    }catch(e){status('⚠️ '+(e.message||e),true);}
-    finally{ocupada=false;atualizarPreviaCorrecao327();}
+      await abrirModal327(
+        'Correção realizada com sucesso!',
+        'Dinheiro físico atualizado: '+moeda(r.dinheiroFisico)+'\n'+
+        'Total para anunciar: '+moeda(r.totalGeral)+'\n'+
+        'As doações em Qc$ permaneceram inalteradas.',
+        {botao:'Entendi'}
+      );
+    }catch(e){
+      // A operação não foi confirmada: mantém a possibilidade de revisar,
+      // mas não recomenda repetir cegamente uma requisição que pode ter gravado.
+      $('qcArCorrigirArea312').hidden=false;
+      status('⚠️ '+(e.message||e)+' Consulte novamente antes de repetir a correção.',true);
+      await abrirModal327('Correção não confirmada',
+        String(e.message||e)+'\nConsulte novamente a arrecadação antes de tentar de novo.',
+        {botao:'Entendi'});
+    }finally{
+      ocupada=false;
+      atualizarPreviaCorrecao327();
+    }
   });
   paineis(null);
   // Recolher a secao cancela qualquer leitura ou consulta pendente,
   // e nunca deixa valores da conferencia abertos ao reexpandir.
   area.addEventListener('toggle',()=>{
     if(!area.open){
+      if(fecharModalAtivo327 && !ocupada)fecharModalAtivo327(false);
       parar();leitura=null;ocupada=false;
       paineis(null);status('');
     }
