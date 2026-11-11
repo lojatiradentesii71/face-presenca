@@ -1,4 +1,4 @@
-/* QuintosCoin - Passo 314 - Conferencia do TS, leitura obrigatoria pelo QR FIXO da mesa.
+/* QuintosCoin - Passo 327 (base 314) - Conferencia do TS, leitura obrigatoria pelo QR FIXO da mesa.
    A leitura do QR e a autorizacao para ENTRAR no fechamento.
    O tesoureiro autenticado e o unico capaz de corrigir um total encerrado.
    Nunca usa o QR da sacola nem altera fichas da carteira. */
@@ -54,10 +54,12 @@
         <div class="qc-ar-par312"><span>Dinheiro físico</span><strong id="qcArHistDin312">—</strong></div>
         <div><small>Total para anunciar</small><div class="qc-ar-grande312" id="qcArHistTotal312">—</div></div>
         <div id="qcArCorrigirArea312" hidden>
-          <label for="qcArNovoTotal312">Correção do total pelo tesoureiro (R$)
-            <input id="qcArNovoTotal312" class="qc-ar-input312" type="text" inputmode="decimal" autocomplete="off" placeholder="Novo total" />
+          <label for="qcArNovoTotal312">Corrigir somente o dinheiro físico (R$)
+            <input id="qcArNovoTotal312" class="qc-ar-input312" type="text" inputmode="decimal" autocomplete="off" placeholder="Valor contado em dinheiro" />
           </label>
-          <button type="button" id="qcArCorrigir312" class="qc-btn-modal-secundario qc-ar-bot312">Corrigir total da arrecadação</button>
+          <div class="qc-ar-par312"><span>Novo total (calculado automaticamente)</span><strong id="qcArPreviaTotal327">—</strong></div>
+          <p class="qc-ar-nota312">As doações em Qc$ não podem ser alteradas nesta correção.</p>
+          <button type="button" id="qcArCorrigir312" class="qc-btn-modal-secundario qc-ar-bot312">Salvar correção do dinheiro</button>
         </div>
       </div>
       <p id="qcArStatus312" class="qc-ar-status312" role="status" aria-live="polite"></p>
@@ -239,14 +241,24 @@
     }catch(e){status('⚠️ '+(e.message||e)+' Se houve falha de comunicação, consulte antes de tentar novamente.',true);}
     finally{ocupada=false;calcular();}
   });
+  function atualizarPreviaCorrecao327(){
+    const dinheiro=dinheiroValor($('qcArNovoTotal312').value);
+    const valido=!!registroAtual && dinheiro!==null;
+    $('qcArPreviaTotal327').textContent=valido
+      ?moeda(Math.round((Number(registroAtual.totalQC)+dinheiro)*100)/100)
+      :'R$ —';
+    $('qcArCorrigir312').disabled=!valido || ocupada;
+  }
+  $('qcArNovoTotal312').addEventListener('input', atualizarPreviaCorrecao327);
   function mostrarRegistro(r){
     registroAtual=r;
     $('qcArSubtitulo312').textContent='Arrecadação de '+r.dataSessao;
     $('qcArHistQC312').textContent=qc(r.totalQC);
     $('qcArHistDin312').textContent=moeda(r.dinheiroFisico);
     $('qcArHistTotal312').textContent=moeda(r.totalGeral);
-    $('qcArNovoTotal312').value='';
+    $('qcArNovoTotal312').value=Number(r.dinheiroFisico||0).toFixed(2).replace('.',',');
     $('qcArCorrigirArea312').hidden=!tesoureiroAutorizado;
+    atualizarPreviaCorrecao327();
     paineis('qcArFechada312');
   }
   $('qcArConsultar312').addEventListener('click',async()=>{
@@ -282,24 +294,26 @@
   });
   $('qcArCorrigir312').addEventListener('click',async()=>{
     if(ocupada||!tesoureiroAutorizado||!registroAtual)return;
-    const valor=dinheiroValor($('qcArNovoTotal312').value);
-    if(valor===null){status('Informe o novo total em reais.',true);return;}
-    if(valor<Number(registroAtual.totalQC)){
-      status('O total não pode ser menor que os Qc$ já confirmados.',true);return;
-    }
-    if(!window.confirm('Corrigir o total da arrecadação de '+registroAtual.dataSessao+' para '+moeda(valor)+'?'))return;
-    ocupada=true;$('qcArCorrigir312').disabled=true;status('Corrigindo o mesmo lançamento em TS...');
+    const novoDinheiro=dinheiroValor($('qcArNovoTotal312').value);
+    if(novoDinheiro===null){status('Informe o novo valor contado em dinheiro físico.',true);return;}
+    const totalPrevisto=Math.round((Number(registroAtual.totalQC)+novoDinheiro)*100)/100;
+    if(!window.confirm('Corrigir somente o dinheiro físico da sessão de '+registroAtual.dataSessao+
+      ' para '+moeda(novoDinheiro)+'?\nNovo total: '+moeda(totalPrevisto)+' (Qc$ inalterados).'))return;
+    ocupada=true;$('qcArCorrigir312').disabled=true;
+    status('Corrigindo o dinheiro físico e atualizando o mesmo lançamento na TS...');
     try{
+      // A rota de transporte usa a chave legada `novoTotal`; o Apps Script 327
+      // a interpreta exclusivamente como o NOVO DINHEIRO FÍSICO.
       const r=await requisitar('qc_arrec_corrigir312',{
         tokenSessao:sessionStorage.getItem('QC_TOKEN_SESSAO_TESTE'),
-        idSessao:registroAtual.idSessao,novoTotal:valor
+        idSessao:registroAtual.idSessao,novoTotal:novoDinheiro
       });
       if(r.status!=='CORRIGIDA')throw Error(r.mensagem||'Correção não realizada.');
       Object.assign(registroAtual,{totalQC:r.totalQC,dinheiroFisico:r.dinheiroFisico,totalGeral:r.totalGeral});
       mostrarRegistro(registroAtual);
-      status('Total corrigido. A mesma linha da aba TS foi atualizada.');
+      status('Dinheiro físico corrigido. Total recalculado e mesma linha da TS atualizada.');
     }catch(e){status('⚠️ '+(e.message||e),true);}
-    finally{ocupada=false;$('qcArCorrigir312').disabled=false;}
+    finally{ocupada=false;atualizarPreviaCorrecao327();}
   });
   paineis(null);
   // Recolher a secao cancela qualquer leitura ou consulta pendente,
