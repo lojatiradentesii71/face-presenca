@@ -989,6 +989,48 @@ qcModalTransferir275.innerHTML = `
     <p id="qcAvisoTransferir275" role="status" class="qc-modal-mensagem"></p>
   </div>`;
 document.body.appendChild(qcModalTransferir275);
+// PASSO 332.4 — Ajuste exclusivo do modal Transferir em telas pequenas.
+// A rolagem fica dentro do cartão, mantendo os extremos acessíveis.
+const qcEstiloTransferencia3324 = document.createElement("style");
+qcEstiloTransferencia3324.textContent = `
+  #qcModalTransferir275 {
+    box-sizing: border-box;
+    padding: 12px;
+    padding-top: max(12px, env(safe-area-inset-top));
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+  #qcModalTransferir275 > .qc-modal-card {
+    box-sizing: border-box;
+    min-height: 0;
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  #qcModalTransferir275 #qcResultadoEnvio275 {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  #qcModalTransferir275 #qcImagemQR275 svg {
+    max-width: 100%;
+    height: auto;
+  }
+  #qcModalTransferir275 #qcCopiarTransf275,
+  #qcModalTransferir275 #qcConferirTransf275 {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 44px;
+    margin: 10px 0 0 !important;
+  }
+  #qcModalTransferir275 #qcAvisoTransferir275 {
+    overflow-wrap: anywhere;
+  }
+`;
+document.head.appendChild(qcEstiloTransferencia3324);
 
 const qcValorEnviar275 = document.getElementById("qcValorEnviar275");
 const qcValorReceber275 = document.getElementById("qcCodigoReceber275");
