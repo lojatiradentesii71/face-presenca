@@ -1160,6 +1160,39 @@ document.getElementById("qcCopiarTransf275")
       window.prompt("Copie o codigo para o destinatario:", qcCodigoCompartilhar275);
     }
   });
+// PASSO 332.8 — Atualizar saldos depois de movimentações CONFIRMADAS.
+// A função de saldo valida assinaturas e fichas gastas junto ao servidor.
+// A movimentação já concluída não é repetida se a consulta falhar.
+async function QC_atualizarSaldoTransferencia3328(confirmacao) {
+  if (typeof window.QC_atualizarSaldoReal202 !== "function" ||
+      typeof window.QC_senhaFichas291 !== "function" ||
+      !window.QC_senhaFichas291()) {
+    const texto = confirmacao +
+      " Não foi possível conferir o saldo automaticamente. " +
+      "Entre novamente na carteira para atualizar; não repita a transferência.";
+    qcAvisoTransferir275.textContent = texto;
+    const mensagem = document.getElementById("mensagem");
+    if (mensagem) mensagem.textContent = texto;
+    return;
+  }
+  qcAvisoTransferir275.textContent = confirmacao + " Conferindo o saldo...";
+  try {
+    await window.QC_atualizarSaldoReal202();
+    const texto = confirmacao + " Saldo atualizado e fichas verificadas.";
+    qcAvisoTransferir275.textContent = texto;
+    const mensagem = document.getElementById("mensagem");
+    if (mensagem) mensagem.textContent = texto;
+  } catch (erro) {
+    const texto = confirmacao +
+      " A consulta do saldo não foi concluída (" +
+      String(erro?.message || erro) +
+      "). Entre novamente na carteira para conferir. Não repita a transferência.";
+    qcAvisoTransferir275.textContent = texto;
+    const mensagem = document.getElementById("mensagem");
+    if (mensagem) mensagem.textContent = texto;
+  }
+}
+
 document.getElementById("qcConferirTransf275")
   .addEventListener("click", async () => {
     if (qcTrabalhando275) return;
@@ -1173,8 +1206,10 @@ document.getElementById("qcConferirTransf275")
         qcImagemQR275.replaceChildren();
         qcValorEnviar275.disabled = false;
         qcEnviar275.textContent = "Continuar";
-        qcAvisoTransferir275.textContent =
-          "✅ " + r.valorEnviado + " QC recebidos pelo destinatario. Nova transferencia liberada.";
+        await QC_atualizarSaldoTransferencia3328(
+          "✅ " + r.valorEnviado +
+          " Qc$ recebidos pelo destinatário. Nova transferência liberada."
+        );
       } else {
         qcAvisoTransferir275.textContent =
           "Aguardando recebimento pelo destinatario (" + r.status + ").";
@@ -1196,13 +1231,12 @@ qcReceber275.addEventListener("click", async () => {
   try {
     const retorno = await window.QC_transferirResgatar275(qcValorReceber275.value);
     if (retorno.status === "RECEBIDA") {
-      qcAvisoTransferir275.textContent =
-        "✅ Recebidos " + retorno.valorRecebido + " QC. Atualize seu saldo.";
-      const mensagem=document.getElementById("mensagem");
-      if (mensagem) mensagem.textContent=qcAvisoTransferir275.textContent;
       qcValorReceber275.value="";
       qcValorReceber275.disabled=false;
       qcReceber275.textContent="Receber Qc$";
+      await QC_atualizarSaldoTransferencia3328(
+        "✅ Recebidos " + retorno.valorRecebido + " Qc$."
+      );
     } else if (retorno.status === "CANCELADO") {
       qcAvisoTransferir275.textContent = "Recebimento cancelado.";
     } else {
