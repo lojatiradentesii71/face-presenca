@@ -3912,6 +3912,48 @@ function QC_confirmarPagamentoPedido(nome, valor) {
   let ocupado=false;
   let maximoResgate333=null;
   let observarSaldo333=null;
+  // PASSO 335 — Resgates reservam fichas no servidor. Ao voltar à carteira,
+  // conferir automaticamente as fichas, sem repetir a solicitação.
+  let saldoARever335=false;
+  let saldoConferindo335=false;
+
+  async function conferirSaldoAoVoltar335() {
+    if(saldoConferindo335)return;
+    const token=sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
+    const idCarteira=localStorage.getItem("QC_ID_CARTEIRA");
+    if(!token||!idCarteira)return;
+    const mensagem=document.getElementById("mensagem");
+    const saldo=document.getElementById("saldo");
+    // Nunca pedir outra senha ou presumir saldo verificado.
+    if(typeof window.QC_atualizarSaldoReal202!=="function" ||
+       typeof window.QC_senhaFichas291!=="function" ||
+       !window.QC_senhaFichas291()) {
+      if(mensagem) mensagem.textContent=
+        "⚠️ Entre novamente na carteira para conferir o saldo. Não repita um resgate pendente.";
+      return;
+    }
+    saldoConferindo335=true;
+    if(saldo)saldo.textContent="Conferindo saldo...";
+    if(mensagem)mensagem.textContent="Conferindo saldo e fichas disponíveis...";
+    try {
+      await window.QC_atualizarSaldoReal202();
+      // A consulta existente valida as assinaturas e os gastos no servidor.
+      // Não mostrar o resultado de outra carteira caso o login mude.
+      if(token===sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") &&
+         idCarteira===localStorage.getItem("QC_ID_CARTEIRA") && mensagem) {
+        mensagem.textContent="✅ Saldo atualizado. Os Qc$ reservados em resgates não estão disponíveis.";
+      }
+    } catch(erro) {
+      if(token===sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") &&
+         idCarteira===localStorage.getItem("QC_ID_CARTEIRA") && mensagem) {
+        mensagem.textContent="⚠️ Não foi possível conferir o saldo ("+
+          String(erro?.message||erro)+
+          "). Use a conferência da carteira; não repita o resgate pendente.";
+      }
+    } finally {
+      saldoConferindo335=false;
+    }
+  }
 
   function atualizarMaximoResgate333() {
     maximoResgate333=null;
@@ -3956,6 +3998,17 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     if(ocupado)return;
     pararObservacaoSaldo333();
     modal.style.display="none";
+    // O mesmo caminho é usado por Voltar, X e toque fora da janela.
+    // Se o pedido foi enviado, atualizar a carteira; caso a memória
+    // já esteja inválida, verificar também um pedido de antes do patch.
+    let memoriaNaoVerificada=false;
+    try {
+      memoriaNaoVerificada=typeof window.QC_planejarMovimento267==="function" &&
+        window.QC_planejarMovimento267(2)?.status==="SALDO_NAO_VERIFICADO";
+    } catch(_) {memoriaNaoVerificada=true;}
+    const precisa=saldoARever335||memoriaNaoVerificada;
+    saldoARever335=false;
+    if(precisa)void conferirSaldoAoVoltar335();
   }
   function rotuloEstado(st) {
     return ({PENDENTE:"Aguardando tesoureiro",
@@ -4015,9 +4068,126 @@ function QC_confirmarPagamentoPedido(nome, valor) {
       lista.appendChild(item);
     });
   }
+  // PASSO 336 — Antes de criar outro resgate, consultar os pedidos da
+  // propria carteira no servidor. CONFIRMADO/CANCELADO sao finais;
+  // demais estados permanecem em andamento, inclusive cancelamentos.
+  function QC_pedidosEmAberto336(pedidos) {
+    if(!Array.isArray(pedidos)) throw Error("Lista de resgates inválida.");
+    const encerrados=new Set(["CONFIRMADO","CANCELADO"]);
+    return pedidos.filter(p=>p&&typeof p==="object" &&
+      !encerrados.has(String(p.status||"").trim().toUpperCase()));
+  }
+
+  // Aviso com o mesmo estilo dos modais do aplicativo, sem confirm() nativo.
+  // Nenhum pedido, reserva ou pagamento e feito por esta janela.
+  function QC_avisoPendenciasResgate336(pedidos) {
+    return new Promise(resolver=>{
+      if(document.getElementById("qcAvisoPendenciasResgate336")) {
+        resolver(false);
+        return;
+      }
+      const overlay=document.createElement("div");
+      overlay.id="qcAvisoPendenciasResgate336";
+      overlay.className="qc-modal-overlay";
+      overlay.style.cssText="display:flex;z-index:10005;padding:12px;box-sizing:border-box";
+      const cartao=document.createElement("div");
+      cartao.className="qc-modal-card";
+      cartao.setAttribute("role","alertdialog");
+      cartao.setAttribute("aria-modal","true");
+      cartao.setAttribute("aria-labelledby","qcTituloPendenciasResgate336");
+      cartao.style.cssText="box-sizing:border-box;max-height:calc(100vh - 24px);"+
+        "max-height:calc(100dvh - 24px);overflow-y:auto;overflow-x:hidden;"+
+        "-webkit-overflow-scrolling:touch";
+      const titulo=document.createElement("h3");
+      titulo.id="qcTituloPendenciasResgate336";
+      titulo.textContent="⚠️ Você já tem resgate pendente";
+      cartao.appendChild(titulo);
+      const aviso=document.createElement("p");
+      aviso.className="qc-modal-texto";
+      aviso.textContent=pedidos.length===1 ?
+        "Encontramos 1 pedido de resgate ainda não encerrado nesta carteira." :
+        "Encontramos "+pedidos.length+" pedidos de resgate ainda não encerrados nesta carteira.";
+      cartao.appendChild(aviso);
+      const itens=document.createElement("div");
+      itens.style.cssText="margin:12px 0;max-height:170px;overflow-y:auto";
+      pedidos.slice(0,5).forEach(p=>{
+        const linha=document.createElement("p");
+        linha.className="qc-resgate-linha278";
+        linha.style.cssText="font-size:13px;line-height:1.45;margin:7px 0;"+
+          "overflow-wrap:anywhere";
+        const valor=Number(p.valor);
+        const valorTexto=Number.isSafeInteger(valor)&&valor>=0 ?
+          "Qc$ "+valor.toLocaleString("pt-BR") : "Valor não informado";
+        const estado=rotuloEstado(String(p.status||""));
+        const data=String(p.solicitadoEm||"");
+        linha.textContent=valorTexto+" · "+estado+(data ? " · "+data : "");
+        itens.appendChild(linha);
+      });
+      if(pedidos.length>5){
+        const mais=document.createElement("p");
+        mais.className="qc-modal-texto";
+        mais.textContent="E mais "+(pedidos.length-5)+" pedido(s) em aberto.";
+        itens.appendChild(mais);
+      }
+      cartao.appendChild(itens);
+      const explicacao=document.createElement("p");
+      explicacao.className="qc-modal-texto";
+      explicacao.textContent="As fichas desses pedidos podem estar reservadas. " +
+        "Se você quer apenas aguardar o pagamento do tesoureiro, " +
+        "não solicite novamente. Só continue se realmente deseja outro resgate.";
+      cartao.appendChild(explicacao);
+      const acoes=document.createElement("div");
+      acoes.className="qc-modal-botoes";
+      acoes.style.marginTop="15px";
+      const voltar=document.createElement("button");
+      voltar.type="button";
+      voltar.className="qc-btn-modal-secundario";
+      voltar.textContent="Não solicitar outro";
+      const continuar=document.createElement("button");
+      continuar.type="button";
+      continuar.className="qc-btn-modal-principal";
+      continuar.textContent="Solicitar outro mesmo assim";
+      acoes.append(voltar,continuar);
+      cartao.appendChild(acoes);
+      overlay.appendChild(cartao);
+      document.body.appendChild(overlay);
+      const focoAnterior=document.activeElement;
+      let terminou=false;
+      function fechar336(permitir){
+        if(terminou) return;
+        terminou=true;
+        document.removeEventListener("keydown",teclado336,true);
+        overlay.remove();
+        if(focoAnterior&&focoAnterior.isConnected&&
+           typeof focoAnterior.focus==="function") focoAnterior.focus();
+        resolver(permitir);
+      }
+      function teclado336(evento){
+        if(evento.key==="Escape") {
+          evento.preventDefault();
+          fechar336(false);
+        } else if(evento.key==="Tab") {
+          if(evento.shiftKey&&document.activeElement===voltar){
+            evento.preventDefault();continuar.focus();
+          } else if(!evento.shiftKey&&document.activeElement===continuar){
+            evento.preventDefault();voltar.focus();
+          }
+        }
+      }
+      voltar.addEventListener("click",()=>fechar336(false));
+      continuar.addEventListener("click",()=>fechar336(true));
+      overlay.addEventListener("click",e=>{
+        if(e.target===overlay) fechar336(false);
+      });
+      document.addEventListener("keydown",teclado336,true);
+      voltar.focus();
+    });
+  }
+
   resgatar.addEventListener("click",()=>{
     if(!sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")) return;
     status.textContent="";campo.value="";campoPix.value="";modal.style.display="flex";
+    saldoARever335=false;
     atualizarMaximoResgate333();
     // Se o saldo terminar de carregar enquanto a janela está aberta,
     // atualizamos o valor exibido, sem recarregar o navegador.
@@ -4045,9 +4215,48 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     if(maximoResgate333!==null && valor>maximoResgate333) {
       status.textContent="O valor informado supera o saldo disponível para resgate.";return;
     }
-    ocupado=true;enviar.disabled=true;status.textContent="Preparando resgate seguro...";
+    ocupado=true;enviar.disabled=true;
+    status.textContent="Conferindo se já existem resgates pendentes...";
+    // A consulta é autenticada e feita antes de qualquer nova reserva.
+    // Se falhar, NÃO solicitar outro resgate às cegas.
+    const sessao336={
+      token:sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE"),
+      id:localStorage.getItem("QC_ID_CARTEIRA")
+    };
+    let iniciouSolicitacao336=false;
     try{
-      if(typeof window.QC_solicitarResgate278!=="function")throw Error("Modulo de resgate nao carregado.");
+      if(typeof window.QC_meusResgates278!=="function") {
+        throw Error("Consulta dos meus resgates indisponível. Atualize o aplicativo.");
+      }
+      const meus=await window.QC_meusResgates278();
+      if(sessao336.token!==sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") ||
+         sessao336.id!==localStorage.getItem("QC_ID_CARTEIRA")) {
+        throw Error("Carteira alterada durante a consulta. Nenhuma solicitação iniciada.");
+      }
+      const abertos=QC_pedidosEmAberto336(meus);
+      if(abertos.length){
+        status.textContent="Há "+abertos.length+" pedido(s) em aberto. Confira antes de continuar.";
+        const permitir=await QC_avisoPendenciasResgate336(abertos);
+        if(!permitir){
+          status.textContent="Nenhum novo resgate solicitado. " +
+            "Consulte o pedido existente em 'Acompanhar meus resgates'.";
+          const acompanhar=document.getElementById("qcMeusResgates278");
+          if(acompanhar) acompanhar.open=true;
+          return;
+        }
+      }
+      if(sessao336.token!==sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") ||
+         sessao336.id!==localStorage.getItem("QC_ID_CARTEIRA")) {
+        throw Error("Carteira alterada. Nenhuma solicitação iniciada.");
+      }
+      if(typeof window.QC_solicitarResgate278!=="function"){
+        throw Error("Módulo de resgate não carregado.");
+      }
+      status.textContent="Preparando resgate seguro...";
+      // A partir daqui o servidor pode reservar fichas. Em falhas
+      // posteriores, preservar e retomar o MESMO pedido no aparelho.
+      iniciouSolicitacao336=true;
+      saldoARever335=true;
       const r=await window.QC_solicitarResgate278(valor,chavePix);
       if(r.status==="CANCELADO_PELO_USUARIO") status.textContent="Operacao cancelada.";
       else if(r.status==="PENDENTE" && r.situacao && r.pixRegistrado===true){
@@ -4064,7 +4273,14 @@ function QC_confirmarPagamentoPedido(nome, valor) {
         status.textContent=r.mensagem||"Operação ainda em andamento; não solicite outro resgate. Retome o mesmo pedido.";
         await atualizarMeus();
       }
-    }catch(e){status.textContent="⚠️ "+String(e.message||e)+" Se a conexão caiu, preserve o pedido neste aparelho e retome-o; não crie outro resgate.";}
+    }catch(e){
+      status.textContent=iniciouSolicitacao336 ?
+        "⚠️ "+String(e.message||e)+
+          " Se a conexão caiu, preserve o pedido neste aparelho e retome-o; não crie outro resgate." :
+        "⚠️ Não foi possível confirmar os pedidos existentes: "+
+          String(e.message||e)+
+          ". Nenhum novo resgate foi iniciado. Tente consultar novamente.";
+    }
     finally{ocupado=false;enviar.disabled=maximoResgate333===0;}
   });
   campo.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();enviar.click();}});
