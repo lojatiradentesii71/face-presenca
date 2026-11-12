@@ -2159,14 +2159,23 @@ function QC_confirmarTransferencia332(opcoes) {
           soma + ficha.valor, 0
         );
 
-        const permitir = window.confirm(
-          "Backup validado.\n\n" +
-          novas.length + " ficha(s) nova(s), total de " +
-          totalNovo + " QC.\n" +
-          repetidas + " ja presente(s) e " + gastasNoBackup +
-          " ja gasta(s) serao ignoradas.\n\n" +
-          "Deseja importar somente as fichas disponiveis?"
-        );
+        if(typeof window.QC_dialogoQuintos338!=="function") {
+          throw Error("Atualize o aplicativo para confirmar a recuperação pelo modal seguro.");
+        }
+        const permitir = await window.QC_dialogoQuintos338({
+          titulo:"Confirmar recuperação das fichas",
+          texto:"O backup foi validado. Deseja importar somente as fichas disponíveis?",
+          detalhes:[
+            {rotulo:"NOVAS FICHAS",valor:String(novas.length)},
+            {rotulo:"TOTAL A RECUPERAR",valor:"Qc$ "+totalNovo.toLocaleString("pt-BR")},
+            {rotulo:"JÁ PRESENTES",valor:String(repetidas)},
+            {rotulo:"JÁ GASTAS — IGNORADAS",valor:String(gastasNoBackup)}
+          ],
+          aviso:"Somente fichas disponíveis e verificadas serão importadas. " +
+            "Fichas gastas não retornarão ao saldo.",
+          confirmarTexto:"Importar fichas disponíveis",
+          cancelarTexto:"Não importar"
+        });
         if (!permitir) {
           aviso.textContent = "Restauracao cancelada. Nenhuma ficha alterada.";
           return;
