@@ -5,6 +5,159 @@
 // Doacoes e transferencias anonimas continuam com fetch proprio.
 const QC_URL_191 = "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
 
+
+// PASSO 338 — Confirmações e avisos no padrão visual do QuintosCoin.
+// Não executa ações financeiras: apenas devolve a escolha do usuário.
+function QC_dialogoQuintos338(opcoes = {}) {
+  return new Promise(resolver => {
+    if (document.getElementById("qcDialogoQuintos338")) {
+      resolver(false);
+      return;
+    }
+    const overlay = document.createElement("div");
+    overlay.id = "qcDialogoQuintos338";
+    overlay.className = "qc-modal-overlay";
+    overlay.style.cssText = "display:flex;z-index:30000;padding:12px;" +
+      "box-sizing:border-box;padding-top:max(12px,env(safe-area-inset-top));" +
+      "padding-bottom:max(12px,env(safe-area-inset-bottom))";
+
+    const cartao = document.createElement("div");
+    cartao.className = "qc-modal-card";
+    cartao.setAttribute("role", "alertdialog");
+    cartao.setAttribute("aria-modal", "true");
+    cartao.setAttribute("aria-labelledby", "qcTituloDialogo338");
+    cartao.style.cssText = "box-sizing:border-box;max-height:calc(100vh - 24px);" +
+      "max-height:calc(100dvh - 24px);overflow-y:auto;overflow-x:hidden;" +
+      "-webkit-overflow-scrolling:touch;width:100%;max-width:440px;";
+
+    const topo = document.createElement("div");
+    topo.className = "qc-modal-topo";
+    const titulo = document.createElement("h3");
+    titulo.id = "qcTituloDialogo338";
+    titulo.textContent = String(opcoes.titulo || "Confirmar operação");
+    topo.appendChild(titulo);
+    cartao.appendChild(topo);
+
+    if (opcoes.texto) {
+      const texto = document.createElement("p");
+      texto.className = "qc-modal-texto";
+      texto.textContent = String(opcoes.texto);
+      texto.style.cssText = "white-space:pre-line;overflow-wrap:anywhere";
+      cartao.appendChild(texto);
+    }
+
+    const detalhes = Array.isArray(opcoes.detalhes) ? opcoes.detalhes : [];
+    if (detalhes.length) {
+      const dados = document.createElement("div");
+      dados.style.cssText = "border:1px solid #e2ba6055;border-radius:10px;" +
+        "padding:12px;margin:12px 0;display:flex;flex-direction:column;gap:9px";
+      for (const item of detalhes) {
+        const linha = document.createElement("div");
+        linha.style.cssText = "display:flex;flex-direction:column;gap:3px";
+        const rotulo = document.createElement("span");
+        rotulo.style.cssText = "font-size:12px;opacity:.8";
+        rotulo.textContent = String(item?.rotulo || "");
+        const valor = document.createElement("strong");
+        valor.style.cssText = "font-size:15px;overflow-wrap:anywhere";
+        valor.textContent = String(item?.valor ?? "");
+        linha.append(rotulo,valor);
+        dados.appendChild(linha);
+      }
+      cartao.appendChild(dados);
+    }
+
+    let campoCodigo = null;
+    if (typeof opcoes.codigo === "string") {
+      const rotuloCodigo = document.createElement("label");
+      rotuloCodigo.className = "qc-label-modal";
+      rotuloCodigo.textContent = "Código para copiar";
+      campoCodigo = document.createElement("textarea");
+      campoCodigo.className = "qc-input-modal";
+      campoCodigo.readOnly = true;
+      campoCodigo.rows = 4;
+      campoCodigo.value = opcoes.codigo;
+      campoCodigo.setAttribute("aria-label", "Código para copiar manualmente");
+      campoCodigo.style.cssText = "width:100%;box-sizing:border-box;" +
+        "resize:vertical;overflow-wrap:anywhere;margin:8px 0";
+      campoCodigo.addEventListener("click", () => campoCodigo.select());
+      cartao.append(rotuloCodigo,campoCodigo);
+    }
+
+    if (opcoes.aviso) {
+      const aviso = document.createElement("p");
+      aviso.className = "qc-modal-texto";
+      aviso.setAttribute("role", "note");
+      aviso.textContent = String(opcoes.aviso);
+      aviso.style.cssText = "border-left:3px solid #e2ba60;" +
+        "padding-left:10px;margin:13px 0;overflow-wrap:anywhere";
+      cartao.appendChild(aviso);
+    }
+
+    const acoes = document.createElement("div");
+    acoes.className = "qc-modal-botoes";
+    acoes.style.cssText = "display:flex;flex-direction:column;gap:9px;" +
+      "margin-top:15px;width:100%";
+    const principal = document.createElement("button");
+    principal.type = "button";
+    principal.className = "qc-btn-modal-principal";
+    principal.textContent = String(opcoes.confirmarTexto || "Confirmar");
+    principal.style.cssText = "width:100%;min-height:44px;box-sizing:border-box";
+
+    const secundario = document.createElement("button");
+    secundario.type = "button";
+    secundario.className = "qc-btn-modal-secundario";
+    secundario.textContent = String(opcoes.cancelarTexto || "Voltar sem confirmar");
+    secundario.style.cssText = "width:100%;min-height:44px;box-sizing:border-box";
+    acoes.appendChild(principal);
+    if (!opcoes.somenteInformativo) acoes.appendChild(secundario);
+    cartao.appendChild(acoes);
+    overlay.appendChild(cartao);
+
+    const focoAnterior = document.activeElement;
+    const overflowAnterior = document.body.style.overflow;
+    document.body.appendChild(overlay);
+    document.body.style.overflow = "hidden";
+    let encerrado = false;
+    function encerrar(aceito) {
+      if (encerrado) return;
+      encerrado = true;
+      document.removeEventListener("keydown", teclado, true);
+      overlay.remove();
+      document.body.style.overflow = overflowAnterior;
+      if (focoAnterior && focoAnterior.isConnected &&
+          typeof focoAnterior.focus === "function") focoAnterior.focus();
+      resolver(aceito);
+    }
+    function teclado(e) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        encerrar(false);
+      } else if (e.key === "Tab") {
+        const primeiro = principal;
+        const ultimo = opcoes.somenteInformativo ? principal : secundario;
+        if (e.shiftKey && document.activeElement === primeiro) {
+          e.preventDefault();ultimo.focus();
+        } else if (!e.shiftKey && document.activeElement === ultimo) {
+          e.preventDefault();primeiro.focus();
+        }
+      }
+    }
+    principal.addEventListener("click", () => encerrar(true));
+    secundario.addEventListener("click", () => encerrar(false));
+    overlay.addEventListener("click", e => {
+      if (e.target === overlay) encerrar(false);
+    });
+    document.addEventListener("keydown", teclado, true);
+    if (campoCodigo) {
+      campoCodigo.focus();
+      campoCodigo.select();
+    } else if (opcoes.somenteInformativo) principal.focus();
+    else secundario.focus();  // A escolha segura é não executar a operação.
+  });
+}
+window.QC_dialogoQuintos338 = QC_dialogoQuintos338;
+
 // PASSO 297 - Espera discreta JUNTO ao botao ou mensagem da operacao.
 // Nao bloqueia, nao escurece nem cobre a tela. Nao altera requisicoes.
 const QC_ESPERA295 = (() => {
@@ -1157,7 +1310,14 @@ document.getElementById("qcCopiarTransf275")
       await navigator.clipboard.writeText(qcCodigoCompartilhar275);
       qcAvisoTransferir275.textContent="Codigo copiado. Envie somente ao destinatario.";
     } catch(_) {
-      window.prompt("Copie o codigo para o destinatario:", qcCodigoCompartilhar275);
+      await QC_dialogoQuintos338({
+        titulo:"Copiar código da transferência",
+        texto:"A cópia automática não está disponível neste navegador. " +
+          "Selecione e copie o código abaixo para entregar somente ao destinatário.",
+        codigo:qcCodigoCompartilhar275,
+        confirmarTexto:"Fechar",
+        somenteInformativo:true
+      });
     }
   });
 // PASSO 332.8 — Atualizar saldos depois de movimentações CONFIRMADAS.
@@ -4060,7 +4220,17 @@ function QC_confirmarPagamentoPedido(nome, valor) {
       }
       if(p.status==="PENDENTE"){
         item.append(acaoLinha("Pedir cancelamento",async()=>{
-          if(!window.confirm("Solicitar cancelamento de "+p.valor+" QC? As fichas continuam reservadas ate autorizacao do tesoureiro.")) return;
+          const aceito=await QC_dialogoQuintos338({
+            titulo:"Solicitar cancelamento de resgate",
+            texto:"Deseja pedir o cancelamento deste resgate?",
+            detalhes:[{rotulo:"VALOR RESERVADO",
+              valor:"Qc$ "+Number(p.valor).toLocaleString("pt-BR")}],
+            aviso:"As fichas continuarão reservadas até a autorização " +
+              "do tesoureiro. Não faça outra solicitação para substituir este pedido.",
+            confirmarTexto:"Solicitar cancelamento",
+            cancelarTexto:"Manter meu resgate"
+          });
+          if(!aceito)return;
           await window.QC_pedirCancelamentoResgate278(p.idResgate);
           status.textContent="Cancelamento solicitado. Aguarde autorizacao do tesoureiro.";
         }));
@@ -4078,7 +4248,7 @@ function QC_confirmarPagamentoPedido(nome, valor) {
       !encerrados.has(String(p.status||"").trim().toUpperCase()));
   }
 
-  // Aviso com o mesmo estilo dos modais do aplicativo, sem confirm() nativo.
+  // Aviso com o mesmo estilo dos modais do aplicativo, sem janelas nativas.
   // Nenhum pedido, reserva ou pagamento e feito por esta janela.
   function QC_avisoPendenciasResgate336(pedidos) {
     return new Promise(resolver=>{
@@ -4392,7 +4562,30 @@ function QC_confirmarPagamentoPedido(nome, valor) {
           const b=document.createElement("button");b.type="button";
           b.className="qc-btn-modal-secundario";b.textContent=texto;
           b.addEventListener("click",async()=>{
-            if(!window.confirm(mensagemConfirmacao))return;
+            const pagamento=acao==="qc_resgate_confirmar_pagamento";
+            const aceito=await QC_dialogoQuintos338({
+              titulo:pagamento ? "Confirmar pagamento do resgate" :
+                "Autorizar cancelamento do resgate",
+              texto:mensagemConfirmacao,
+              detalhes:[
+                {rotulo:"IRMÃO",valor:String(p.nome||"Não informado")},
+                {rotulo:"VALOR",valor:"Qc$ "+Number(p.valor).toLocaleString("pt-BR")+
+                  " — R$ "+Number(p.valor).toLocaleString("pt-BR",{
+                    minimumFractionDigits:2,maximumFractionDigits:2})},
+                ...(pagamento && chavePix ?
+                  [{rotulo:"CHAVE PIX",valor:chavePix}] : [])
+              ],
+              aviso:pagamento ?
+                "Esta opção NÃO envia Pix. Confirme somente depois que o " +
+                "pagamento tiver sido realizado e conferido no banco. " +
+                "A confirmação extingue os Qc$ definitivamente." :
+                "Autorize apenas se nenhum pagamento foi realizado. " +
+                "As fichas só voltam à carteira após a recuperação segura.",
+              confirmarTexto:pagamento ?
+                "Já paguei — confirmar e encerrar" : "Autorizar cancelamento",
+              cancelarTexto:"Voltar sem alterar"
+            });
+            if(!aceito)return;
             b.disabled=true;mensagem.textContent="Registrando...";
             try{
               const r=await postar(acao,{idResgate:p.idResgate});
