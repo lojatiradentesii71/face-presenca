@@ -105,6 +105,17 @@
   atualizarIconeOlho301();
   let ocupada=false,escaneando=false,stream=null,video=null,leitor=null;
   let ciclo=0;
+  let leitorPromessa343=null;
+  function leitorAntecipado343() {
+    if(!leitorPromessa343) {
+      leitorPromessa343=escolherLeitor().catch(e=>{
+        leitorPromessa343=null;
+        throw e;
+      });
+    }
+    return leitorPromessa343;
+  }
+
 
   // Passo 311: sinal sonoro discreto ao ler o QR Code correto da sacola.
   // O som confirma a LEITURA, nao a conclusao do registro no servidor.
@@ -163,6 +174,9 @@
   }
   async function abrir() {
     if (ocupada) return;
+    // Iniciar carregamento do leitor enquanto o irmão escolhe o valor.
+    // Não bloquear a abertura da janela; tentativa antecipada é opcional.
+    leitorAntecipado343().catch(()=>{});
     modal.style.display="flex";
     modo("processando");
     try {
@@ -189,26 +203,36 @@
     }
     if (typeof BarcodeDetector==="function") {
       try {return {tipo:"nativo",detector:new BarcodeDetector({formats:["qr_code"]})};}
-      catch(_){ /* Recorre ao leitor de imagem. */ }
+      catch(_){ /* Biblioteca alternativa. */ }
     }
     if (typeof window.jsQR!=="function") {
       const origens=[
         "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js",
         "https://unpkg.com/jsqr@1.4.0/dist/jsQR.min.js"
       ];
-      let carregou=false;
-      for (const url of origens) {
+      for(const url of origens) {
         try {
-          await new Promise((resolve,reject)=>{
-            const s=document.createElement("script");s.src=url;s.async=true;
-            s.onload=resolve;s.onerror=()=>{s.remove();reject(Error("Sem conexão com o leitor QR."));};
+          await new Promise((resolver,rejeitar)=>{
+            const s=document.createElement("script");
+            s.src=url;s.async=true;
+            let resolvido=false;
+            const encerrar=(erro)=>{
+              if(resolvido)return;
+              resolvido=true;
+              clearTimeout(limite);
+              s.onload=null;s.onerror=null;
+              if(erro){s.remove();rejeitar(erro);}else resolver();
+            };
+            const limite=setTimeout(()=>encerrar(Error("Tempo esgotado ao carregar leitor de QR.")),7000);
+            s.onload=()=>encerrar(null);
+            s.onerror=()=>encerrar(Error("Leitor de QR indisponível."));
             document.head.appendChild(s);
           });
-          if (typeof window.jsQR==="function") {carregou=true;break;}
-        } catch(_) {/* Segunda origem disponível. */}
+          if(typeof window.jsQR==="function")break;
+        } catch(_) { /* Tentativa alternativa, sem bloqueio indefinido. */ }
       }
-      if (!carregou && typeof window.jsQR!=="function") {
-        throw Error("Leitor de QR Code indisponível. Nenhuma doação foi enviada.");
+      if(typeof window.jsQR!=="function") {
+        throw Error("O leitor de QR não carregou. Conecte-se à internet e tente novamente. Nenhuma doação foi enviada.");
       }
     }
     return {tipo:"imagem"};
@@ -224,8 +248,12 @@
     const botao=$("qcPrepararDoar301");botao.disabled=true;
     aviso.textContent="Verificando fichas e preparando sua contribuição...";
     try {
-      leitor=await escolherLeitor();
+      const comeco343=performance.now();
+      leitor=await leitorAntecipado343();
+      const tempoLeitor343=Math.round(performance.now()-comeco343);
       const retorno=await window.QC_prepararDoacaoQR301(valor);
+      console.info("QC_PERF343 leitor "+tempoLeitor343+" ms; preparacao completa "+
+        Math.round(performance.now()-comeco343)+" ms");
       if (retorno.status==="PREPARADA") {campo.value="";modo("pronto");}
       else if (retorno.status==="ACIONADA") modo("pendente");
       else if (retorno.status==="CANCELADO") aviso.textContent="Preparação cancelada.";
