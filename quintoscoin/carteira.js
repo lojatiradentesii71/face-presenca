@@ -468,6 +468,8 @@ qcCartaoReceber293.insertBefore(
   qcPedidosReceber295, qcConfirmacaoReceber293
 );
 let qcConsultaReceber295 = 0;
+// PASSO 341: bloqueia cliques repetidos enquanto o servidor confirma o cancelamento.
+let qcCancelandoPedidoPix341 = false;
 
 // PASSO 300 - Indicador de valores disponiveis no botao RECEBER Qc$.
 // So conta pedidos efetivamente recebiveis; CONFERIR nao gera alerta.
@@ -787,7 +789,10 @@ async function QC_carregarPedidosReceber295() {
         resumo.style.cssText="font-size:13px;line-height:1.5;margin:0";
         const verPix=QC_botaoReceber295("Ver Pix deste pedido");
         verPix.addEventListener("click",()=>{
-          QC_exibirConfirmacaoReceber(quantidade,{reabrir:true});
+          QC_exibirConfirmacaoReceber(quantidade,{
+            reabrir:true,
+            idAutorizacao:String(pedido.idAutorizacao||"").trim()
+          });
         });
         area.append(resumo,verPix);
         qcPedidosReceber295.appendChild(area);
@@ -817,13 +822,70 @@ function QC_abrirModalReceber() {
 }
 
 function QC_fecharModalReceber() {
+  if (qcCancelandoPedidoPix341) return;
   qcConsultaReceber295++; // descarta resposta de consultas encerradas
   qcModalReceber.style.display = "none";
   document.getElementById("qcMensagemReceber").textContent = "";
 }
 
+// PASSO 341 — Cancelamento de pedido de RECEBIMENTO, nunca de Pix bancário.
+// A rota autentica a carteira e só permite a transição PENDENTE -> CANCELADA.
+async function QC_cancelarPedidoPix341(idAutorizacao, quantidade, botao) {
+  if(qcCancelandoPedidoPix341) return;
+  const id=String(idAutorizacao||"").trim();
+  if(!/^[0-9a-f-]{36}$/i.test(id)) {
+    const aviso=QC_avisoReceber295(
+      "Não foi possível identificar o pedido. Volte à lista e consulte novamente.");
+    qcConfirmacaoReceber293.appendChild(aviso);
+    return;
+  }
+  const aceito=await QC_dialogoQuintos338({
+    titulo:"Cancelar pedido de recebimento",
+    texto:"Deseja cancelar esta solicitação de QuintosCoin?",
+    detalhes:[{rotulo:"PEDIDO",valor:id.slice(0,8)},
+      {rotulo:"VALOR SOLICITADO",valor:QC_valorReceber295(quantidade)}],
+    aviso:"Cancele somente se AINDA NÃO FEZ O PIX. " +
+      "Se você já pagou, não cancele: fale com o tesoureiro. " +
+      "Este cancelamento não estorna pagamentos bancários. " +
+      "Pedidos já autorizados não podem ser cancelados por aqui.",
+    confirmarTexto:"Sim, cancelar pedido",
+    cancelarTexto:"Manter pedido"
+  });
+  if(!aceito) return;
+  qcCancelandoPedidoPix341=true;
+  if(botao) botao.disabled=true;
+  const status=QC_avisoReceber295("Solicitando cancelamento ao servidor...");
+  qcConfirmacaoReceber293.appendChild(status);
+  try {
+    const retorno=await QC_post191("qc_cancelar_pedido_pix_341",{
+      idAutorizacao:id
+    });
+    if(retorno?.status!=="CANCELADA") {
+      throw Error(retorno?.mensagem ||
+        "Pedido não cancelado: " + String(retorno?.status||"resposta desconhecida"));
+    }
+    // A lista sempre é consultada novamente; não se cria nova emissão.
+    await QC_carregarPedidosReceber295();
+    if(qcModalReceber.style.display==="flex" &&
+       qcPedidosReceber295.style.display==="block") {
+      qcPedidosReceber295.insertBefore(
+        QC_avisoReceber295("✅ Pedido cancelado no servidor. Nenhum Qc$ foi emitido. " +
+          "Se já houve Pix, contate o tesoureiro sobre o pagamento."),
+        qcPedidosReceber295.firstChild
+      );
+    }
+  } catch(erro) {
+    status.textContent="⚠️ " + String(erro.message||erro) +
+      ". Consulte a lista de pedidos antes de tentar novamente.";
+  } finally {
+    qcCancelandoPedidoPix341=false;
+    if(botao && botao.isConnected) botao.disabled=false;
+  }
+}
+
 function QC_exibirConfirmacaoReceber(quantidade, opcoes={}) {
   const reabrir=!!opcoes.reabrir;
+  const idAutorizacao=String(opcoes.idAutorizacao||"").trim();
   qcPedidosReceber295.style.display = "none";
   // Substituir visualmente o formulario pela confirmacao dentro do modal.
   qcFormularioReceber293.forEach(elemento => {
@@ -854,16 +916,38 @@ function QC_exibirConfirmacaoReceber(quantidade, opcoes={}) {
   const fechar = document.createElement("button");
   fechar.type = "button";
   fechar.className = "qc-btn-modal-principal";
-  fechar.textContent = reabrir ? "Voltar aos pedidos" : "Entendi";
-  fechar.style.cssText = "margin-top:8px;min-width:130px;max-width:210px";
+  fechar.textContent = reabrir ? "Voltar aos pedidos" : "OK";
+  fechar.style.cssText = "margin-top:8px;width:100%;min-height:44px;"+
+    "box-sizing:border-box;";
   fechar.addEventListener("click", reabrir ?
     QC_carregarPedidosReceber295 : QC_fecharModalReceber);
+
+  // Ação distinta: cancelar o PEDIDO no servidor, e não só fechar o Pix.
+  const cancelarPedido=document.createElement("button");
+  cancelarPedido.type="button";
+  cancelarPedido.className="qc-btn-modal-secundario";
+  cancelarPedido.textContent=reabrir ? "Cancelar pedido" : "Cancelar";
+  cancelarPedido.style.cssText="width:100%;min-height:44px;"+
+    "box-sizing:border-box;border-color:#da8a8a;";
+  const idValido=/^[0-9a-f-]{36}$/i.test(idAutorizacao);
+  cancelarPedido.disabled=!idValido;
+  cancelarPedido.addEventListener("click",()=>
+    QC_cancelarPedidoPix341(idAutorizacao,quantidade,cancelarPedido));
+  const botoesPix=document.createElement("div");
+  botoesPix.style.cssText="display:flex;flex-direction:column;"+
+    "gap:9px;width:100%;box-sizing:border-box;margin-top:8px";
+  botoesPix.append(fechar,cancelarPedido);
+  if(!idValido) {
+    const orientacao=QC_avisoReceber295(
+      "Para cancelar com segurança, volte à lista e consulte o pedido atualizado.");
+    botoesPix.appendChild(orientacao);
+  }
 
   // O Pix é gerado localmente. Mesmo que ele falhe, a solicitação
   // previamente confirmada como PENDENTE continua registrada no servidor.
   const pagamentoPix=QC_montarPagamentoPix340(quantidade);
   qcConfirmacaoReceber293.append(
-    titulo, valor, situacao, descricao, pagamentoPix, fechar
+    titulo, valor, situacao, descricao, pagamentoPix, botoesPix
   );
   qcConfirmacaoReceber293.style.display = "flex";
   qcModalReceber.style.display = "flex";
@@ -939,7 +1023,9 @@ document.getElementById("qcConfirmarReceber")
 
       campo.value = "";
       // Mostrar a confirmação na própria janela, sem tocar no saldo.
-      QC_exibirConfirmacaoReceber(quantidade);
+      QC_exibirConfirmacaoReceber(quantidade,{
+        idAutorizacao:String(resultado.idAutorizacao||"").trim()
+      });
 
 
     } catch (erro) {
