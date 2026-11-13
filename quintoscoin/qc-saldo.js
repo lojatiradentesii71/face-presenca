@@ -9,6 +9,34 @@
   const enc = new TextEncoder();
   let memoria = null;
   let senhaSessao265 = null;
+  // PASSO 343 — Máximo de quatro verificações independentes em paralelo.
+  // NUNCA paralelizar criação, reserva, gasto, assinatura ou escrita de fichas.
+  const QC_CONCORRENCIA_LEITURA343 = 4;
+  let cacheFichasConferidas343 = null;
+  async function QC_emParalelo343(itens, tarefa) {
+    const resultados=new Array(itens.length);
+    let proximo=0, primeiraFalha=null;
+    async function executar() {
+      while (!primeiraFalha) {
+        const i=proximo++;
+        if(i>=itens.length) return;
+        try {resultados[i]=await tarefa(itens[i],i);}
+        catch(e) { if(!primeiraFalha) primeiraFalha=e; return; }
+      }
+    }
+    const n=Math.min(itens.length,QC_CONCORRENCIA_LEITURA343);
+    await Promise.all(Array.from({length:n},()=>executar()));
+    if(primeiraFalha) throw primeiraFalha;
+    return resultados;
+  }
+  function QC_cacheValido343(id,token) {
+    const c=cacheFichasConferidas343;
+    if(!c || c.id!==id || c.token!==token) return null;
+    // Se fichas foram recebidas, importadas ou alteradas, não reutilizar o cache.
+    if(localStorage.getItem(chaveLocal())!==c.conteudo) return null;
+    return c;
+  }
+
   function QC_formatoValor291(valor) {
     return "Qc$ " + Number(valor).toLocaleString("pt-BR", {
       minimumFractionDigits:2, maximumFractionDigits:2
@@ -387,37 +415,64 @@
     if (!data || typeof data.status!=="string") throw Error("Resposta inesperada do servidor.");
     return data;
   }
-  async function QC_fichasAtuais271(senha) {
-    const todos = lerRegistros();
-    const fichas = [], chaves = new Map(), msgs = new Set();
-    for (const [chaveLocalRegistro, cifrado] of Object.entries(todos)) {
-      const ficha = await abrir(cifrado,senha);
-      const valor = Number(ficha?.valor);
+  async function QC_fichasAtuais271(senha,valorSolicitado=null) {
+    const {id,token}=dadosDaSessao();
+    const anterior=QC_cacheValido343(id,token);
+    if(anterior) {
+      // A conferência integral das assinaturas já foi feita neste login.
+      // Para a sacola, só precisamos confirmar de novo no servidor as
+      // fichas SELECIONADAS no plano (inclusive se houver troco).
+      // Em caso de conflito, reconsulta todas e o planejamento é refeito.
+      if(Number.isSafeInteger(valorSolicitado)) {
+        const previa=QC_planejarComposicao267(
+          anterior.fichas.map(f=>f.valor),valorSolicitado);
+        if(previa.status==="OK") {
+          const escolhidas=previa.indicesSelecionados.map(i=>anterior.fichas[i]);
+          const situacoes=await QC_emParalelo343(escolhidas,consultarFicha263);
+          if(situacoes.every(st=>st==="DISPONIVEL")) {
+            return anterior.fichas.map(f=>({...f}));
+          }
+        }
+      }
+      // Caminho de recuperação ou outras operações: servidor verifica
+      // cada ficha, em paralelo, antes de devolvê-la à carteira.
+      const atualizadas=await QC_emParalelo343(anterior.fichas,async ficha=>{
+        const situacao=await consultarFicha263(ficha);
+        return situacao==="DISPONIVEL" ? {...ficha} : null;
+      });
+      return atualizadas.filter(Boolean);
+    }
+    const todos=Object.entries(lerRegistros());
+    const chaves=new Map(),msgs=new Set();
+    const processadas=await QC_emParalelo343(todos,async ([chaveLocalRegistro,cifrado])=>{
+      const ficha=await abrir(cifrado,senha);
+      const valor=Number(ficha?.valor);
       if (ficha?.formato!=="QC_FICHA_ASSINADA_V1" ||
           ![2,5,10].includes(valor) || ficha.idChave!=="QC-"+valor+"-V1" ||
           !/^[0-9a-f]{1024}$/i.test(String(ficha.assinaturaHex||""))) {
         throw Error("Existe uma ficha local invalida. Nenhuma doacao realizada.");
       }
-      const m = deHex(String(ficha.mensagemHex||"").toLowerCase());
-      const frase = dec.decode(m.subarray(32));
-      if (m.length < 80 || !new RegExp("^QUINTOSCOIN\\|V1\\|"+valor+"\\|QC-"+valor+"-V1\\|[0-9a-f-]{36}$","i").test(frase) ||
-          msgs.has(ficha.mensagemHex.toLowerCase())) {
-        throw Error("Ficha local inconsistente ou duplicada.");
+      const m=deHex(String(ficha.mensagemHex||"").toLowerCase());
+      const frase=dec.decode(m.subarray(32));
+      if(m.length<80 || !new RegExp("^QUINTOSCOIN\\|V1\\|"+valor+
+          "\\|QC-"+valor+"-V1\\|[0-9a-f-]{36}$","i").test(frase)) {
+        throw Error("Ficha local inconsistente.");
       }
-      msgs.add(ficha.mensagemHex.toLowerCase());
-      let pub=chaves.get(valor);
-      if (!pub) {pub=await QC_publica271(valor);chaves.set(valor,pub);}
-      if (!(await crypto.subtle.verify({name:"RSA-PSS",saltLength:48},pub.verify,
-        deHex(ficha.assinaturaHex),m))) {
+      const chaveMsg=ficha.mensagemHex.toLowerCase();
+      if(msgs.has(chaveMsg)) throw Error("Ficha local duplicada.");
+      msgs.add(chaveMsg);
+      if(!chaves.has(valor)) chaves.set(valor,QC_publica271(valor));
+      const pub=await chaves.get(valor);
+      if(!(await crypto.subtle.verify({name:"RSA-PSS",saltLength:48},pub.verify,
+          deHex(ficha.assinaturaHex),m))) {
         throw Error("Assinatura de ficha nao confere.");
       }
       const situacao=await consultarFicha263(ficha);
-      if (situacao === "DISPONIVEL") {
-        fichas.push({chaveLocalRegistro, valor,
-          mensagemHex:ficha.mensagemHex, assinaturaHex:ficha.assinaturaHex});
-      }
-    }
-    return fichas;
+      if(situacao!=="DISPONIVEL") return null;
+      return {chaveLocalRegistro,valor,mensagemHex:ficha.mensagemHex,
+        assinaturaHex:ficha.assinaturaHex};
+    });
+    return processadas.filter(Boolean);
   }
   async function QC_prepararTroco271(plano) {
     const saidasCegas=[],privadas=[];
@@ -693,6 +748,7 @@
   };
 
   window.QC_prepararDoacaoQR301=async function(valor) {
+    const inicioPreparacao343=performance.now();
     if (movimentando271) throw Error("Outra operação de doação está em andamento.");
     movimentando271=true;
     try {
@@ -707,7 +763,7 @@
       if (!Number.isSafeInteger(valor) || valor<2 || valor===3) {
         throw Error("Informe um valor inteiro a partir de 2 Qc$, exceto 3 Qc$.");
       }
-      const disponiveis=await QC_fichasAtuais271(segredo);
+      const disponiveis=await QC_fichasAtuais271(segredo,valor);
       const plano=QC_planejarComposicao267(disponiveis.map(x=>x.valor),valor);
       if (plano.status!=="OK") throw Error(plano.mensagem||plano.status);
       // Conferir bloqueios e sessao ABERTA antes de reservar fichas locais.
@@ -746,6 +802,8 @@
       // Esta gravação NAO movimenta nenhuma ficha nem altera saldo.
       localStorage.setItem(QC_pendenteChave271(),JSON.stringify(cifrado));
       memorizarSenha265(segredo,inicio);
+      console.info("QC_PERF343 preparacao concluída em "+
+        Math.round(performance.now()-inicioPreparacao343)+" ms");
       return {status:"PREPARADA"};
     } finally {movimentando271=false;}
   };
@@ -1810,133 +1868,92 @@ function QC_confirmarTransferencia332(opcoes) {
   }
 
   const QC_conferirSaldo291 = async () => {
-    const {id, token} = dadosDaSessao();
-    const segredo = await obterSenha265();
+    const iniciado343=performance.now();
+    const {id, token}=dadosDaSessao();
+    const segredo=await obterSenha265();
     if (!id || !token) {
-      aviso.textContent = "Entre na carteira primeiro.";
+      aviso.textContent="Entre na carteira primeiro.";
       return;
     }
     if (!segredo) {
-      aviso.textContent = "Digite a senha usada para proteger a ficha.";
+      aviso.textContent="Digite a senha usada para proteger a ficha.";
       return;
     }
-    conferir.disabled = true;
-    aviso.textContent = "Desbloqueando e verificando assinaturas...";
-
+    conferir.disabled=true;
+    aviso.textContent="Desbloqueando e verificando assinaturas...";
     try {
-      if (!crypto.subtle) throw Error("Criptografia indisponível.");
-      const registros = Object.values(lerRegistros());
-      const fichas = [];
-      const mensagens = new Set();
-      let gastas = 0;
-
-      // PASSO 225 - Verificar cada ficha com a chave de sua denominacao.
-      // A mesma chave publica e consultada apenas uma vez por valor.
-      const chaves = new Map();
-      const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
-
-      for (const registro of registros) {
-        const ficha = await abrir(registro, segredo);
-        const valor = ficha?.valor;
-
-        if (
-          !ficha ||
-          ficha.formato !== "QC_FICHA_ASSINADA_V1" ||
-          ![2, 5, 10].includes(valor) ||
-          ficha.idChave !== "QC-" + valor + "-V1" ||
-          !/^[0-9a-f]{1024}$/i.test(ficha.assinaturaHex || "")
-        ) {
+      if(!crypto.subtle) throw Error("Criptografia indisponível.");
+      const conteudoOriginal=localStorage.getItem(chaveLocal());
+      const registros=Object.entries(lerRegistros());
+      const mensagens=new Set();
+      const chaves=new Map();
+      const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+      const resultados=await QC_emParalelo343(registros,
+          async ([chaveLocalRegistro,registro])=>{
+        const ficha=await abrir(registro,segredo);
+        const valor=ficha?.valor;
+        if(!ficha || ficha.formato!=="QC_FICHA_ASSINADA_V1" ||
+           ![2,5,10].includes(valor) ||
+           ficha.idChave!=="QC-"+valor+"-V1" ||
+           !/^[0-9a-f]{1024}$/i.test(ficha.assinaturaHex||"")) {
           throw Error("Ficha assinada com estrutura invalida.");
         }
-
-        const mensagemHex = String(ficha.mensagemHex || "").toLowerCase();
-        const msg = deHex(mensagemHex);
-        if (msg.length < 80) {
-          throw Error("Mensagem da ficha incompleta.");
-        }
-
-        const texto = new TextDecoder("utf-8", {fatal:true})
-          .decode(msg.subarray(32));
-        const partes = texto.split("|");
-        if (
-          partes.length !== 5 ||
-          partes[0] !== "QUINTOSCOIN" ||
-          partes[1] !== "V1" ||
-          partes[2] !== String(valor) ||
-          partes[3] !== ficha.idChave ||
-          !uuid.test(partes[4])
-        ) {
+        const mensagemHex=String(ficha.mensagemHex||"").toLowerCase();
+        const msg=deHex(mensagemHex);
+        if(msg.length<80) throw Error("Mensagem da ficha incompleta.");
+        const texto=new TextDecoder("utf-8",{fatal:true}).decode(msg.subarray(32));
+        const partes=texto.split("|");
+        if(partes.length!==5 || partes[0]!=="QUINTOSCOIN" ||
+           partes[1]!=="V1" || partes[2]!==String(valor) ||
+           partes[3]!==ficha.idChave || !uuid.test(partes[4])) {
           throw Error("Conteudo da ficha invalido.");
         }
-
-        if (mensagens.has(mensagemHex)) {
+        if(mensagens.has(mensagemHex))
           throw Error("Ficha duplicada no armazenamento.");
-        }
         mensagens.add(mensagemHex);
-
-        let chave = chaves.get(valor);
-        if (!chave) {
-          const resposta = await QC_post191("qc_chave_publica_" + valor);
-          const nHex = String(resposta.moduloHex || "").toLowerCase();
-          const eHex = String(resposta.expoenteHex || "").toLowerCase();
-          if (
-            resposta.status !== "OK" ||
-            resposta.idChave !== "QC-" + valor + "-V1" ||
-            !/^[89a-f][0-9a-f]{1023}$/.test(nHex) ||
-            !/^0*10001$/.test(eHex)
-          ) {
-            throw Error("Chave publica de " + valor + " QC indisponivel.");
-          }
-          const eNormal = eHex.length % 2 ? "0" + eHex : eHex;
-          chave = await crypto.subtle.importKey(
-            "jwk",
-            {
-              kty:"RSA", n:base64url(deHex(nHex)),
-              e:base64url(deHex(eNormal)),
-              ext:true, key_ops:["verify"]
-            },
-            {name:"RSA-PSS", hash:"SHA-384"}, false, ["verify"]
-          );
-          chaves.set(valor, chave);
+        if(!chaves.has(valor)) chaves.set(valor,QC_publica271(valor));
+        const pub=await chaves.get(valor);
+        if(!(await crypto.subtle.verify({name:"RSA-PSS",saltLength:48},
+              pub.verify,deHex(ficha.assinaturaHex),msg))) {
+          throw Error("Assinatura de ficha de "+valor+" QC nao verificada.");
         }
-
-        const valida = await crypto.subtle.verify(
-          {name:"RSA-PSS", saltLength:48}, chave,
-          deHex(ficha.assinaturaHex), msg
-        );
-        if (!valida) {
-          throw Error("Assinatura de ficha de " + valor + " QC nao verificada.");
-        }
-        // A assinatura prova autenticidade, mas NAO prova que a ficha
-        // ainda esta disponivel. Consultar o servidor obrigatoriamente.
-        const situacao = await consultarFicha263(ficha);
-        if (situacao === "GASTA") {
-          gastas++;
-          continue;
-        }
-        fichas.push({valor, idChave:ficha.idChave});
+        const situacao=await consultarFicha263(ficha);
+        return situacao==="GASTA" ? {gasta:true} :
+          {gasta:false,valor,idChave:ficha.idChave,
+           chaveLocalRegistro,mensagemHex:ficha.mensagemHex,
+           assinaturaHex:ficha.assinaturaHex};
+      });
+      const agora=dadosDaSessao();
+      if(agora.id!==id || agora.token!==token ||
+         localStorage.getItem(chaveLocal())!==conteudoOriginal) {
+        throw Error("Carteira alterada durante a conferencia. Verifique novamente.");
       }
-
-      const agora = dadosDaSessao();
-      if (agora.id !== id || agora.token !== token) {
-        throw Error("A sessão mudou durante a conferência.");
-      }
-      memoria = {
-        id, token, fichas, gastas,
-        total:fichas.reduce((soma, ficha) => soma + ficha.valor, 0)
-      };
-      memorizarSenha265(segredo, {id, token});
+      const disponiveis=resultados.filter(r=>!r.gasta);
+      const fichas=disponiveis.map(r=>({valor:r.valor,idChave:r.idChave}));
+      const gastas=resultados.length-disponiveis.length;
+      cacheFichasConferidas343={id,token,conteudo:conteudoOriginal,
+        fichas:disponiveis.map(r=>({chaveLocalRegistro:r.chaveLocalRegistro,
+          valor:r.valor,mensagemHex:r.mensagemHex,
+          assinaturaHex:r.assinaturaHex}))};
+      memoria={id,token,fichas,gastas,
+        total:fichas.reduce((soma,ficha)=>soma+ficha.valor,0)};
+      memorizarSenha265(segredo,{id,token});
       renderizar();
-      aviso.textContent = "✅ Saldo disponivel: " + memoria.total +
-        " QC em " + fichas.length + " ficha(s). " + gastas +
+      const duracao=Math.round(performance.now()-iniciado343);
+      console.info("QC_PERF343 saldo concluído em "+duracao+" ms; fichas="+registros.length);
+      aviso.textContent="✅ Saldo disponivel: "+memoria.total+
+        " QC em "+fichas.length+" ficha(s). "+gastas+
         " ficha(s) ja gastas foram excluidas do saldo.";
-    } catch (erro) {
-      memoria = null;
+    } catch(erro) {
+      cacheFichasConferidas343=null;
+      memoria=null;
       renderizar();
-      aviso.textContent = "⚠️ " + erro.message;
+      console.warn("QC_PERF343 saldo falhou após "+
+        Math.round(performance.now()-iniciado343)+" ms");
+      aviso.textContent="⚠️ "+erro.message;
       throw erro;
     } finally {
-      conferir.disabled = false;
+      conferir.disabled=false;
     }
   };
   conferir.addEventListener("click", () => {
