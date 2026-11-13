@@ -400,7 +400,7 @@ qcModalReceber.innerHTML = `
     <input
       id="qcValorReceber"
       type="number"
-      min="1"
+      min="2"
       step="1"
       inputmode="numeric"
       placeholder="Exemplo: 50"
@@ -430,6 +430,19 @@ qcModalReceber.innerHTML = `
 `;
 
 document.body.appendChild(qcModalReceber);
+// PASSO 340 — Rolagem acessível em celulares quando o Pix é apresentado.
+const qcEstiloPixReceber340=document.createElement("style");
+qcEstiloPixReceber340.textContent=`
+  #qcModalReceber {box-sizing:border-box;padding:12px;
+    padding-top:max(12px,env(safe-area-inset-top));
+    padding-bottom:max(12px,env(safe-area-inset-bottom));}
+  #qcModalReceber>.qc-modal-card {box-sizing:border-box;
+    min-height:0;max-height:calc(100vh - 24px);
+    max-height:calc(100dvh - 24px);overflow-y:auto;overflow-x:hidden;
+    overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
+  #qcReceberPix340 svg{max-width:100%;height:auto}
+`;
+document.head.appendChild(qcEstiloPixReceber340);
 
 // PASSO 293 - A confirmacao aparece NA MESMA JANELA do formulario.
 // Preservar os elementos originais preserva tambem seus eventos de clique.
@@ -761,6 +774,24 @@ async function QC_carregarPedidosReceber295() {
           : "Você também tem " + aguardando.length +
             " pedidos aguardando autorização do tesoureiro."
       ));
+      // PASSO 340 — Reabrir o Pix do mesmo pedido PENDENTE, sem gerar outro.
+      for(const pedido of aguardando) {
+        const quantidade=Number(pedido.valor);
+        if(!Number.isSafeInteger(quantidade)||quantidade<2||quantidade===3) continue;
+        const area=document.createElement("div");
+        area.style.cssText="border:1px solid #e6c36350;border-radius:10px;"+
+          "padding:12px;margin:9px 0";
+        const resumo=document.createElement("p");
+        resumo.textContent=QC_valorReceber295(quantidade)+
+          " · Pedido pendente · " + String(pedido.dataSolicitacao||"");
+        resumo.style.cssText="font-size:13px;line-height:1.5;margin:0";
+        const verPix=QC_botaoReceber295("Ver Pix deste pedido");
+        verPix.addEventListener("click",()=>{
+          QC_exibirConfirmacaoReceber(quantidade,{reabrir:true});
+        });
+        area.append(resumo,verPix);
+        qcPedidosReceber295.appendChild(area);
+      }
     }
     const novo = QC_botaoReceber295("+ Solicitar novos Qc$");
     novo.addEventListener("click",QC_mostrarFormularioReceber295);
@@ -791,7 +822,8 @@ function QC_fecharModalReceber() {
   document.getElementById("qcMensagemReceber").textContent = "";
 }
 
-function QC_exibirConfirmacaoReceber(quantidade) {
+function QC_exibirConfirmacaoReceber(quantidade, opcoes={}) {
+  const reabrir=!!opcoes.reabrir;
   qcPedidosReceber295.style.display = "none";
   // Substituir visualmente o formulario pela confirmacao dentro do modal.
   qcFormularioReceber293.forEach(elemento => {
@@ -800,7 +832,8 @@ function QC_exibirConfirmacaoReceber(quantidade) {
   qcConfirmacaoReceber293.replaceChildren();
 
   const titulo = document.createElement("h3");
-  titulo.textContent = "✅ Solicitação registrada!";
+  titulo.textContent = reabrir ? "Pix para pedido pendente" :
+    "✅ Solicitação registrada!";
   titulo.style.cssText = "margin:0;color:#e6c363;font-size:21px";
 
   const valor = document.createElement("div");
@@ -813,19 +846,24 @@ function QC_exibirConfirmacaoReceber(quantidade) {
 
   const descricao = document.createElement("p");
   descricao.textContent =
-    "Aguardando confirmação do pagamento e autorização do tesoureiro. " +
-    "Os QCs ainda não foram creditados.";
+    "Pedido pendente de autorização do tesoureiro. " +
+    "O Pix pode ser pago no banco, mas os Qc$ só serão creditados " +
+    "após a confirmação do tesoureiro e a assinatura das fichas.";
   descricao.style.cssText = "margin:0;line-height:1.5";
 
   const fechar = document.createElement("button");
   fechar.type = "button";
   fechar.className = "qc-btn-modal-principal";
-  fechar.textContent = "Entendi";
+  fechar.textContent = reabrir ? "Voltar aos pedidos" : "Entendi";
   fechar.style.cssText = "margin-top:8px;min-width:130px;max-width:210px";
-  fechar.addEventListener("click", QC_fecharModalReceber);
+  fechar.addEventListener("click", reabrir ?
+    QC_carregarPedidosReceber295 : QC_fecharModalReceber);
 
+  // O Pix é gerado localmente. Mesmo que ele falhe, a solicitação
+  // previamente confirmada como PENDENTE continua registrada no servidor.
+  const pagamentoPix=QC_montarPagamentoPix340(quantidade);
   qcConfirmacaoReceber293.append(
-    titulo, valor, situacao, descricao, fechar
+    titulo, valor, situacao, descricao, pagamentoPix, fechar
   );
   qcConfirmacaoReceber293.style.display = "flex";
   qcModalReceber.style.display = "flex";
@@ -865,10 +903,10 @@ document.getElementById("qcConfirmarReceber")
     if (
       !campo.value.trim() ||
       !Number.isSafeInteger(quantidade) ||
-      quantidade <= 0
+      quantidade < 2 || quantidade === 3
     ) {
       mensagem.textContent =
-        "⚠️ Informe uma quantidade inteira e positiva.";
+        "⚠️ Informe uma quantidade inteira a partir de 2 Qc$, exceto 3 Qc$.";
       return;
     }
 
@@ -1080,6 +1118,156 @@ function QC_desenharQR275(elemento, texto) {
   elemento.replaceChildren(svg);
 }
 
+
+// PASSO 340 — Pix ESTÁTICO (BR Code/EMV) para solicitação de Qc$.
+// NÃO consulta o banco, NÃO confirma pagamento e NÃO autoriza emissão.
+// A chave Pix é pública; não há segredo bancário no aplicativo.
+const QC_PIX340 = Object.freeze({
+  chave: "89606529000167", // CNPJ informado para a loja.
+  favorecidoCompleto: "A LOJA SIMBOLICA TIRADENTES II N 71",
+  // Campo 59 do BR Code permite no máximo 25 caracteres.
+  nomeEmv: "LOJA TIRADENTES II N 71",
+  cidadeEmv: "CAPAO DO LEAO"
+});
+function QC_tlvPix340(id, valor) {
+  const texto = String(valor);
+  if (!/^\d{2}$/.test(id) || !/^[\x20-\x7e]*$/.test(texto) ||
+      texto.length > 99) throw Error("Campo BR Code inválido.");
+  return id + String(texto.length).padStart(2,"0") + texto;
+}
+function QC_crcPix340(texto) {
+  let crc=0xFFFF;
+  for(let i=0;i<texto.length;i++) {
+    crc ^= texto.charCodeAt(i) << 8;
+    for(let b=0;b<8;b++) {
+      crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xFFFF
+        : (crc << 1) & 0xFFFF;
+    }
+  }
+  return crc.toString(16).toUpperCase().padStart(4,"0");
+}
+function QC_gerarCopiaColaPix340(qtd) {
+  if (!Number.isSafeInteger(qtd) || qtd < 2 || qtd===3 || qtd>999999999) {
+    throw Error("Informe quantidade válida de Qc$ (exceto 1 e 3).");
+  }
+  const conta = QC_tlvPix340("00","br.gov.bcb.pix")+
+    QC_tlvPix340("01",QC_PIX340.chave);
+  const codigo = QC_tlvPix340("00","01")+
+    QC_tlvPix340("01","11")+ // QR estático reutilizável, com valor por solicitação.
+    QC_tlvPix340("26",conta)+
+    QC_tlvPix340("52","0000")+
+    QC_tlvPix340("53","986")+
+    QC_tlvPix340("54",qtd.toFixed(2))+
+    QC_tlvPix340("58","BR")+
+    QC_tlvPix340("59",QC_PIX340.nomeEmv)+
+    QC_tlvPix340("60",QC_PIX340.cidadeEmv)+
+    QC_tlvPix340("62",QC_tlvPix340("05","***"))+"6304";
+  return codigo + QC_crcPix340(codigo);
+}
+function QC_montarPagamentoPix340(valor) {
+  const raiz=document.createElement("section");
+  raiz.id="qcReceberPix340";
+  raiz.style.cssText="width:100%;box-sizing:border-box;text-align:center;"+
+    "display:flex;flex-direction:column;gap:10px;align-items:center;"+
+    "border:1px solid #e6c36365;border-radius:12px;padding:12px;"+
+    "background:#ffffff08;margin:5px 0;";
+  const titulo=document.createElement("h3");
+  titulo.textContent="Pagar por Pix";
+  titulo.style.cssText="margin:3px 0;color:#e6c363;font-size:18px";
+  const quantidade=document.createElement("strong");
+  quantidade.textContent="R$ " + Number(valor).toLocaleString("pt-BR",{
+    minimumFractionDigits:2,maximumFractionDigits:2
+  });
+  quantidade.style.cssText="font-size:27px;color:#fff";
+  const favorecido=document.createElement("p");
+  favorecido.textContent=QC_PIX340.favorecidoCompleto + " · Capão do Leão";
+  favorecido.style.cssText="font-size:12px;line-height:1.4;margin:0;"+
+    "overflow-wrap:anywhere";
+  const imagem=document.createElement("div");
+  imagem.className="qc-pix-imagem340";
+  imagem.style.cssText="display:flex;justify-content:center;"+
+    "background:white;padding:9px;border-radius:9px;max-width:100%;"+
+    "box-sizing:border-box";
+  const orientacao=document.createElement("p");
+  orientacao.textContent="Escaneie com outro celular ou use Pix Copia e Cola " +
+    "no aplicativo do seu banco.";
+  orientacao.style.cssText="margin:0;font-size:13px;line-height:1.5";
+  const codigoTitulo=document.createElement("label");
+  codigoTitulo.textContent="Pix Copia e Cola";
+  codigoTitulo.style.cssText="align-self:flex-start;font-size:13px;"+
+    "font-weight:700";
+  const texto=document.createElement("textarea");
+  texto.rows=3;
+  texto.readOnly=true;
+  texto.className="qc-input-modal";
+  texto.style.cssText="width:100%;box-sizing:border-box;resize:vertical;"+
+    "font-size:12px;word-break:break-all";
+  texto.setAttribute("aria-label","Código Pix Copia e Cola");
+  const copiar=document.createElement("button");
+  copiar.type="button";
+  copiar.textContent="Copiar código Pix";
+  copiar.className="qc-btn-modal-principal";
+  copiar.style.cssText="width:100%;box-sizing:border-box;min-height:44px";
+  const resposta=document.createElement("p");
+  resposta.setAttribute("role","status");
+  resposta.style.cssText="margin:0;font-size:12px;line-height:1.4";
+  const aviso=document.createElement("p");
+  aviso.textContent="O pagamento não é confirmado automaticamente. " +
+    "Confira no aplicativo bancário o CNPJ, o beneficiário e o valor " +
+    "antes de pagar. O tesoureiro verifica o recebimento e autoriza " +
+    "a emissão dos Qc$.";
+  aviso.style.cssText="margin:0;font-size:12px;line-height:1.5;"+
+    "opacity:.9;text-align:left;border-left:3px solid #e6c363;"+
+    "padding-left:9px";
+  raiz.append(titulo,quantidade,favorecido,imagem,orientacao,
+    codigoTitulo,texto,copiar,resposta,aviso);
+  try {
+    const payload=QC_gerarCopiaColaPix340(Number(valor));
+    texto.value=payload;
+    QC_desenharQR275(imagem,payload); // Gerador local do app (QR v10-L).
+    const qr=imagem.querySelector("svg");
+    if(qr) {
+      qr.setAttribute("aria-label","QR Code Pix para R$ "+valor);
+      qr.style.maxWidth="100%";
+      qr.style.height="auto";
+      qr.style.width="276px";
+    }
+    texto.addEventListener("click",()=>texto.select());
+    copiar.addEventListener("click",async()=>{
+      try {
+        if (!navigator.clipboard?.writeText) throw Error("Sem permissão de cópia");
+        await navigator.clipboard.writeText(payload);
+        resposta.textContent="Código Pix copiado. Cole no aplicativo do banco.";
+      } catch(_) {
+        if(typeof window.QC_dialogoQuintos338==="function") {
+          await window.QC_dialogoQuintos338({
+            titulo:"Copiar Pix manualmente",
+            texto:"Copie o código abaixo e cole no aplicativo do banco.",
+            codigo:payload,confirmarTexto:"Fechar",somenteInformativo:true
+          });
+        } else {
+          texto.focus();texto.select();
+          resposta.textContent="Selecione e copie o código exibido acima.";
+        }
+      }
+    });
+  } catch(erro) {
+    // Nunca transformar um pedido já PENDENTE num falso 'pedido falhou'.
+    imagem.replaceChildren();
+    const informacao=document.createElement("p");
+    informacao.textContent="QR Code indisponível neste aparelho: " +
+      String(erro.message||erro);
+    informacao.style.cssText="color:#6d260c;background:#fff7d3;"+
+      "padding:9px;border-radius:8px";
+    imagem.appendChild(informacao);
+    texto.style.display="none";
+    copiar.style.display="none";
+    codigoTitulo.style.display="none";
+    resposta.textContent="O pedido já está registrado. Não faça outra " +
+      "solicitação para tentar novamente; consulte o tesoureiro.";
+  }
+  return raiz;
+}
 
 // PASSO 275 - UM BOTAO TRANSFERIR, COM ENVIAR E RECEBER NA MESMA JANELA.
 // Nenhum QR ou codigo secreto passa por site de QR: gerar inteiramente local.
