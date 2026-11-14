@@ -766,12 +766,20 @@
       const disponiveis=await QC_fichasAtuais271(segredo,valor);
       const plano=QC_planejarComposicao267(disponiveis.map(x=>x.valor),valor);
       if (plano.status!=="OK") throw Error(plano.mensagem||plano.status);
-      // Conferir bloqueios e sessao ABERTA antes de reservar fichas locais.
-      // Esta consulta nao envia fichas, nome, ID nem token da carteira.
-      const pre=await QC_postAnonimo271("qc_preparar_doacao_qr301",{
-        tipo:plano.tipo,quantidadeEntradas:plano.indicesSelecionados.length,
-        quantidadeTroco:plano.fichasTroco.length
-      });
+      // PASSO 344 — Latência: consulta da sessão e geração de troco cego
+      // são operações INDEPENDENTES e não movimentam fichas. Paralelizar
+      // não altera a assinatura, o gasto ou a recuperação idempotente.
+      // Ambas devem concluir ANTES de qualquer gravação da doação preparada.
+      const inicioEtapa344=performance.now();
+      const [pre,trocoLocal344]=await Promise.all([
+        QC_postAnonimo271("qc_preparar_doacao_qr301",{
+          tipo:plano.tipo,quantidadeEntradas:plano.indicesSelecionados.length,
+          quantidadeTroco:plano.fichasTroco.length
+        }),
+        plano.valorTroco ? QC_prepararTroco271(plano) : Promise.resolve(null)
+      ]);
+      console.info("QC_PERF344 sessão+troco em paralelo: "+
+        Math.round(performance.now()-inicioEtapa344)+" ms");
       if (pre.status!=="PRONTA" || !pre.idSessao ||
           !/^\d{4}-\d{2}-\d{2}$/.test(String(pre.dia||""))) {
         throw Error(pre.mensagem||"A arrecadação ainda não está disponível.");
@@ -790,9 +798,12 @@
         saidasCegas:[],privadas:[],etapaQR301:"PREPARADA",
         idSessaoQR301:String(pre.idSessao),diaQR301:String(pre.dia)};
       if (plano.valorTroco) {
-        const troco=await QC_prepararTroco271(plano);
-        op.saidasCegas=troco.saidasCegas;
-        op.privadas=troco.privadas;
+        if (!trocoLocal344 || !Array.isArray(trocoLocal344.saidasCegas) ||
+            !Array.isArray(trocoLocal344.privadas)) {
+          throw Error("O troco protegido não ficou pronto. Nenhuma doação foi gravada.");
+        }
+        op.saidasCegas=trocoLocal344.saidasCegas;
+        op.privadas=trocoLocal344.privadas;
       }
       const cifrado=await QC_cifrar271(op,segredo);
       QC_conferirSessaoQR301(inicio);
@@ -2378,6 +2389,10 @@ function QC_confirmarTransferencia332(opcoes) {
   // Reconsulta quando o usuario retorna a aba; sem digitar outra senha.
   document.addEventListener("visibilitychange",()=>{
     if(!document.hidden && window.QC_senhaFichas291()) {
+      // PASSO 344: se a sacola já está preparada/acionada, não atrasar
+      // a câmera refazendo todas as consultas de saldo. O servidor
+      // continua validando fichas no ato da doação.
+      if(localStorage.getItem(QC_pendenteChave271())) return;
       QC_conferirSaldo291().catch(()=>{});
     }
   });
