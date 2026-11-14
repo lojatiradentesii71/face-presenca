@@ -249,12 +249,27 @@
     aviso.textContent="Verificando fichas e preparando sua contribuição...";
     try {
       const comeco343=performance.now();
-      leitor=await leitorAntecipado343();
-      const tempoLeitor343=Math.round(performance.now()-comeco343);
+      // PASSO 344: iniciar o leitor de QR sem bloquear o preparo. O leitor
+      // será aguardado apenas ao abrir a câmera; nenhuma ficha depende dele.
+      let falhaLeitor344="";
+      leitorAntecipado343().then(
+        pronto=>{leitor=pronto;},
+        e=>{
+          falhaLeitor344=String(e?.message||e);
+          if(modal.style.display==="flex" && !secoes.pronto.hidden)
+            erro("Leitor QR ainda indisponível: "+falhaLeitor344+
+              ". Seu preparo continua protegido; tente abrir a câmera novamente.");
+        }
+      );
       const retorno=await window.QC_prepararDoacaoQR301(valor);
-      console.info("QC_PERF343 leitor "+tempoLeitor343+" ms; preparacao completa "+
+      console.info("QC_PERF344 preparacao sem espera do leitor: "+
         Math.round(performance.now()-comeco343)+" ms");
-      if (retorno.status==="PREPARADA") {campo.value="";modo("pronto");}
+      if (retorno.status==="PREPARADA") {
+        campo.value="";modo("pronto");
+        if(falhaLeitor344)
+          erro("Leitor QR ainda indisponível: "+falhaLeitor344+
+            ". O preparo foi salvo; tente novamente antes da sacola.");
+      }
       else if (retorno.status==="ACIONADA") modo("pendente");
       else if (retorno.status==="CANCELADO") aviso.textContent="Preparação cancelada.";
       else throw Error("Não foi possível preparar a doação.");
@@ -298,7 +313,8 @@
     prepararSom311(); // Desbloqueia audio no gesto do usuario, inclusive no Android.
     ocupada=true;
     try {
-      leitor=leitor||await escolherLeitor();
+      // Reutilizar o leitor iniciado antes do preparo, sem baixar novamente.
+      leitor=leitor||await leitorAntecipado343();
       const cam=await navigator.mediaDevices.getUserMedia({
         video:{facingMode:{ideal:"environment"}},audio:false
       });
