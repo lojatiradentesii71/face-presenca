@@ -2026,8 +2026,8 @@ const QC_AUTO303 = (() => {
   const NOME = "QC_ACESSO_TEMPORARIO_303";
   const BASE = "QC_CHAVES_TEMPORARIAS_303";
   const LOJA = "chaves";
-  const INATIVIDADE = 30 * 60 * 1000;
-  const MAXIMO = 30 * 60 * 1000; // alinhado ao TTL atual do servidor
+  const INATIVIDADE = 2 * 60 * 60 * 1000; // PASSO 344: 2 horas sem atividade
+  const MAXIMO = 2 * 60 * 60 * 1000; // PASSO 344: 2 horas absolutas (servidor alinhado)
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   let ultimoToque = 0;
