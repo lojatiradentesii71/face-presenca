@@ -3616,11 +3616,11 @@ qcAreaTesoureiro.innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
       <div style="padding:10px;border-radius:10px;background:#ffffff10">
         <small style="display:block;opacity:.8">Qc$ em circulação</small>
-        <strong id="qcCirculacao276" style="font-size:21px">—</strong>
+        <strong id="qcCirculacao276" style="font-size:22px;font-weight:800;color:#e5bf62">—</strong>
       </div>
       <div style="padding:10px;border-radius:10px;background:#ffffff10">
         <small style="display:block;opacity:.8">Lastro bancário indisponível</small>
-        <strong id="qcLastro276" style="font-size:21px">—</strong>
+        <strong id="qcLastro276" style="font-size:22px;font-weight:800;color:#e5bf62">—</strong>
       </div>
     </div>
     <p id="qcResumoLastro276" style="font-size:13px;opacity:.85;margin:10px 0 0">Consultando registros...</p>
@@ -3677,6 +3677,10 @@ async function QC_carregarPainelTesoureiro276(tokenSessao) {
     sessionStorage.getItem(QC_CHAVE_SESSAO) === tokenSessao &&
     consultaAtual === qcConsultaPainel331;
   const formato = n => Number(n).toLocaleString("pt-BR");
+  const formatoQC2 = n => Number(n).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
   const inteiro = n => typeof n === "number" &&
     Number.isSafeInteger(n) && n >= 0;
   const valorQC = n => inteiro(n) ? "Qc$ " + formato(n) : "a conferir";
@@ -3729,7 +3733,7 @@ async function QC_carregarPainelTesoureiro276(tokenSessao) {
         inteiro(dados.circulacao) &&
         inteiro(dados.lastroReservadoBRL) &&
         dados.lastroReservadoBRL === dados.circulacao) {
-      circulacao.textContent = "Qc$ " + formato(dados.circulacao);
+      circulacao.textContent = "Qc$ " + formatoQC2(dados.circulacao);
       lastro.textContent = Number(dados.lastroReservadoBRL)
         .toLocaleString("pt-BR", {style:"currency",currency:"BRL"});
       aviso.textContent = "Valores calculados a partir dos registros. " +
