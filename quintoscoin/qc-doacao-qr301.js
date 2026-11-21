@@ -241,8 +241,8 @@
   $("qcPrepararDoar301").addEventListener("click",async()=>{
     if (ocupada) return;
     const valor=Number(campo.value.trim().replace(",","."));
-    if (!Number.isSafeInteger(valor) || valor<2 || valor===3) {
-      erro("Informe um valor inteiro de pelo menos 2 Qc$, exceto 3 Qc$.");return;
+    if (!Number.isSafeInteger(valor) || valor<1) {
+      erro("Informe um valor inteiro de pelo menos 1 Qc$.");return;
     }
     ocupada=true;
     const botao=$("qcPrepararDoar301");botao.disabled=true;
