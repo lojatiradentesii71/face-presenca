@@ -1,7 +1,7 @@
 
  // QUINTOSCOIN - PASSO 291 - FICHAS PROTEGIDAS PELA SENHA DO LOGIN
- // Preparacao e recebimento de fichas de 2, 5 e 10 QC.
- // Mantem os bloqueios de assinatura no servidor.
+ // Preparacao V2 de fichas 1, 2, 5, 10 e 50 QC sem tocar no armazenamento V1.
+ // Respeita bloqueios de assinatura no servidor (Passo 363 e Worker 357).
 
 (function () {
   "use strict";
@@ -178,16 +178,11 @@
     );
   }
 
-  function chaveArmazenamento() {
-    const id = localStorage.getItem(
-      "QC_ID_CARTEIRA"
-    );
-
-    if (!id) {
-      throw Error("Carteira nao selecionada.");
-    }
-
-    return "QC_FICHAS_CEGAS_PENDENTES_V1_" + id;
+  function chaveArmazenamento(versao = "V1") {
+    const id = localStorage.getItem("QC_ID_CARTEIRA");
+    if (!id) throw Error("Carteira nao selecionada.");
+    if (!["V1", "V2"].includes(versao)) throw Error("Versao invalida.");
+    return "QC_FICHAS_CEGAS_PENDENTES_" + versao + "_" + id;
   }
 
   async function criptografar(conteudo, senha) {
@@ -239,9 +234,9 @@
     };
   }
 
-  function pendencias() {
+  function pendencias(versao = "V1") {
     const raw = localStorage.getItem(
-      chaveArmazenamento()
+      chaveArmazenamento(versao)
     );
 
     if (!raw) return {};
@@ -261,41 +256,37 @@
     return p;
   }
 
-  // PASSO 222 - Distribuicao local igual ao plano sem fichas de 50 QC.
-  // Esta funcao apenas calcula as fichas: o servidor ainda valida cada cota.
+  // PASSO 364 - Mesma decomposicao V2 do Apps Script (362).
+  // O V1 e mantido SOMENTE para historico, sem emitir novas fichas.
   function QC_distribuirFichas222(valor) {
     const total = Number(valor);
-
-    if (!Number.isSafeInteger(total) || total < 2 || total === 3) {
-      throw Error("Valor autorizado invalido para fichas.");
+    if (!Number.isSafeInteger(total) || total < 1) {
+      throw Error("Valor autorizado invalido para V2.");
     }
-
     const fichas = [];
     let restante = total;
-
-    for (const denominacao of [10, 5, 2]) {
-      while (restante >= denominacao) {
-        const proximo = restante - denominacao;
-        if (proximo === 1 || proximo === 3) break;
-        fichas.push(denominacao);
-        restante = proximo;
+    for (const denominacao of [50, 10, 5, 2, 1]) {
+      const quantidade = Math.floor(restante / denominacao);
+      if (quantidade > 10000 || fichas.length + quantidade > 10000) {
+        throw Error("Numero de fichas excede o limite tecnico da emissao.");
       }
+      for (let i = 0; i < quantidade; i++) fichas.push(denominacao);
+      restante -= quantidade * denominacao;
     }
-
     if (restante !== 0 ||
         fichas.reduce((soma, d) => soma + d, 0) !== total) {
-      throw Error("Nao foi possivel distribuir o valor autorizado.");
+      throw Error("Composicao V2 divergente do total autorizado.");
     }
-
     return fichas;
   }
 
   window.QC_inserirAcao195 = function(item, pedido) {
     if (
       pedido.status !== "AUTORIZADA" ||
+      pedido.versaoEmissao !== "V2" ||
       !/^QC-EM-[0-9a-f-]{36}$/i.test(pedido.idEmissao || "")
     ) {
-      return;
+      return; // Emissao V1 historica nao pode preparar fichas novas.
     }
 
     let valores;
@@ -332,7 +323,7 @@
     });
 
     try {
-      if (pendencias()[idEmissao]) {
+      if (pendencias("V2")[idEmissao]) {
         mensagem.textContent =
           "Fichas cegas ja preparadas e protegidas neste celular.";
         painel.append(mensagem);
@@ -378,9 +369,9 @@
         // Uma consulta por denominacao; cada ficha usa um cegamento unico.
         const chaves = {};
         for (const denominacao of new Set(valores)) {
-          const idChave = "QC-" + denominacao + "-V1";
+          const idChave = "QC-" + denominacao + "-V2";
           const resposta = await QC_post191(
-            "qc_chave_publica_" + denominacao
+            "qc_chave_publica_v2_" + denominacao
           );
           const nHex = String(resposta.moduloHex || "").toLowerCase();
           const eHex = String(resposta.expoenteHex || "").toLowerCase();
@@ -402,10 +393,10 @@
 
         const registros = [];
         for (const denominacao of valores) {
-          const idChave = "QC-" + denominacao + "-V1";
+          const idChave = "QC-" + denominacao + "-V2";
           const {n, e} = chaves[denominacao];
           const mensagemFicha = ENC.encode(
-            "QUINTOSCOIN|V1|" + denominacao + "|" +
+            "QUINTOSCOIN|V2|" + denominacao + "|" +
             idChave + "|" + crypto.randomUUID()
           );
           const preparado = juntar(
@@ -423,7 +414,7 @@
           const bloco = (m * potMod(r, e, n)) % n;
 
           registros.push({
-            formato: "QC_FICHA_CEGA_PENDENTE_V1",
+            formato: "QC_FICHA_CEGA_PENDENTE_V2",
             idChave,
             valor: denominacao,
             idEmissao,
@@ -435,24 +426,22 @@
           });
         }
 
-        // Compatibilidade: uma ficha de 10 QC conserva o formato anterior.
-        // Varias fichas ficam em um unico registro protegido por senha.
-        const conteudo = registros.length === 1
-          ? registros[0]
-          : {
-              formato: "QC_LOTE_CEGAS_PENDENTES_V2",
-              idEmissao,
-              valorTotal: total,
-              fichas: registros
-            };
+        // Fichas V2 sempre em lote criptografado e em chave local separada.
+        // Fichas antigas V1 nao sao alteradas nem incorporadas ao saldo V2.
+        const conteudo = {
+          formato: "QC_LOTE_CEGAS_PENDENTES_V2",
+          idEmissao,
+          valorTotal: total,
+          fichas: registros
+        };
         const cifrado = await criptografar(conteudo, senha);
 
-        const p = pendencias();
+        const p = pendencias("V2");
         if (p[idEmissao]) {
           throw Error("Essa emissao ja foi preparada.");
         }
         p[idEmissao] = cifrado;
-        localStorage.setItem(chaveArmazenamento(), JSON.stringify(p));
+        localStorage.setItem(chaveArmazenamento("V2"), JSON.stringify(p));
 
         botao.remove();
         entrada.remove();
@@ -486,7 +475,8 @@ window.QC_inserirBackup197 = function(item, pedido) {
     return;
   }
 
-  const registros = pendencias();
+  const versao = pedido.versaoEmissao === "V2" ? "V2" : "V1";
+  const registros = pendencias(versao);
   const registro = registros[pedido.idEmissao];
 
   if (!registro) {
@@ -505,7 +495,7 @@ window.QC_inserirBackup197 = function(item, pedido) {
 
     try {
 
-      const atual = pendencias()[pedido.idEmissao];
+      const atual = pendencias(versao)[pedido.idEmissao];
 
       if (!atual) {
         throw new Error("Ficha pendente não encontrada.");
@@ -513,7 +503,7 @@ window.QC_inserirBackup197 = function(item, pedido) {
 
       // Somente dados criptografados são exportados.
       const backup = {
-        formato: "QUINTOSCOIN_BACKUP_PENDENTE_V1",
+        formato: "QUINTOSCOIN_BACKUP_PENDENTE_" + versao,
         criadoEm: new Date().toISOString(),
         registroCifrado: atual
       };
@@ -602,19 +592,16 @@ async function QC_descriptografar198(cifrado, senha) {
   }
 }
 
-function QC_chaveAssinadas198() {
+function QC_chaveAssinadas198(versao = "V1") {
   const id = localStorage.getItem("QC_ID_CARTEIRA");
-
-  if (!id) {
-    throw Error("Carteira não selecionada.");
-  }
-
-  return "QC_FICHAS_ASSINADAS_V1_" + id;
+  if (!id) throw Error("Carteira nao selecionada.");
+  if (!["V1", "V2"].includes(versao)) throw Error("Versao invalida.");
+  return "QC_FICHAS_ASSINADAS_" + versao + "_" + id;
 }
 
-function QC_lerAssinadas198() {
+function QC_lerAssinadas198(versao = "V1") {
   const valor = JSON.parse(
-    localStorage.getItem(QC_chaveAssinadas198()) || "{}"
+    localStorage.getItem(QC_chaveAssinadas198(versao)) || "{}"
   );
 
   if (
@@ -641,9 +628,10 @@ function QC_base64Url198(bytes) {
 window.QC_inserirRecebimento198 = function(item, pedido) {
   if (
     pedido.status !== "AUTORIZADA" ||
+    pedido.versaoEmissao !== "V2" ||
     !/^QC-EM-[0-9a-f-]{36}$/i.test(pedido.idEmissao || "")
   ) {
-    return;
+    return; // Historico V1 somente leitura.
   }
 
   const idEmissao = pedido.idEmissao;
@@ -651,7 +639,7 @@ window.QC_inserirRecebimento198 = function(item, pedido) {
   let valoresEsperados;
   try {
     valoresEsperados = QC_distribuirFichas222(valorAutorizado);
-    if (!pendencias()[idEmissao]) return;
+    if (!pendencias("V2")[idEmissao]) return;
   } catch (_) {
     return;
   }
@@ -694,19 +682,19 @@ window.QC_inserirRecebimento198 = function(item, pedido) {
       if (!crypto?.subtle || typeof BigInt !== "function") {
         throw Error("Navegador sem suporte criptografico.");
       }
-      const cifrado = pendencias()[idEmissao];
+      const cifrado = pendencias("V2")[idEmissao];
       if (!cifrado) throw Error("Fichas pendentes nao encontradas.");
       const aberto = await QC_descriptografar198(cifrado, senha);
-      const fichasPendentes = aberto?.formato === "QC_LOTE_CEGAS_PENDENTES_V2"
-        ? aberto.fichas
-        : [aberto];
+      if (aberto?.formato !== "QC_LOTE_CEGAS_PENDENTES_V2") {
+        throw Error("Lote criptografado V2 invalido.");
+      }
+      const fichasPendentes = aberto.fichas;
 
       if (
         !Array.isArray(fichasPendentes) ||
         fichasPendentes.length !== valoresEsperados.length ||
-        (aberto?.formato === "QC_LOTE_CEGAS_PENDENTES_V2" &&
-          (aberto.idEmissao !== idEmissao ||
-           Number(aberto.valorTotal) !== valorAutorizado))
+        (aberto.idEmissao !== idEmissao ||
+         Number(aberto.valorTotal) !== valorAutorizado)
       ) {
         throw Error("Lote de fichas diferente do valor autorizado.");
       }
@@ -724,9 +712,9 @@ window.QC_inserirRecebimento198 = function(item, pedido) {
       const padraoUUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
       for (const ficha of fichasPendentes) {
         const valor = Number(ficha?.valor);
-        const idChave = "QC-" + valor + "-V1";
+        const idChave = "QC-" + valor + "-V2";
         if (
-          ficha?.formato !== "QC_FICHA_CEGA_PENDENTE_V1" ||
+          ficha?.formato !== "QC_FICHA_CEGA_PENDENTE_V2" ||
           ficha.idEmissao !== idEmissao ||
           ficha.idCota !== idEmissao + "-" + valor ||
           ficha.idChave !== idChave ||
@@ -747,7 +735,7 @@ window.QC_inserirRecebimento198 = function(item, pedido) {
         const partes = texto.split("|");
         if (
           partes.length !== 5 ||
-          partes[0] !== "QUINTOSCOIN" || partes[1] !== "V1" ||
+          partes[0] !== "QUINTOSCOIN" || partes[1] !== "V2" ||
           partes[2] !== String(valor) || partes[3] !== idChave ||
           !padraoUUID.test(partes[4]) ||
           mensagens.has(ficha.mensagemPreparadaHex)
@@ -761,8 +749,8 @@ window.QC_inserirRecebimento198 = function(item, pedido) {
       // Consultar todas as chaves ANTES de solicitar qualquer assinatura.
       const chaves = {};
       for (const valor of new Set(valoresEsperados)) {
-        const idChave = "QC-" + valor + "-V1";
-        const publico = await QC_post191("qc_chave_publica_" + valor);
+        const idChave = "QC-" + valor + "-V2";
+        const publico = await QC_post191("qc_chave_publica_v2_" + valor);
         const nHex = String(publico.moduloHex || "").toLowerCase();
         const eHex = String(publico.expoenteHex || "").toLowerCase();
         if (
@@ -794,7 +782,7 @@ window.QC_inserirRecebimento198 = function(item, pedido) {
         const chaveRegistro = registrosValidados.length === 1
           ? idEmissao // Preserva a chave usada na versao anterior de 10 QC.
           : idEmissao + "_" + ficha.idOperacao;
-        const existentes = QC_lerAssinadas198();
+        const existentes = QC_lerAssinadas198("V2");
         const chaveVerificacao = chaves[valor];
 
         if (existentes[chaveRegistro]) {
@@ -803,7 +791,7 @@ window.QC_inserirRecebimento198 = function(item, pedido) {
             existentes[chaveRegistro], senha
           );
           if (
-            anterior?.formato !== "QC_FICHA_ASSINADA_V1" ||
+            anterior?.formato !== "QC_FICHA_ASSINADA_V2" ||
             anterior.idChave !== idChave || anterior.valor !== valor ||
             anterior.mensagemHex !== ficha.mensagemPreparadaHex ||
             !/^[0-9a-f]{1024}$/i.test(anterior.assinaturaHex || "") ||
@@ -852,41 +840,29 @@ window.QC_inserirRecebimento198 = function(item, pedido) {
 
         // A ficha assinada preserva o anonimato: sem dados do proprietario.
         const fichaAssinada = {
-          formato: "QC_FICHA_ASSINADA_V1",
+          formato: "QC_FICHA_ASSINADA_V2",
           idChave,
           valor,
           mensagemHex: ficha.mensagemPreparadaHex,
           assinaturaHex
         };
-        const atualizadas = QC_lerAssinadas198();
+        const atualizadas = QC_lerAssinadas198("V2");
         if (atualizadas[chaveRegistro]) {
           throw Error("Ficha armazenada simultaneamente. Tente novamente.");
         }
         atualizadas[chaveRegistro] = await criptografar(fichaAssinada, senha);
-        localStorage.setItem(QC_chaveAssinadas198(), JSON.stringify(atualizadas));
+        localStorage.setItem(QC_chaveAssinadas198("V2"), JSON.stringify(atualizadas));
         armazenadasNestaTentativa++;
       }
 
       // So remove a pendencia se TODAS as fichas estao salvas e verificadas.
-      const restantes = pendencias();
+      const restantes = pendencias("V2");
       delete restantes[idEmissao];
-      localStorage.setItem(chaveArmazenamento(), JSON.stringify(restantes));
-      mensagem.textContent = "✅ " + registrosValidados.length +
-        " ficha(s) assinada(s), verificada(s) e protegida(s). Atualizando saldo...";
-      try {
-        if (typeof window.QC_atualizarSaldoReal202 === "function") {
-          await window.QC_atualizarSaldoReal202();
-        }
-        mensagem.textContent = "✅ Recebimento concluído. Seu saldo foi atualizado.";
-        if (typeof window.QC_mostrarRecebimentoConcluido300 === "function") {
-          window.QC_mostrarRecebimentoConcluido300({
-            valor: valorAutorizado, idEmissao
-          });
-        }
-      } catch (erroSaldo) {
-        mensagem.textContent = "✅ Fichas recebidas e protegidas. " +
-          "Não foi possível atualizar o saldo agora: " + erroSaldo.message;
-      }
+      localStorage.setItem(chaveArmazenamento("V2"), JSON.stringify(restantes));
+      // O saldo atual e exclusivamente V1. Nunca misturar o saldo V2
+      // enquanto o corte financeiro e o validador de gastos V2 nao existirem.
+      mensagem.textContent = "✅ Fichas V2 recebidas, verificadas e protegidas. " +
+        "A exibicao do saldo V2 depende da ativacao financeira definitiva.";
       botao.remove();
       senhaCampo.remove();
     } catch (erro) {
