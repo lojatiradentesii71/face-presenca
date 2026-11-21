@@ -8,6 +8,9 @@
   const dec = new TextDecoder();
   const enc = new TextEncoder();
   let memoria = null;
+  // O saldo V2 e conferido SEPARADAMENTE e nunca alimenta doacoes V1.
+  let memoriaV2365 = null;
+  let avisoV2365 = null;
   let senhaSessao265 = null;
   // PASSO 343 — Máximo de quatro verificações independentes em paralelo.
   // NUNCA paralelizar criação, reserva, gasto, assinatura ou escrita de fichas.
@@ -174,6 +177,141 @@
     return {id, token};
   }
 
+  // PASSO 365 — Validacao de fichas V2 sem misturar dinheiro V1 e V2.
+  // Nao executa nenhuma chamada remota se ainda nao ha fichas V2.
+  function QC_lerV2Local365(id) {
+    const original = localStorage.getItem("QC_FICHAS_ASSINADAS_V2_" + id);
+    const registros = JSON.parse(original || "{}");
+    if (!registros || typeof registros !== "object" ||
+        Array.isArray(registros)) {
+      throw Error("Armazenamento das fichas V2 invalido.");
+    }
+    return {original, registros:Object.entries(registros)};
+  }
+
+  function QC_exibirV2365() {
+    if (!avisoV2365) return;
+    const sessao = dadosDaSessao();
+    const atual = memoriaV2365;
+    if (!atual || atual.id !== sessao.id || atual.token !== sessao.token) {
+      avisoV2365.hidden = true;
+      avisoV2365.textContent = "";
+      return;
+    }
+    avisoV2365.hidden = false;
+    if (atual.erro) {
+      avisoV2365.textContent =
+        "⚠️ Fichas V2 ainda nao conferidas: " + atual.erro +
+        ". Nenhuma ficha V2 foi somada ao saldo.";
+    } else {
+      avisoV2365.textContent =
+        "Fichas V2 conferidas: " + QC_formatoValor291(atual.total) +
+        " (" + atual.quantidade + " disponivel(is), " + atual.gastas +
+        " gasta(s)). Geracao V2 bloqueada para movimentacoes; " +
+        "nao incluida no saldo principal.";
+    }
+  }
+
+  async function QC_conferirV2365(id, token, senha) {
+    let dados;
+    try {
+      dados = QC_lerV2Local365(id);
+    } catch (erro) {
+      memoriaV2365 = {id, token, erro:erro.message};
+      QC_exibirV2365();
+      return;
+    }
+    if (!dados.registros.length) {
+      memoriaV2365 = null;
+      QC_exibirV2365();
+      return;
+    }
+    memoriaV2365 = {id, token, erro:"Conferencia em andamento"};
+    QC_exibirV2365();
+    try {
+      const conferidas = await QC_emParalelo343(
+        dados.registros, async ([chaveRegistro, cifrada]) => {
+          const ficha = await abrir(cifrada, senha);
+          const valor = Number(ficha?.valor);
+          if (!ficha || ficha.formato !== "QC_FICHA_ASSINADA_V2" ||
+              ![1, 2, 5, 10, 50].includes(valor) ||
+              ficha.idChave !== "QC-" + valor + "-V2" ||
+              !/^[0-9a-f]{1024}$/i.test(String(ficha.assinaturaHex || ""))) {
+            throw Error("Ficha V2 local invalida.");
+          }
+          const mensagemHex = String(ficha.mensagemHex || "").toLowerCase();
+          const bytes = deHex(mensagemHex);
+          if (bytes.length < 32 || bytes.length > 512) {
+            throw Error("Mensagem V2 fora do tamanho permitido.");
+          }
+          const texto = new TextDecoder("utf-8", {fatal:true})
+            .decode(bytes.subarray(32));
+          const partes = /^QUINTOSCOIN\|V2\|(1|2|5|10|50)\|(QC-(?:1|2|5|10|50)-V2)\|([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i
+            .exec(texto);
+          if (!partes || Number(partes[1]) !== valor ||
+              partes[2].toUpperCase() !== ficha.idChave) {
+            throw Error("Conteudo V2 inconsistente.");
+          }
+          return {chaveRegistro, valor, idChave:ficha.idChave,
+            mensagemHex, assinaturaHex:String(ficha.assinaturaHex).toLowerCase()};
+        }
+      );
+      const mensagens = new Set();
+      for (const ficha of conferidas) {
+        if (mensagens.has(ficha.mensagemHex)) {
+          throw Error("Ficha V2 repetida no armazenamento local.");
+        }
+        mensagens.add(ficha.mensagemHex);
+      }
+      const estados = [];
+      // O servidor confere a assinatura RSA-PSS e os gastos. Sem token.
+      for (let i=0; i<conferidas.length; i+=20) {
+        const parte=conferidas.slice(i,i+20);
+        const http=await fetch(QC_URL_191, {
+          method:"POST", redirect:"follow",
+          headers:{"Content-Type":"text/plain;charset=utf-8"},
+          body:JSON.stringify({
+            acao:"qc_consultar_gastos_v2_lote",
+            fichas:parte.map(x=>({
+              mensagemHex:x.mensagemHex, assinaturaHex:x.assinaturaHex
+            }))
+          })
+        });
+        if (!http.ok) throw Error("Consulta V2 indisponivel (HTTP " +
+          http.status + ").");
+        const retorno=await http.json();
+        if (!retorno || retorno.status!=="OK" || retorno.versao!=="V2" ||
+            retorno.operacoesLiberadas!==false ||
+            !Array.isArray(retorno.resultados) ||
+            retorno.resultados.length!==parte.length) {
+          throw Error(retorno?.mensagem || "Conferencia V2 nao autorizada.");
+        }
+        for (let j=0;j<parte.length;j++) {
+          const situacao=retorno.resultados[j];
+          if (!situacao || !["GASTA","DISPONIVEL"].includes(situacao.status) ||
+              situacao.valor!==parte[j].valor) {
+            throw Error("Resposta V2 divergente.");
+          }
+          estados.push(situacao.status);
+        }
+      }
+      const agora=dadosDaSessao();
+      if (agora.id!==id || agora.token!==token ||
+          localStorage.getItem("QC_FICHAS_ASSINADAS_V2_"+id)!==dados.original) {
+        throw Error("Carteira V2 alterada durante a conferencia.");
+      }
+      const disponiveis=conferidas.filter((_,i)=>estados[i]==="DISPONIVEL");
+      memoriaV2365={id,token,quantidade:disponiveis.length,
+        gastas:conferidas.length-disponiveis.length,
+        total:disponiveis.reduce((s,f)=>s+f.valor,0)};
+    } catch (erro) {
+      // Nunca considerar uma ficha V2 valida se a consulta falhar.
+      memoriaV2365={id,token,erro:erro?.message || String(erro)};
+      console.warn("QuintosCoin V2: conferencia incompleta",erro);
+    }
+    QC_exibirV2365();
+  }
+
   function renderizar() {
     const {id, token} = dadosDaSessao();
     if (!memoria || memoria.id !== id || memoria.token !== token) {
@@ -194,6 +332,7 @@
       lista.textContent = token
         ? "Aguardando verificação automática."
         : "Entre na carteira para consultar suas fichas.";
+      QC_exibirV2365();
       return;
     }
 
@@ -211,6 +350,7 @@
     if (!memoria.fichas.length) {
       lista.textContent = "Nenhuma ficha disponivel nesta carteira.";
     }
+    QC_exibirV2365();
   }
 
   // PASSO 267 - Composicao automatica, sem gasto nem assinatura.
@@ -1904,6 +2044,13 @@ function QC_confirmarTransferencia332(opcoes) {
   listaResumo.style.cssText = "cursor:pointer;font-size:14px;opacity:.85";
   secao.parentNode.insertBefore(listaDetalhes, secao);
   listaDetalhes.append(listaResumo, secao);
+  // Area separada e recolhida, sem alterar o saldo principal nem os planos.
+  avisoV2365 = document.createElement("p");
+  avisoV2365.id = "qcStatusFichasV2365";
+  avisoV2365.style.cssText = "font-size:12px;opacity:.85;margin:9px 0";
+  avisoV2365.setAttribute("role","status");
+  avisoV2365.hidden = true;
+  listaDetalhes.append(avisoV2365);
   listaDetalhes.after(painel);
 
   // Esconder os detalhes de solicitacoes tecnicas fora do fluxo principal.
@@ -1990,6 +2137,13 @@ function QC_confirmarTransferencia332(opcoes) {
         total:fichas.reduce((soma,ficha)=>soma+ficha.valor,0)};
       memorizarSenha265(segredo,{id,token});
       renderizar();
+      // V1 ja foi renderizado; V2 so consulta se existem fichas locais.
+      // Em falha, V2 permanece bloqueada e nao impacta o saldo V1.
+      await QC_conferirV2365(id, token, segredo);
+      const sessaoFinal365 = dadosDaSessao();
+      if (sessaoFinal365.id !== id || sessaoFinal365.token !== token) {
+        throw Error("Sessao alterada durante a conferencia.");
+      }
       const duracao=Math.round(performance.now()-iniciado343);
       console.info("QC_PERF343 saldo concluído em "+duracao+" ms; fichas="+registros.length);
       aviso.textContent="✅ Saldo disponivel: "+memoria.total+
@@ -1998,6 +2152,7 @@ function QC_confirmarTransferencia332(opcoes) {
     } catch(erro) {
       cacheFichasConferidas343=null;
       memoria=null;
+      memoriaV2365=null;
       renderizar();
       console.warn("QC_PERF343 saldo falhou após "+
         Math.round(performance.now()-iniciado343)+" ms");
