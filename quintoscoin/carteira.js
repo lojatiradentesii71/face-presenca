@@ -623,7 +623,7 @@ function QC_valorReceber295(valor) {
 // PASSO 296 - Metadados LOCAIS apenas para retomar emissao deste aparelho.
 // Nunca considera um registro criptografado como prova de credito:
 // a situacao da assinatura vem do servidor e o saldo valida o conteudo.
-function QC_estadoLocalRecebimento296(idEmissao) {
+function QC_estadoLocalRecebimento296(idEmissao, versaoEmissao = "V1") {
   const idCarteira = localStorage.getItem("QC_ID_CARTEIRA") || "";
   if (!idCarteira || !idEmissao) return {pendente:false, armazenadas:0};
   function ler(chave) {
@@ -633,8 +633,9 @@ function QC_estadoLocalRecebimento296(idEmissao) {
     }
     return v;
   }
-  const pendentes = ler("QC_FICHAS_CEGAS_PENDENTES_V1_" + idCarteira);
-  const assinadas = ler("QC_FICHAS_ASSINADAS_V1_" + idCarteira);
+  const versao = versaoEmissao === "V2" ? "V2" : "V1";
+  const pendentes = ler("QC_FICHAS_CEGAS_PENDENTES_" + versao + "_" + idCarteira);
+  const assinadas = ler("QC_FICHAS_ASSINADAS_" + versao + "_" + idCarteira);
   const quant = Object.keys(assinadas).filter(k =>
     k === idEmissao || k.startsWith(idEmissao + "_")).length;
   return {pendente:!!pendentes[idEmissao], armazenadas:quant};
@@ -696,16 +697,24 @@ async function QC_carregarPedidosReceber295() {
       mensagem.setAttribute("role","status");
       mensagem.style.cssText = "font-size:13px;line-height:1.5;margin-top:8px";
       const acoes = document.createElement("div");
-      const local = QC_estadoLocalRecebimento296(idEmissao);
+      const local = QC_estadoLocalRecebimento296(idEmissao, p.versaoEmissao);
       const parcialmenteAssinado = Number(p.quantidadeAssinada) > 0 ||
         Number(p.operacoesExistentes) > 0 || local.armazenadas > 0;
       let permitir = situacao === "PRONTA" ||
         (situacao === "EM_ANDAMENTO" &&
           (local.pendente || !parcialmenteAssinado));
+      // A V1 pertence exclusivamente ao piloto historico. Nao emitir V1.
+      if (idEmissao && p.versaoEmissao !== "V2") {
+        permitir = false;
+        descricao.textContent = "Emissao historica V1 preservada. " +
+          "Novas assinaturas V1 estao desativadas.";
+      }
       if (situacao === "CONFERIR") {
         descricao.textContent = p.mensagem ||
           "Os registros desta emissão precisam de conferência. Nenhuma assinatura será solicitada.";
         permitir = false;
+      } else if (idEmissao && p.versaoEmissao !== "V2") {
+        // Manter a mensagem de bloqueio da versao historica V1.
       } else if (situacao === "EM_ANDAMENTO" && !permitir) {
         descricao.textContent = "Esta emissão já tem operações iniciadas. " +
           "Para continuar, use o dispositivo onde as fichas foram preparadas " +
@@ -729,19 +738,25 @@ async function QC_carregarPedidosReceber295() {
           const encerrar = QC_ESPERA295.iniciar("Preparando o recebimento...", botao, mensagem);
           try {
             let emissao = idEmissao;
+            let versaoEmissao = p.versaoEmissao;
             if (!emissao) {
               const preparado = await QC_post191("qc_preparar_emissao", {
                 idAutorizacao:p.idAutorizacao
               });
               emissao = String(preparado?.idEmissao ||
                 preparado?.emissao?.idEmissao || "").trim();
-              if (!/^QC-EM-[0-9a-f-]{36}$/i.test(emissao)) {
+              versaoEmissao = preparado?.versaoFicha;
+              if (!/^QC-EM-[0-9a-f-]{36}$/i.test(emissao) ||
+                  versaoEmissao !== "V2") {
                 throw Error(preparado?.mensagem ||
-                  "A emissão ainda não pôde ser preparada.");
+                  "A emissao V2 ainda nao foi liberada.");
               }
             }
+            if (versaoEmissao !== "V2") {
+              throw Error("Emissao V1 historica: nao permite nova assinatura.");
+            }
             const pronto = {...p, idEmissao:emissao,
-              valor, status:"AUTORIZADA"};
+              versaoEmissao:"V2", valor, status:"AUTORIZADA"};
             if (typeof window.QC_inserirAcao195 !== "function" ||
                 typeof window.QC_inserirRecebimento198 !== "function") {
               throw Error("Módulo de recebimento indisponível.");
