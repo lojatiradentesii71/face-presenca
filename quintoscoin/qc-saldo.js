@@ -124,6 +124,50 @@
     return resposta.status;
   }
 
+  // PASSO 361 - Conferencia anonima em lotes de no maximo 20 fichas.
+  // O servidor verifica cada assinatura e consulta gastos e reservas
+  // uma vez por lote. Falha = saldo indisponivel, nunca disponibilidade
+  // presumida. Mantem consultarFicha263 para restauracao/backup.
+  async function consultarFichasLote361(fichas) {
+    if (!Array.isArray(fichas)) throw Error("Lote de fichas invalido.");
+    if (!fichas.length) return [];
+    const estados = [];
+    for (let inicio = 0; inicio < fichas.length; inicio += 20) {
+      const parte = fichas.slice(inicio, inicio + 20);
+      const http = await fetch(QC_URL_191, {
+        method: "POST",
+        redirect: "follow",
+        headers: {"Content-Type":"text/plain;charset=utf-8"},
+        body: JSON.stringify({
+          acao: "qc_consultar_gastos_lote",
+          fichas: parte.map(f => ({
+            mensagemHex: f.mensagemHex,
+            assinaturaHex: f.assinaturaHex
+          }))
+        })
+      });
+      if (!http.ok) {
+        throw Error("Falha ao conferir fichas em lote. HTTP " + http.status);
+      }
+      const retorno = await http.json();
+      if (!retorno || retorno.status !== "OK" ||
+          !Array.isArray(retorno.resultados) ||
+          retorno.resultados.length !== parte.length) {
+        throw Error(retorno?.mensagem ||
+          "Servidor nao confirmou todas as fichas do lote.");
+      }
+      for (let i = 0; i < parte.length; i++) {
+        const r = retorno.resultados[i];
+        if (!r || !["DISPONIVEL","GASTA"].includes(r.status) ||
+            Number(r.valor) !== parte[i].valor) {
+          throw Error("Resposta de conferencia de ficha divergente.");
+        }
+        estados.push(r.status);
+      }
+    }
+    return estados;
+  }
+
   function dadosDaSessao() {
     const id = localStorage.getItem("QC_ID_CARTEIRA");
     const token = sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
@@ -428,7 +472,7 @@
           anterior.fichas.map(f=>f.valor),valorSolicitado);
         if(previa.status==="OK") {
           const escolhidas=previa.indicesSelecionados.map(i=>anterior.fichas[i]);
-          const situacoes=await QC_emParalelo343(escolhidas,consultarFicha263);
+          const situacoes=await consultarFichasLote361(escolhidas);
           if(situacoes.every(st=>st==="DISPONIVEL")) {
             return anterior.fichas.map(f=>({...f}));
           }
@@ -436,11 +480,9 @@
       }
       // Caminho de recuperação ou outras operações: servidor verifica
       // cada ficha, em paralelo, antes de devolvê-la à carteira.
-      const atualizadas=await QC_emParalelo343(anterior.fichas,async ficha=>{
-        const situacao=await consultarFicha263(ficha);
-        return situacao==="DISPONIVEL" ? {...ficha} : null;
-      });
-      return atualizadas.filter(Boolean);
+      const situacoes=await consultarFichasLote361(anterior.fichas);
+      return anterior.fichas.filter((_,i)=>situacoes[i]==="DISPONIVEL")
+        .map(f=>({...f}));
     }
     const todos=Object.entries(lerRegistros());
     const chaves=new Map(),msgs=new Set();
@@ -467,12 +509,11 @@
           deHex(ficha.assinaturaHex),m))) {
         throw Error("Assinatura de ficha nao confere.");
       }
-      const situacao=await consultarFicha263(ficha);
-      if(situacao!=="DISPONIVEL") return null;
       return {chaveLocalRegistro,valor,mensagemHex:ficha.mensagemHex,
         assinaturaHex:ficha.assinaturaHex};
     });
-    return processadas.filter(Boolean);
+    const situacoes=await consultarFichasLote361(processadas);
+    return processadas.filter((_,i)=>situacoes[i]==="DISPONIVEL");
   }
   async function QC_prepararTroco271(plano) {
     const saidasCegas=[],privadas=[];
@@ -1928,18 +1969,17 @@ function QC_confirmarTransferencia332(opcoes) {
               pub.verify,deHex(ficha.assinaturaHex),msg))) {
           throw Error("Assinatura de ficha de "+valor+" QC nao verificada.");
         }
-        const situacao=await consultarFicha263(ficha);
-        return situacao==="GASTA" ? {gasta:true} :
-          {gasta:false,valor,idChave:ficha.idChave,
-           chaveLocalRegistro,mensagemHex:ficha.mensagemHex,
-           assinaturaHex:ficha.assinaturaHex};
+        return {valor,idChave:ficha.idChave,
+          chaveLocalRegistro,mensagemHex:ficha.mensagemHex,
+          assinaturaHex:ficha.assinaturaHex};
       });
+      const situacoes=await consultarFichasLote361(resultados);
       const agora=dadosDaSessao();
       if(agora.id!==id || agora.token!==token ||
          localStorage.getItem(chaveLocal())!==conteudoOriginal) {
         throw Error("Carteira alterada durante a conferencia. Verifique novamente.");
       }
-      const disponiveis=resultados.filter(r=>!r.gasta);
+      const disponiveis=resultados.filter((_,i)=>situacoes[i]==="DISPONIVEL");
       const fichas=disponiveis.map(r=>({valor:r.valor,idChave:r.idChave}));
       const gastas=resultados.length-disponiveis.length;
       cacheFichasConferidas343={id,token,conteudo:conteudoOriginal,
