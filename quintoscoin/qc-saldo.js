@@ -301,9 +301,13 @@
         throw Error("Carteira V2 alterada durante a conferencia.");
       }
       const disponiveis=conferidas.filter((_,i)=>estados[i]==="DISPONIVEL");
+      // PASSO 366: conservar apenas na memoria da sessao a lista V2
+      // ja validada pelo servidor, para o futuro planejador de doacoes.
+      // NUNCA transferi-la para o saldo historico V1.
       memoriaV2365={id,token,quantidade:disponiveis.length,
         gastas:conferidas.length-disponiveis.length,
-        total:disponiveis.reduce((s,f)=>s+f.valor,0)};
+        total:disponiveis.reduce((s,f)=>s+f.valor,0),
+        fichas:disponiveis, origem:dados.original};
     } catch (erro) {
       // Nunca considerar uma ficha V2 valida se a consulta falhar.
       memoriaV2365={id,token,erro:erro?.message || String(erro)};
@@ -465,6 +469,114 @@
       indicesSelecionados,valoresSelecionados,totalFichasSelecionadas,
       valorTroco:escolhido-valor,fichasTroco};
   }
+
+  // PASSO 366 - PLANEJAMENTO V2 (1, 2, 5, 10 e 50 Qc$).
+  // SOMENTE aritmetica local. Nao transfere, reserva ou gasta fichas.
+  // Manter o planejador historico 267 intacto ate o corte contábil.
+  function QC_decomporTrocoV2366(total) {
+    if (!Number.isSafeInteger(total) || total < 0) return null;
+    const fichas=[];
+    for (const d of [50,10,5,2,1]) {
+      const quantidade=Math.floor(total/d);
+      for (let i=0;i<quantidade;i++) fichas.push(d);
+      total-=quantidade*d;
+    }
+    if (total!==0) throw Error("Troco V2 nao conservado.");
+    return fichas;
+  }
+
+  function QC_planejarComposicaoV2366(valoresDisponiveis,valorSolicitado) {
+    const valor=Number(valorSolicitado);
+    if (!Number.isSafeInteger(valor) || valor < 1) {
+      return {status:"VALOR_NAO_PERMITIDO",
+        mensagem:"Informe um valor inteiro de pelo menos 1 Qc$."};
+    }
+    if (!Array.isArray(valoresDisponiveis)) {
+      return {status:"CARTEIRA_INDISPONIVEL"};
+    }
+    const denom=[1,2,5,10,50];
+    const grupos=new Map(denom.map(v=>[v,[]]));
+    let saldo=0;
+    for (let i=0;i<valoresDisponiveis.length;i++) {
+      const n=Number(valoresDisponiveis[i]);
+      if (!grupos.has(n)) return {status:"DENOMINACAO_INVALIDA"};
+      saldo+=n;
+      if (!Number.isSafeInteger(saldo)) return {status:"SALDO_INVALIDO"};
+      grupos.get(n).push(i);
+    }
+    if (valor>saldo) return {status:"SALDO_INSUFICIENTE",saldoDisponivel:saldo,
+      mensagem:"Saldo V2 insuficiente para a doacao."};
+
+    // Mochila limitada por quantidade: mesma estrategia eficiente V1.
+    const blocos=[];
+    for (const [d,indices] of grupos) {
+      let q=indices.length,p=1;
+      while(q>0) {
+        const n=Math.min(q,p);
+        blocos.push({d,q:n,peso:d*n});
+        q-=n;p*=2;
+      }
+    }
+    const custo=new Float64Array(saldo+1);
+    custo.fill(Infinity);
+    const caminho=Array(saldo+1).fill(null);
+    custo[0]=0;
+    for (const b of blocos) {
+      for (let s=saldo;s>=b.peso;s--) {
+        if (!Number.isFinite(custo[s-b.peso])) continue;
+        const novo=custo[s-b.peso]+b.q;
+        if (novo<custo[s]) {
+          custo[s]=novo;
+          caminho[s]={anterior:caminho[s-b.peso],d:b.d,q:b.q};
+        }
+      }
+    }
+    let escolhido=-1;
+    for (let s=valor;s<=saldo;s++) {
+      if (Number.isFinite(custo[s])) { escolhido=s;break; }
+    }
+    if (escolhido<0) return {status:"COMPOSICAO_IMPOSSIVEL",
+      mensagem:"Nao foi encontrada uma composicao com as fichas V2 disponiveis."};
+    const quantidades=new Map(denom.map(v=>[v,0]));
+    for (let p=caminho[escolhido];p;p=p.anterior) {
+      quantidades.set(p.d,quantidades.get(p.d)+p.q);
+    }
+    const indicesSelecionados=[];
+    for (const d of [50,10,5,2,1]) {
+      const q=quantidades.get(d);
+      if (q>grupos.get(d).length) throw Error("Plano V2 inconsistente.");
+      indicesSelecionados.push(...grupos.get(d).slice(0,q));
+    }
+    const entradas=indicesSelecionados.map(i=>Number(valoresDisponiveis[i]));
+    const soma=entradas.reduce((a,b)=>a+b,0);
+    const fichasTroco=QC_decomporTrocoV2366(soma-valor);
+    if (soma!==escolhido || soma!==valor+fichasTroco.reduce((a,b)=>a+b,0)) {
+      throw Error("Falha na conservacao de valor V2.");
+    }
+    return {status:"OK",versao:"V2",valorSolicitado:valor,
+      saldoDisponivel:saldo,tipo:fichasTroco.length?"COM_TROCO":"EXATA",
+      indicesSelecionados,valoresSelecionados:entradas,
+      totalFichasSelecionadas:soma,valorTroco:soma-valor,fichasTroco};
+  }
+
+  // Oferece somente os numeros do plano; sem assinatura, segredo ou identidade.
+  window.QC_planejarMovimentoV2366=function(valor) {
+    const {id,token}=dadosDaSessao();
+    const r=memoriaV2365;
+    if (!id || !token || !r || r.id!==id || r.token!==token ||
+        !Array.isArray(r.fichas) ||
+        localStorage.getItem("QC_FICHAS_ASSINADAS_V2_"+id)!==r.origem) {
+      return {status:"SALDO_V2_NAO_VERIFICADO",
+        mensagem:"As fichas V2 ainda nao estao conferidas nesta carteira."};
+    }
+    const plano=QC_planejarComposicaoV2366(r.fichas.map(f=>f.valor),valor);
+    if (plano.status!=="OK") return plano;
+    // Nao expor indices de identificacao nem dados de fichas na API publica.
+    return {status:"OK",versao:"V2",valorSolicitado:plano.valorSolicitado,
+      saldoDisponivel:plano.saldoDisponivel,tipo:plano.tipo,
+      totalFichasSelecionadas:plano.totalFichasSelecionadas,
+      valorTroco:plano.valorTroco,fichasTroco:plano.fichasTroco.slice()};
+  };
 
   // Disponibilizar apenas o PLANO matematico ao botao original Doar QC.
   // Nao divulga mensagens, assinaturas, senha ou registros criptografados.
@@ -941,9 +1053,34 @@
         const anterior=await QC_lerPendenteQR301(segredo);
         return {status:anterior.etapaQR301==="PREPARADA"?"PREPARADA":"ACIONADA"};
       }
-      if (!Number.isSafeInteger(valor) || valor<2 || valor===3) {
-        throw Error("Informe um valor inteiro a partir de 2 Qc$, exceto 3 Qc$.");
+      if (!Number.isSafeInteger(valor) || valor<1) {
+        throw Error("Informe um valor inteiro de pelo menos 1 Qc$.");
       }
+      // PASSO 366: impedir novas doacoes com fichas do piloto V1.
+      // O novo plano V2 já aceita 1 e 3 Qc$ e calcula o troco com ficha de 1.
+      // A preparacao para escanear a sacola so sera liberada quando o
+      // servidor V2 tiver escrita idempotente e o corte contábil concluido.
+      const v2=memoriaV2365;
+      if (!v2 || v2.id!==inicio.id || v2.token!==inicio.token ||
+          !Array.isArray(v2.fichas) || v2.fichas.length===0 ||
+          localStorage.getItem("QC_FICHAS_ASSINADAS_V2_"+inicio.id)!==v2.origem) {
+        throw Error("Os 18 Qc$ do piloto sao fichas V1. " +
+          "Aguarde a emissao V2 antes de preparar novas doacoes. " +
+          "Nenhum gasto foi realizado.");
+      }
+      const planoV2=QC_planejarComposicaoV2366(
+        v2.fichas.map(f=>f.valor),valor);
+      if (planoV2.status!=="OK") {
+        throw Error(planoV2.mensagem||planoV2.status);
+      }
+      // Protecao adicional: jamais mostrar PRONTA nem iniciar QR antes
+      // da implantacao das rotas de gasto V2 (exato e com troco).
+      throw Error("O planejamento das fichas V2 esta pronto, mas " +
+        "as doacoes permanecem bloqueadas ate a integracao do servidor " +
+        "e o encerramento contabil do piloto. Nenhuma ficha foi gasta.");
+
+      // LEGADO V1: mantido temporariamente para auditoria, nunca acessado
+      // por uma nova preparacao apos o bloqueio V2 acima.
       const disponiveis=await QC_fichasAtuais271(segredo,valor);
       const plano=QC_planejarComposicao267(disponiveis.map(x=>x.valor),valor);
       if (plano.status!=="OK") throw Error(plano.mensagem||plano.status);
