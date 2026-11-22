@@ -1030,10 +1030,268 @@
     }
   }
 
+
+  // PASSO 368 - DOACAO V2: mesma camera/QR publico, pendencia separada de V1.
+  // O codigo nao libera doacao: preflight no servidor exige corte V1, abertura V2
+  // e QC_V2_QR_PREPARO_ATIVO=SIM. No piloto essas condicoes NAO existem.
+  const QC_PENDENTE_V2_368 = 'QC_DOACAO_PENDENTE_V2_';
+  const QC_VALORES_V2_368 = Object.freeze([1,2,5,10,50]);
+  const QC_UUID_368 = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+  const QC_HEX_1024_368 = /^[0-9a-f]{1024}$/i;
+  const QC_CHAVE_LOCAL_V2_368 = id => 'QC_FICHAS_ASSINADAS_V2_'+id;
+  function QC_chavePendenteV2368() {
+    return QC_PENDENTE_V2_368 + dadosDaSessao().id;
+  }
+  async function QC_lerPendenteV2368(segredo) {
+    const bruto = localStorage.getItem(QC_chavePendenteV2368());
+    if (!bruto) return null;
+    let op;
+    try { op=await abrir(JSON.parse(bruto),segredo); }
+    catch (_) { throw Error('Doacao V2 pendente nao pode ser aberta. Preserve o backup local.'); }
+    if (!op || op.versao!==2 || !QC_UUID_368.test(op.idOperacao||'') ||
+        !['EXATA','COM_TROCO'].includes(op.tipo) ||
+        !Number.isSafeInteger(op.valorDoacao) || op.valorDoacao < 1 ||
+        !Number.isSafeInteger(op.valorTroco) || op.valorTroco < 0 ||
+        !['PREPARADA','ACIONADA'].includes(op.etapaQR301) ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(op.diaQR301||'') ||
+        !Array.isArray(op.fichasEntrada) || op.fichasEntrada.length < 1 ||
+        op.fichasEntrada.length > 20 || !Array.isArray(op.saidasCegas) ||
+        op.saidasCegas.length > 20 || !Array.isArray(op.privadas) ||
+        op.saidasCegas.length !== op.privadas.length ||
+        (op.tipo==='EXATA') !== (op.saidasCegas.length===0)) {
+      throw Error('Doacao V2 protegida inconsistente. Preserve os dados.');
+    }
+    return op;
+  }
+
+  async function QC_publicasV2368() {
+    // Rota publica e anonima: o token de login nunca sai junto ao preparo.
+    const r=await QC_postAnonimo271('qc_publicas_anonimas_v2',{});
+    if (r.status!=='OK' || r.versao!=='V2' ||
+        !Array.isArray(r.chaves) || r.chaves.length!==5) {
+      throw Error('Chaves publicas V2 indisponiveis.');
+    }
+    const publicas=new Map();
+    for (const chave of r.chaves) {
+      const valor=Number(chave?.denominacao);
+      const nHex=String(chave?.moduloHex||'').trim().toLowerCase();
+      const eHex=String(chave?.expoenteHex||'').trim().toLowerCase();
+      if (!QC_VALORES_V2_368.includes(valor) || publicas.has(valor) ||
+          chave.idChave!=='QC-'+valor+'-V2' ||
+          !/^[89a-f][0-9a-f]{1023}$/.test(nHex) ||
+          !/^0*10001$/.test(eHex)) {
+        throw Error('Cadastro de chave V2 divergente.');
+      }
+      const eBytes=deHex(eHex.length%2?'0'+eHex:eHex);
+      const verify=await crypto.subtle.importKey('jwk',{
+        kty:'RSA',n:base64url(deHex(nHex)),e:base64url(eBytes),
+        ext:true,key_ops:['verify']
+      },{name:'RSA-PSS',hash:'SHA-384'},false,['verify']);
+      publicas.set(valor,{idChave:chave.idChave,verify,
+        n:BigInt('0x'+nHex),e:BigInt('0x'+eHex)});
+    }
+    if (publicas.size!==5) throw Error('Faltam chaves publicas V2.');
+    return publicas;
+  }
+
+  async function QC_prepararTrocoV2368(valores,publicas) {
+    const saidasCegas=[],privadas=[];
+    for (const valor of valores) {
+      const p=publicas.get(valor);
+      if (!p) throw Error('Chave de troco V2 nao encontrada.');
+      const idChave='QC-'+valor+'-V2';
+      const msg=QC_juntar271(crypto.getRandomValues(new Uint8Array(32)),
+        enc.encode('QUINTOSCOIN|V2|'+valor+'|'+idChave+'|'+crypto.randomUUID()));
+      const codificado=await QC_pss271(msg);
+      const m=QC_num271(codificado);
+      if (m<=BIG_ZERO271 || m>=p.n || QC_mdc271(m,p.n)!==BIG_UM271) {
+        throw Error('Codificacao criptografica V2 invalida.');
+      }
+      const fator=QC_fator271(p.n);
+      const bloco=m*QC_modpow271(fator,p.e,p.n)%p.n;
+      if (bloco<=BIG_ZERO271 || bloco>=p.n) throw Error('Cegamento V2 invalido.');
+      saidasCegas.push({denominacao:valor,blocoHex:QC_hex271(QC_fixos271(bloco))});
+      privadas.push({indice:saidasCegas.length,valor,idChave,
+        mensagemHex:QC_hex271(msg),
+        inversoHex:QC_hex271(QC_fixos271(QC_inverso271(fator,p.n)))});
+    }
+    return {saidasCegas,privadas};
+  }
+
+  async function QC_consultarSelecionadasV2368(fichas) {
+    for (let i=0;i<fichas.length;i+=20) {
+      const parte=fichas.slice(i,i+20);
+      const r=await QC_postAnonimo271('qc_consultar_gastos_v2_lote',{
+        fichas:parte.map(f=>({mensagemHex:f.mensagemHex,
+          assinaturaHex:f.assinaturaHex}))
+      });
+      if (r.status!=='OK' || r.versao!=='V2' ||
+          !Array.isArray(r.resultados) || r.resultados.length!==parte.length ||
+          r.resultados.some((st,j)=>st.status!=='DISPONIVEL' ||
+            st.valor!==parte[j].valor)) {
+        throw Error('Uma ficha V2 nao esta disponivel. Atualize o saldo.');
+      }
+    }
+  }
+
+  async function QC_prepararQRV2368(valor,segredo,inicio) {
+    const atual=memoriaV2365;
+    if (!atual || atual.id!==inicio.id || atual.token!==inicio.token ||
+        !Array.isArray(atual.fichas) || !atual.fichas.length ||
+        localStorage.getItem(QC_CHAVE_LOCAL_V2_368(inicio.id))!==atual.origem) {
+      throw Error('Os 18 Qc$ do piloto sao fichas V1. Aguarde fichas V2 conferidas.');
+    }
+    const plano=QC_planejarComposicaoV2366(atual.fichas.map(f=>f.valor),valor);
+    if (plano.status!=='OK') throw Error(plano.mensagem||plano.status);
+    if (plano.indicesSelecionados.length>20 || plano.fichasTroco.length>20) {
+      throw Error('Esta combinacao exige mais de 20 fichas. Escolha outro valor ou reorganize as fichas.');
+    }
+    // Fail closed: o servidor precisa aprovar o preparo ANTES de mostrar a camera.
+    const pre=await QC_postAnonimo271('qc_preparar_doacao_v2',{
+      tipo:plano.tipo,quantidadeEntradas:plano.indicesSelecionados.length,
+      quantidadeTroco:plano.fichasTroco.length
+    });
+    if (pre.status!=='PRONTA' || pre.versao!=='V2' || !pre.idSessao ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(String(pre.dia||''))) {
+      throw Error('Doacoes V2 ainda bloqueadas. Nenhuma ficha foi movimentada.');
+    }
+    if (pre.dia!==QC_hojeBrasil301()) {
+      throw Error('Sessao V2 nao corresponde ao dia atual.');
+    }
+    const escolhidas=plano.indicesSelecionados.map(i=>atual.fichas[i]);
+    // Uma nova verificacao do servidor protege contra gastos em outro aparelho.
+    await QC_consultarSelecionadasV2368(escolhidas);
+    const publicas=plano.valorTroco
+      ?await QC_publicasV2368():null;
+    const troco=plano.valorTroco
+      ?await QC_prepararTrocoV2368(plano.fichasTroco,publicas)
+      :{saidasCegas:[],privadas:[]};
+    QC_conferirSessaoQR301(inicio);
+    if (localStorage.getItem(QC_CHAVE_LOCAL_V2_368(inicio.id))!==atual.origem) {
+      throw Error('Carteira V2 mudou durante o preparo.');
+    }
+    const op={versao:2,idOperacao:crypto.randomUUID().toLowerCase(),
+      tipo:plano.tipo,valorDoacao:plano.valorSolicitado,
+      valorTroco:plano.valorTroco,
+      fichasEntrada:escolhidas.map(f=>({
+        mensagemHex:f.mensagemHex,assinaturaHex:f.assinaturaHex})),
+      saidasCegas:troco.saidasCegas,privadas:troco.privadas,
+      diaQR301:String(pre.dia),idSessaoQR301:String(pre.idSessao),
+      etapaQR301:'PREPARADA'};
+    const cifrada=await QC_cifrar271(op,segredo);
+    QC_conferirSessaoQR301(inicio);
+    if (localStorage.getItem(QC_chavePendenteV2368()) ||
+        localStorage.getItem(QC_pendenteChave271())) {
+      throw Error('Existe outra doacao preparada. Nao crie uma nova.');
+    }
+    localStorage.setItem(QC_chavePendenteV2368(),JSON.stringify(cifrada));
+    memorizarSenha265(segredo,inicio);
+    return {status:'PREPARADA'};
+  }
+
+  async function QC_finalizarTrocoV2368(op,resposta,segredo,inicio) {
+    if (resposta.status!=='TROCO_ASSINADO' || resposta.versao!=='V2' ||
+        resposta.idTroca!==op.idOperacao ||
+        Number(resposta.valorDoacao)!==op.valorDoacao ||
+        Number(resposta.valorTroco)!==op.valorTroco ||
+        !Array.isArray(resposta.assinaturasCegas) ||
+        resposta.assinaturasCegas.length!==op.privadas.length) {
+      throw Error('Troco V2 ainda nao foi confirmado pelo servidor.');
+    }
+    const publicas=await QC_publicasV2368();
+    const novas=[];
+    for (const privada of op.privadas) {
+      const a=resposta.assinaturasCegas.find(s=>Number(s.indice)===privada.indice);
+      if (!a || Number(a.denominacao)!==privada.valor ||
+          a.idChave!==privada.idChave ||
+          !QC_HEX_1024_368.test(a.assinaturaCegaHex||'')) {
+        throw Error('Assinatura de troco V2 divergente. Operacao preservada.');
+      }
+      const p=publicas.get(privada.valor);
+      const cega=BigInt('0x'+a.assinaturaCegaHex);
+      const inverso=BigInt('0x'+privada.inversoHex);
+      if (cega<=BIG_ZERO271 || cega>=p.n || inverso<=BIG_ZERO271 || inverso>=p.n) {
+        throw Error('Assinatura de troco V2 fora do dominio.');
+      }
+      const assinaturaHex=QC_hex271(QC_fixos271(cega*inverso%p.n));
+      if (!(await crypto.subtle.verify({name:'RSA-PSS',saltLength:48},p.verify,
+        deHex(assinaturaHex),deHex(privada.mensagemHex)))) {
+        throw Error('Troco V2 invalido. Operacao preservada.');
+      }
+      novas.push({chave:'QC-TR-V2-'+op.idOperacao+'-'+privada.indice,
+        ficha:{formato:'QC_FICHA_ASSINADA_V2',idChave:privada.idChave,
+          valor:privada.valor,mensagemHex:privada.mensagemHex,assinaturaHex}});
+    }
+    const cifradas=[];
+    for (const n of novas) {
+      cifradas.push({chave:n.chave,registro:await QC_cifrar271(n.ficha,segredo)});
+    }
+    const chave=QC_CHAVE_LOCAL_V2_368(inicio.id);
+    const antigoTexto=localStorage.getItem(chave);
+    const registros=antigoTexto?JSON.parse(antigoTexto):{};
+    if (!registros || typeof registros!=='object' || Array.isArray(registros)) {
+      throw Error('Armazenamento de fichas V2 invalido.');
+    }
+    for (const n of cifradas) {
+      if (Object.prototype.hasOwnProperty.call(registros,n.chave)) {
+        const ja=await abrir(registros[n.chave],segredo);
+        const esperada=novas.find(x=>x.chave===n.chave).ficha;
+        if (ja.mensagemHex!==esperada.mensagemHex ||
+            ja.assinaturaHex!==esperada.assinaturaHex) {
+          throw Error('Troco V2 divergente da gravacao anterior.');
+        }
+      } else registros[n.chave]=n.registro;
+    }
+    QC_conferirSessaoQR301(inicio);
+    if (localStorage.getItem(chave)!==antigoTexto) {
+      throw Error('Carteira V2 mudou durante a gravacao do troco.');
+    }
+    localStorage.setItem(chave,JSON.stringify(registros));
+  }
+
+  async function QC_retomarV2368(op,segredo,inicio) {
+    if (op.etapaQR301!=='ACIONADA') {
+      throw Error('A sacola ainda nao foi lida. Nenhuma doacao enviada.');
+    }
+    // NENHUM token, nome, id de carteira ou senha vai para a rota anonima.
+    const resposta=await QC_postAnonimo271('qc_doar_v2',{
+      idOperacao:op.idOperacao,valorDoacao:op.valorDoacao,
+      fichasEntrada:op.fichasEntrada,saidasCegas:op.saidasCegas
+    });
+    const confirmada=op.tipo==='EXATA'
+      ? resposta.status==='DOACAO_REGISTRADA' && resposta.versao==='V2' &&
+        resposta.idOperacao===op.idOperacao && Number(resposta.valor)===op.valorDoacao
+      : resposta.status==='TROCO_ASSINADO' && resposta.versao==='V2' &&
+        resposta.idTroca===op.idOperacao;
+    if (!confirmada) {
+      throw Error('Operacao V2 nao confirmada ('+
+        String(resposta.status||'SEM_RESPOSTA')+'). Retome a mesma doacao.');
+    }
+    if (op.tipo==='COM_TROCO') {
+      await QC_finalizarTrocoV2368(op,resposta,segredo,inicio);
+    }
+    QC_conferirSessaoQR301(inicio);
+    localStorage.removeItem(QC_chavePendenteV2368());
+    memoriaV2365=null;
+    QC_conferirV2365(inicio.id,inicio.token,segredo).catch(()=>{});
+    return {status:'OK'};
+  }
+
   window.QC_estadoDoacaoQR301=async function() {
     const inicio=dadosDaSessao();
     if (!inicio.id || !inicio.token) throw Error("Entre na carteira.");
-    if (!localStorage.getItem(QC_pendenteChave271())) return {status:"NENHUMA"};
+    const pendenteV1=localStorage.getItem(QC_pendenteChave271());
+    const pendenteV2=localStorage.getItem(QC_chavePendenteV2368());
+    if (pendenteV1 && pendenteV2) {
+      throw Error('Doacoes V1 e V2 pendentes ao mesmo tempo. Preserve os dados.');
+    }
+    if (!pendenteV1 && !pendenteV2) return {status:"NENHUMA"};
+    if (pendenteV2) {
+      const segredo=await obterSenha265();
+      if (!segredo) return {status:"CANCELADO"};
+      const op=await QC_lerPendenteV2368(segredo);
+      return {status:op.etapaQR301==="PREPARADA"?"PREPARADA":"ACIONADA"};
+    }
     const segredo=await obterSenha265();
     if (!segredo) return {status:"CANCELADO"};
     const op=await QC_lerPendenteQR301(segredo);
@@ -1049,35 +1307,24 @@
       if (!inicio.id || !inicio.token) throw Error("Entre na carteira antes de doar.");
       const segredo=await obterSenha265();
       if (!segredo) return {status:"CANCELADO"};
+      if (localStorage.getItem(QC_pendenteChave271()) &&
+          localStorage.getItem(QC_chavePendenteV2368())) {
+        throw Error('Duas doacoes pendentes. Preserve os dados locais.');
+      }
       if (localStorage.getItem(QC_pendenteChave271())) {
         const anterior=await QC_lerPendenteQR301(segredo);
+        return {status:anterior.etapaQR301==="PREPARADA"?"PREPARADA":"ACIONADA"};
+      }
+      if (localStorage.getItem(QC_chavePendenteV2368())) {
+        const anterior=await QC_lerPendenteV2368(segredo);
         return {status:anterior.etapaQR301==="PREPARADA"?"PREPARADA":"ACIONADA"};
       }
       if (!Number.isSafeInteger(valor) || valor<1) {
         throw Error("Informe um valor inteiro de pelo menos 1 Qc$.");
       }
-      // PASSO 366: impedir novas doacoes com fichas do piloto V1.
-      // O novo plano V2 já aceita 1 e 3 Qc$ e calcula o troco com ficha de 1.
-      // A preparacao para escanear a sacola so sera liberada quando o
-      // servidor V2 tiver escrita idempotente e o corte contábil concluido.
-      const v2=memoriaV2365;
-      if (!v2 || v2.id!==inicio.id || v2.token!==inicio.token ||
-          !Array.isArray(v2.fichas) || v2.fichas.length===0 ||
-          localStorage.getItem("QC_FICHAS_ASSINADAS_V2_"+inicio.id)!==v2.origem) {
-        throw Error("Os 18 Qc$ do piloto sao fichas V1. " +
-          "Aguarde a emissao V2 antes de preparar novas doacoes. " +
-          "Nenhum gasto foi realizado.");
-      }
-      const planoV2=QC_planejarComposicaoV2366(
-        v2.fichas.map(f=>f.valor),valor);
-      if (planoV2.status!=="OK") {
-        throw Error(planoV2.mensagem||planoV2.status);
-      }
-      // Protecao adicional: jamais mostrar PRONTA nem iniciar QR antes
-      // da implantacao das rotas de gasto V2 (exato e com troco).
-      throw Error("O planejamento das fichas V2 esta pronto, mas " +
-        "as doacoes permanecem bloqueadas ate a integracao do servidor " +
-        "e o encerramento contabil do piloto. Nenhuma ficha foi gasta.");
+      // Passo 368: prepara APENAS com fichas V2. O servidor ainda bloqueia
+      // o preparo no piloto, sem criar gastos, reservas nem saldo.
+      return await QC_prepararQRV2368(valor,segredo,inicio);
 
       // LEGADO V1: mantido temporariamente para auditoria, nunca acessado
       // por uma nova preparacao apos o bloqueio V2 acima.
@@ -1143,6 +1390,17 @@
     try {
       const segredo=await obterSenha265();
       if (!segredo) return {status:"CANCELADO"};
+      if (localStorage.getItem(QC_chavePendenteV2368())) {
+        if (localStorage.getItem(QC_pendenteChave271())) {
+          throw Error('Duas doacoes pendentes. Preserve os dados.');
+        }
+        const v2=await QC_lerPendenteV2368(segredo);
+        if (v2.etapaQR301!=='PREPARADA') {
+          throw Error('Doacao V2 ja acionada. Use Recuperar operacao.');
+        }
+        localStorage.removeItem(QC_chavePendenteV2368());
+        return {status:'CANCELADA'};
+      }
       const op=await QC_lerPendenteQR301(segredo);
       if (!op) return {status:"NENHUMA"};
       if (op.etapaQR301!=="PREPARADA") {
@@ -1164,6 +1422,25 @@
       if (!inicio.id || !inicio.token) throw Error("Entre na carteira novamente.");
       const segredo=await obterSenha265();
       if (!segredo) return {status:"CANCELADO"};
+      if (localStorage.getItem(QC_chavePendenteV2368())) {
+        if (localStorage.getItem(QC_pendenteChave271())) {
+          throw Error('Duas doacoes pendentes. Preserve os dados.');
+        }
+        const v2=await QC_lerPendenteV2368(segredo);
+        if (v2.etapaQR301!=='PREPARADA') {
+          throw Error('Doacao V2 ja acionada. Retome a mesma operacao.');
+        }
+        if (v2.diaQR301!==QC_hojeBrasil301()) {
+          throw Error('Preparo V2 de outro dia. Cancele e prepare novamente.');
+        }
+        QC_conferirSessaoQR301(inicio);
+        v2.etapaQR301='ACIONADA';
+        const cifrada=await QC_cifrar271(v2,segredo);
+        QC_conferirSessaoQR301(inicio);
+        localStorage.setItem(QC_chavePendenteV2368(),JSON.stringify(cifrada));
+        memorizarSenha265(segredo,inicio);
+        return await QC_retomarV2368(v2,segredo,inicio);
+      }
       const op=await QC_lerPendenteQR301(segredo);
       if (!op) throw Error("Não existe doação preparada neste aparelho.");
       if (op.etapaQR301!=="PREPARADA") {
@@ -1192,6 +1469,16 @@
       if (!inicio.id || !inicio.token) throw Error("Entre na carteira novamente.");
       const segredo=await obterSenha265();
       if (!segredo) return {status:"CANCELADO"};
+      if (localStorage.getItem(QC_chavePendenteV2368())) {
+        if (localStorage.getItem(QC_pendenteChave271())) {
+          throw Error('Duas doacoes pendentes. Preserve os dados.');
+        }
+        const v2=await QC_lerPendenteV2368(segredo);
+        if (v2.etapaQR301==='PREPARADA') {
+          throw Error('A sacola ainda nao foi lida. Nenhuma doacao V2 enviada.');
+        }
+        return await QC_retomarV2368(v2,segredo,inicio);
+      }
       const op=await QC_lerPendenteQR301(segredo);
       if (!op) return {status:"NENHUMA"};
       if (op.etapaQR301==="PREPARADA") {
