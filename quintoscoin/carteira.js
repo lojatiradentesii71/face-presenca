@@ -1424,7 +1424,7 @@ qcModalTransferir275.innerHTML = `
       <label for="qcCodigoReceber275" class="qc-label-modal">Código da transferência</label>
       <textarea id="qcCodigoReceber275" class="qc-input-modal" rows="3"
         style="width:100%;box-sizing:border-box;resize:vertical"
-        placeholder="Cole aqui o código QC1|..."></textarea>
+        placeholder="Cole o código QC2|... (ou QC1 de uma operação antiga)"></textarea>
       <button type="button" id="qcReceber275" class="qc-btn-modal-principal"
         style="width:100%;margin-top:10px">Receber Qc$</button>
     </div>
@@ -1551,7 +1551,7 @@ document.getElementById("qcAbaReceber275")
   .addEventListener("click", () => QC_mostrarAbaTransferencia275("receber"));
 function QC_mostrarCodigo275(retorno) {
   qcCodigoCompartilhar275 = String(retorno.codigoQR || "");
-  if (!/^QC1\|[0-9a-f-]{36}\|[0-9a-f]{64}$/i.test(qcCodigoCompartilhar275)) {
+  if (!/^QC[12]\|[0-9a-f-]{36}\|[0-9a-f]{64}$/i.test(qcCodigoCompartilhar275)) {
     throw Error("Codigo de transferencia inesperado.");
   }
   QC_desenharQR275(qcImagemQR275, qcCodigoCompartilhar275);
@@ -1729,7 +1729,7 @@ document.getElementById("qcLerQR275").addEventListener("click", async () => {
         const codigos=await detector.detect(video);
         if (codigos.length) {
           const valor=String(codigos[0].rawValue||"");
-          if (/^QC1\|[0-9a-f-]{36}\|[0-9a-f]{64}$/i.test(valor)) {
+          if (/^QC[12]\|[0-9a-f-]{36}\|[0-9a-f]{64}$/i.test(valor)) {
             qcValorReceber275.value=valor;
             QC_pararCamera275();
             qcAvisoTransferir275.textContent="Codigo lido. Toque em Receber QC.";
@@ -4413,20 +4413,27 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     campo.removeAttribute("max");
     let plano;
     try {
-      if(typeof window.QC_planejarMovimento267!=="function") {
-        throw Error("Rotina de saldo indisponível.");
-      }
-      // Consulta apenas memória de fichas já verificadas; nenhuma transação.
-      plano=window.QC_planejarMovimento267(2);
-      const saldo=plano && plano.saldoDisponivel;
-      if(!Number.isSafeInteger(saldo) || saldo<0) {
-        throw Error("Saldo ainda não verificado nesta sessão.");
-      }
-      if(saldo>0) {
-        // O total deve ser componível sem troco para ser chamado de máximo.
-        const total=window.QC_planejarMovimento267(saldo);
-        if(!total || total.status!=="OK") {
-          throw Error("Não foi possível conferir o valor máximo resgatável.");
+      // Ao existir saldo V2 conferido, somente ele pode financiar
+      // novos resgates; as fichas V1 permanecem historicas.
+      const saldoV2=typeof window.QC_saldoDisponivelV2370==="function"
+        ? window.QC_saldoDisponivelV2370():null;
+      let saldo;
+      if(Number.isSafeInteger(saldoV2) && saldoV2>0) {
+        saldo=saldoV2;
+        const total=window.QC_planejarMovimentoV2366(saldo);
+        if(!total || total.status!=="OK")
+          throw Error("Nao foi possivel conferir o limite V2.");
+      } else {
+        if(typeof window.QC_planejarMovimento267!=="function")
+          throw Error("Rotina de saldo indisponível.");
+        plano=window.QC_planejarMovimento267(2);
+        saldo=plano && plano.saldoDisponivel;
+        if(!Number.isSafeInteger(saldo) || saldo<0)
+          throw Error("Saldo ainda não verificado nesta sessão.");
+        if(saldo>0) {
+          const total=window.QC_planejarMovimento267(saldo);
+          if(!total || total.status!=="OK")
+            throw Error("Não foi possível conferir o valor máximo resgatável.");
         }
       }
       maximoResgate333=saldo;
@@ -4814,21 +4821,28 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     if(carregando)return;
     carregando=true;lista.textContent="Consultando resgates...";
     try{
-      const r=await postar("qc_resgate_pendentes_tesoureiro");
-      if(r.status!=="OK"||!Array.isArray(r.pedidos))throw Error("Lista de resgates invalida.");
+      const [r,v2]=await Promise.all([
+        postar("qc_resgate_pendentes_tesoureiro"),
+        postar("qc_resgate_v2_pendentes_tesoureiro")
+      ]);
+      if(r.status!=="OK"||!Array.isArray(r.pedidos)||
+          v2.status!=="OK"||!Array.isArray(v2.pedidos))
+        throw Error("Lista de resgates invalida.");
+      const pendentes=r.pedidos.map(p=>({...p,versao:'V1'}))
+        .concat(v2.pedidos.map(p=>({...p,versao:'V2'})));
       lista.replaceChildren();
-      const quantidade=r.pedidos.length;
+      const quantidade=pendentes.length;
       esfera.className="qc-esfera-pedidos "+(quantidade ?
         "qc-esfera-laranja" : "qc-esfera-verde");
       contador.textContent=quantidade ?
         quantidade+(quantidade===1 ? " pendente" : " pendentes") :
         "Nenhum resgate";
       if(!quantidade){lista.textContent="Nenhum resgate pendente.";return;}
-      r.pedidos.forEach(p=>{
+      pendentes.forEach(p=>{
         const item=document.createElement("div");item.className="qc-resgate-linha278";
         const nome=document.createElement("strong");nome.textContent=p.nome;
         const info=document.createElement("p");
-        info.textContent="Qc$ "+Number(p.valor).toLocaleString("pt-BR")+
+        info.textContent="["+p.versao+"] Qc$ "+Number(p.valor).toLocaleString("pt-BR")+
           " · Pix R$ "+Number(p.valor).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+
           " · "+p.solicitadoEm+" · "+p.status;
         const mensagem=document.createElement("p");mensagem.setAttribute("role","status");
@@ -4855,7 +4869,7 @@ function QC_confirmarPagamentoPedido(nome, valor) {
           const b=document.createElement("button");b.type="button";
           b.className="qc-btn-modal-secundario";b.textContent=texto;
           b.addEventListener("click",async()=>{
-            const pagamento=acao==="qc_resgate_confirmar_pagamento";
+            const pagamento=acao.endsWith("confirmar_pagamento");
             const aceito=await QC_dialogoQuintos338({
               titulo:pagamento ? "Confirmar pagamento do resgate" :
                 "Autorizar cancelamento do resgate",
@@ -4882,14 +4896,15 @@ function QC_confirmarPagamentoPedido(nome, valor) {
             b.disabled=true;mensagem.textContent="Registrando...";
             try{
               const r=await postar(acao,{idResgate:p.idResgate});
-              if(acao==="qc_resgate_confirmar_pagamento" && r.status!=="RESGATE_CONFIRMADO"){
+              if(pagamento && r.status!=="RESGATE_CONFIRMADO"){
                 throw Error(r.mensagem||"Confirmacao nao concluida: "+r.status);
               }
-              if(acao==="qc_resgate_autorizar_cancelamento" &&
-                 !["RESGATE_CANCELADO","CANCELAMENTO_PENDENTE_ASSINATURA"].includes(r.status)){
+              if(acao.endsWith("autorizar_cancelamento") &&
+                 !["RESGATE_CANCELADO","CANCELAMENTO_PENDENTE_ASSINATURA",
+                   "CANCELAMENTO_V2_PENDENTE_ASSINATURA"].includes(r.status)){
                 throw Error(r.mensagem||"Cancelamento nao concluido: "+r.status);
               }
-              mensagem.textContent=acao==="qc_resgate_confirmar_pagamento" ?
+              mensagem.textContent=pagamento ?
                 "✅ Pagamento registrado e QCs extintos." :
                 r.status==="RESGATE_CANCELADO" ?
                 "✅ Cancelamento autorizado. Irmao deve recuperar as fichas na carteira." :
@@ -4902,13 +4917,15 @@ function QC_confirmarPagamentoPedido(nome, valor) {
         }
         if(p.status==="PENDENTE"||p.status==="CANCELAMENTO_SOLICITADO"){
           item.append(botao("Confirmar pagamento",
-            "qc_resgate_confirmar_pagamento",
+            p.versao==="V2" ? "qc_resgate_v2_confirmar_pagamento" :
+              "qc_resgate_confirmar_pagamento",
             "Confirma que JA PAGOU R$ "+Number(p.valor).toFixed(2)+" a "+p.nome+
             " fora do sistema? Esta operacao extingue os QCs definitivamente e reduz o lastro."));
         }
         if(p.status==="CANCELAMENTO_SOLICITADO"||p.status==="CANCELAMENTO_APROVADO"){
           item.append(botao("Autorizar cancelamento",
-            "qc_resgate_autorizar_cancelamento",
+            p.versao==="V2" ? "qc_resgate_v2_autorizar_cancelamento" :
+              "qc_resgate_autorizar_cancelamento",
             "Confirma que NENHUM pagamento foi realizado a "+p.nome+
             "? Esta operacao devolve fichas para recuperacao na carteira do irmao."));
         }
