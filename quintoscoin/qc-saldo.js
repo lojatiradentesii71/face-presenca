@@ -2336,6 +2336,388 @@ function QC_confirmarTransferencia332(opcoes) {
   };
 
 
+  // ================================================================
+  // PASSO 370 — TRANSFERENCIAS E RESGATES V2 NA CARTEIRA
+  // Novas operacoes somente em V2; nao cria, converte nem apaga V1.
+  // Material secreto e fichas em armazenamento cifrado, idempotente.
+  // As propriedades do servidor e o Worker continuam bloqueando
+  // qualquer movimentacao antes da abertura contabil definitiva.
+  // ================================================================
+  const QC_TX_V2_370='QC_TRANSFERENCIA_ENVIO_V2_';
+  const QC_RX_V2_370='QC_TRANSFERENCIA_RESGATE_V2_';
+  const QC_RS_V2_370='QC_RESGATE_LOCAL_V2_';
+  const QC_CODIGO_V2_370=/^QC2\|([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\|([0-9a-f]{64})$/i;
+  let QC_movV2Ocupado370=false;
+
+  function QC_fichasDisponiveisV2370() {
+    const s=dadosDaSessao(),m=memoriaV2365;
+    if (!s.id||!s.token||!m||m.id!==s.id||m.token!==s.token||
+        !Array.isArray(m.fichas)||
+        localStorage.getItem(QC_CHAVE_LOCAL_V2_368(s.id))!==m.origem) return null;
+    return m.fichas;
+  }
+  // Somente valor numerico; nunca revela o conteudo das fichas.
+  window.QC_saldoDisponivelV2370=function() {
+    const f=QC_fichasDisponiveisV2370();
+    return f ? f.reduce((n,x)=>n+x.valor,0) : null;
+  };
+  function QC_chaveMovV2370(prefixo) {
+    const s=dadosDaSessao();
+    if (!s.id||!s.token) throw Error('Entre novamente na sua carteira.');
+    return prefixo+s.id;
+  }
+  function QC_chaveResgateV2370(id) {
+    if (!QC_UUID_368.test(id)) throw Error('Identificador de resgate V2 invalido.');
+    return QC_chaveMovV2370(QC_RS_V2_370)+'_'+id.toLowerCase();
+  }
+  async function QC_lerMovV2370(chave,senha,tipo) {
+    const bruto=localStorage.getItem(chave);
+    if (!bruto) return null;
+    let op;
+    try {op=await abrir(JSON.parse(bruto),senha);}
+    catch (_) {throw Error('Operacao V2 protegida nao pode ser aberta. Preserve a carteira.');}
+    if (!op||op.versao!==2||op.tipo!==tipo ||
+        !QC_UUID_368.test(op.idTransferencia||op.idResgate||'')||
+        !Array.isArray(op.privadasTroco||op.privadas) ||
+        !Array.isArray(op.saidasCegas||op.trocoCego||[]))
+      throw Error('Operacao V2 local inconsistente. Preserve os dados.');
+    return op;
+  }
+  async function QC_guardarMovV2370(chave,op,senha) {
+    if (localStorage.getItem(chave)) throw Error('Ja existe operacao protegida; retome a anterior.');
+    const cifrado=await QC_cifrar271(op,senha);
+    if (localStorage.getItem(chave)) throw Error('Outra operacao foi iniciada.');
+    localStorage.setItem(chave,JSON.stringify(cifrado));
+  }
+  function QC_conferirMemoriaV2370(sessao) {
+    QC_conferirSessaoQR301(sessao);
+    if (!QC_fichasDisponiveisV2370()) {
+      throw Error('Fichas V2 nao conferidas nesta carteira. Atualize o saldo.');
+    }
+  }
+  async function QC_liberacaoV2370(tipo) {
+    const r=await QC_postAnonimo271('qc_v2_estado_operacional',{});
+    if (r.status!=='OK'||r.versao!=='V2'||
+        r[tipo]!==true) throw Error(
+      'Operacoes V2 ainda bloqueadas. Nenhum valor foi movimentado.');
+  }
+  async function QC_gravarAssinadasV2370(idLocal,privadas,assinaturas,senha,origem) {
+    if (!Array.isArray(privadas)||!Array.isArray(assinaturas)||
+        privadas.length!==assinaturas.length) {
+      throw Error('Assinaturas V2 incompletas. Preserve esta operacao.');
+    }
+    if (!privadas.length) {
+      memoriaV2365=null;
+      QC_exibirV2365();
+      return;
+    }
+    const valor=privadas.reduce((s,f)=>s+Number(f.valor),0);
+    const resposta={status:'TROCO_ASSINADO',versao:'V2',
+      idTroca:idLocal,valorDoacao:0,valorTroco:valor,assinaturasCegas:assinaturas};
+    await QC_finalizarTrocoV2368({idOperacao:idLocal,valorDoacao:0,
+      valorTroco:valor,privadas},resposta,senha,origem);
+    memoriaV2365=null;
+    QC_exibirV2365();
+  }
+  const QC_v1TransferirCriar370=window.QC_transferirCriar275;
+  const QC_v1TransferirConsultar370=window.QC_transferirConsultar275;
+  const QC_v1TransferirResgatar370=window.QC_transferirResgatar275;
+  const QC_v1TXPendente370=window.QC_transferenciaPendente275;
+  const QC_v1RXPendente370=window.QC_resgatePendente275;
+
+  async function QC_enviarV2370(op,senha,sessao) {
+    const r=await QC_postAnonimo271('qc_transferir_v2_criar',{
+      idTransferencia:op.idTransferencia,codigo:op.codigo,
+      valorEnviado:op.valorEnviado,fichasEntrada:op.fichasEntrada,
+      trocoCego:op.saidasCegas
+    });
+    if (r.status!=='TRANSFERENCIA_V2_PRONTA'||r.idTransferencia!==op.idTransferencia||
+        Number(r.valorEnviado)!==op.valorEnviado||Number(r.valorTroco)!==op.valorTroco)
+      throw Error(r.mensagem||'Transferencia V2 pendente ('+String(r.status||'?')+
+        '). Retome a mesma operacao; nao crie outra.');
+    await QC_gravarAssinadasV2370('TX-'+op.idTransferencia,
+      op.privadasTroco,r.assinaturasTroco,senha,sessao);
+    return {status:'PRONTA',idTransferencia:op.idTransferencia,
+      valorEnviado:op.valorEnviado,
+      codigoQR:'QC2|'+op.idTransferencia+'|'+op.codigo};
+  }
+  window.QC_transferirCriar275=async function(valorSolicitado) {
+    const sessao=dadosDaSessao(),
+      pendenteV2=sessao.id&&localStorage.getItem(QC_TX_V2_370+sessao.id);
+    // Manter retomada historica V1, se existir.
+    if (!pendenteV2 && !QC_fichasDisponiveisV2370())
+      return QC_v1TransferirCriar370(valorSolicitado);
+    if (QC_movV2Ocupado370) throw Error('Transferencia V2 em andamento.');
+    QC_movV2Ocupado370=true;
+    try {
+      const senha=await obterSenha265();
+      if (!senha) return {status:'CANCELADO'};
+      memorizarSenha265(senha,sessao);
+      const chave=QC_chaveMovV2370(QC_TX_V2_370);
+      const anterior=await QC_lerMovV2370(chave,senha,'TX');
+      if (anterior) return await QC_enviarV2370(anterior,senha,sessao);
+      if (localStorage.getItem(CHAVE_TX275+sessao.id))
+        throw Error('Transferencia V1 anterior pendente. Recupere antes de continuar.');
+      const valor=Number(valorSolicitado);
+      if (!Number.isSafeInteger(valor)||valor<2||valor===3||valor>10000)
+        throw Error('Informe valor inteiro a partir de 2 Qc$, exceto 3.');
+      QC_conferirMemoriaV2370(sessao);
+      const fichas=QC_fichasDisponiveisV2370();
+      const plano=QC_planejarComposicaoV2366(fichas.map(f=>f.valor),valor);
+      if (plano.status!=='OK') throw Error(plano.mensagem||plano.status);
+      if (plano.indicesSelecionados.length>20||plano.fichasTroco.length>20)
+        throw Error('Quantidade V2 acima de 20 fichas. Use valores menores.');
+      // Antes de preparar o material privado, verificar bloqueio no servidor.
+      await QC_liberacaoV2370('transferencias');
+      const confirmar=await QC_confirmarTransferencia332({
+        titulo:'Confirmar transferencia V2',
+        destaque:QC_formatoValor291(valor),
+        linhas:[plano.valorTroco
+          ?'Troco automatico: '+plano.valorTroco+' Qc$.'
+          :'Sem necessidade de troco.',
+          'Compartilhe o codigo somente com o destinatario.'],
+        rotulo:'Preparar transferencia'
+      });
+      if (!confirmar) return {status:'CANCELADO'};
+      QC_conferirMemoriaV2370(sessao);
+      const pub=plano.fichasTroco.length ? await QC_publicasV2368():new Map();
+      const saidas=await QC_prepararTrocoV2368(plano.fichasTroco,pub);
+      const op={versao:2,tipo:'TX',idTransferencia:crypto.randomUUID().toLowerCase(),
+        codigo:QC_hex271(crypto.getRandomValues(new Uint8Array(32))),
+        valorEnviado:valor,valorTroco:plano.valorTroco,
+        fichasEntrada:plano.indicesSelecionados.map(i=>({
+          mensagemHex:fichas[i].mensagemHex,
+          assinaturaHex:fichas[i].assinaturaHex})),
+        saidasCegas:saidas.saidasCegas,privadasTroco:saidas.privadas};
+      await QC_guardarMovV2370(chave,op,senha);
+      return await QC_enviarV2370(op,senha,sessao);
+    } finally {QC_movV2Ocupado370=false;}
+  };
+  window.QC_transferenciaPendente275=function() {
+    const {id}=dadosDaSessao();
+    return !!(id&&(localStorage.getItem(QC_TX_V2_370+id)||
+      (QC_v1TXPendente370&&QC_v1TXPendente370())));
+  };
+  window.QC_transferirConsultar275=async function() {
+    const sessao=dadosDaSessao();
+    if (!sessao.id||!localStorage.getItem(QC_TX_V2_370+sessao.id))
+      return QC_v1TransferirConsultar370();
+    const senha=await obterSenha265();
+    if (!senha) return {status:'CANCELADO'};
+    const chave=QC_chaveMovV2370(QC_TX_V2_370),
+      op=await QC_lerMovV2370(chave,senha,'TX');
+    const r=await QC_postAnonimo271('qc_transferir_v2_consultar',{
+      idTransferencia:op.idTransferencia,codigo:op.codigo});
+    if (r.status==='CONCLUIDA') {
+      // Antes de apagar o codigo, garantir que o troco esteja salvo.
+      await QC_enviarV2370(op,senha,sessao);
+      localStorage.removeItem(chave);
+      return {status:'CONCLUIDA',valorEnviado:op.valorEnviado};
+    }
+    if (!['PRONTA','RESGATANDO'].includes(r.status))
+      throw Error('Transferencia V2 ainda nao confirmada: '+String(r.status));
+    return {status:r.status,valorEnviado:op.valorEnviado,
+      codigoQR:'QC2|'+op.idTransferencia+'|'+op.codigo};
+  };
+
+  async function QC_receberV2370(op,senha,sessao) {
+    const r=await QC_postAnonimo271('qc_transferir_v2_resgatar',{
+      idTransferencia:op.idTransferencia,codigo:op.codigo,
+      saidasCegas:op.saidasCegas});
+    if (r.status!=='TRANSFERENCIA_V2_RESGATADA'||
+        r.idTransferencia!==op.idTransferencia||
+        Number(r.valorRecebido)!==op.valorRecebido) {
+      throw Error(r.mensagem||'Recebimento V2 pendente ('+String(r.status||'?')+
+        '). Preserve os dados e retome este recebimento.');
+    }
+    await QC_gravarAssinadasV2370('RX-'+op.idTransferencia,
+      op.privadas,r.assinaturasCegas,senha,sessao);
+    localStorage.removeItem(QC_chaveMovV2370(QC_RX_V2_370));
+    return {status:'RECEBIDA',valorRecebido:op.valorRecebido};
+  }
+  window.QC_resgatePendente275=function() {
+    const {id}=dadosDaSessao();
+    return !!(id&&(localStorage.getItem(QC_RX_V2_370+id)||
+      (QC_v1RXPendente370&&QC_v1RXPendente370())));
+  };
+  window.QC_transferirResgatar275=async function(codigoLido) {
+    const texto=String(codigoLido||'').trim();
+    const sessao=dadosDaSessao(),
+      rxChave=sessao.id?QC_RX_V2_370+sessao.id:null;
+    if (!rxChave||(!QC_CODIGO_V2_370.test(texto)&&
+        !localStorage.getItem(rxChave)))
+      return QC_v1TransferirResgatar370(codigoLido);
+    if (QC_movV2Ocupado370) throw Error('Outra movimentacao V2 em andamento.');
+    QC_movV2Ocupado370=true;
+    try {
+      const senha=await obterSenha265();
+      if (!senha) return {status:'CANCELADO'};
+      memorizarSenha265(senha,sessao);
+      let op=await QC_lerMovV2370(rxChave,senha,'RX');
+      if (op) {
+        if (texto) {
+          const match=QC_CODIGO_V2_370.exec(texto);
+          if (!match||match[1].toLowerCase()!==op.idTransferencia||
+              match[2].toLowerCase()!==op.codigo)
+            throw Error('Outro recebimento V2 esta pendente. Retome primeiro.');
+        }
+        return await QC_receberV2370(op,senha,sessao);
+      }
+      const match=QC_CODIGO_V2_370.exec(texto);
+      if (!match) throw Error('Codigo de transferencia V2 invalido.');
+      if (localStorage.getItem(CHAVE_RX275+sessao.id))
+        throw Error('Recebimento V1 pendente. Recupere antes de continuar.');
+      await QC_liberacaoV2370('transferencias');
+      const id=match[1].toLowerCase(),codigo=match[2].toLowerCase();
+      const consulta=await QC_postAnonimo271('qc_transferir_v2_consultar',{
+        idTransferencia:id,codigo});
+      if (consulta.status!=='PRONTA'||consulta.versao!=='V2')
+        throw Error('Transferencia V2 nao esta pronta: '+String(consulta.status));
+      const valor=Number(consulta.valorEnviado);
+      if (!Number.isSafeInteger(valor)||valor<2||valor===3||valor>10000)
+        throw Error('Valor V2 recebido invalido.');
+      const confirmou=await QC_confirmarTransferencia332({
+        titulo:'Confirmar recebimento V2',destaque:QC_formatoValor291(valor),
+        linhas:['O servidor verificara o codigo antes de assinar novas fichas.'],
+        rotulo:'Receber Qc$'
+      });
+      if (!confirmou) return {status:'CANCELADO'};
+      QC_conferirSessaoQR301(sessao);
+      const valores=QC_decomporTrocoV2366(valor);
+      if (valores.length>20) throw Error('Recebimento requer mais de 20 fichas.');
+      const pub=await QC_publicasV2368();
+      const preparadas=await QC_prepararTrocoV2368(valores,pub);
+      op={versao:2,tipo:'RX',idTransferencia:id,codigo,valorRecebido:valor,
+        saidasCegas:preparadas.saidasCegas,privadas:preparadas.privadas,
+        privadasTroco:[]};
+      await QC_guardarMovV2370(rxChave,op,senha);
+      return await QC_receberV2370(op,senha,sessao);
+    } finally {QC_movV2Ocupado370=false;}
+  };
+
+  const QC_v1SolicitarResgate370=window.QC_solicitarResgate278;
+  const QC_v1MeusResgates370=window.QC_meusResgates278;
+  const QC_v1RetomarResgate370=window.QC_retomarResgate278;
+  const QC_v1CancelarResgate370=window.QC_pedirCancelamentoResgate278;
+  const QC_v1PendenciasResgate370=window.QC_resgatesSemConfirmacaoLocal278;
+
+  async function QC_retomarResgateV2370(op,senha,sessao) {
+    const pedido={idResgate:op.idResgate};
+    let r=await QC_postResgate278('qc_resgate_v2_consultar',pedido);
+    if (r.status==='NAO_ENCONTRADO') {
+      r=await QC_postResgate278('qc_resgate_v2_criar',{
+        ...pedido,valorResgate:op.valorResgate,chavePix:op.chavePix,
+        fichasEntrada:op.fichasEntrada,trocoCego:op.trocoCego,
+        devolucaoCega:op.devolucaoCega});
+      if (r.status==='RESGATE_V2_PENDENTE_ASSINATURA')
+        return {status:'PENDENTE',mensagem:'Assinatura V2 pendente. Retome este pedido.'};
+      if (r.status==='RESGATES_V2_BLOQUEADOS'||r.status==='FICHA_V2_INDISPONIVEL')
+        throw Error('Resgate V2 indisponivel; preserve o pedido e confira o servidor.');
+      r=await QC_postResgate278('qc_resgate_v2_consultar',pedido);
+    }
+    if (!['RESGATE_PENDENTE','RESGATE_CANCELAMENTO_SOLICITADO',
+        'RESGATE_CANCELAMENTO_APROVADO','RESGATE_CONFIRMADO','RESGATE_CANCELADO']
+        .includes(r.status)||r.versao!=='V2'||r.idResgate!==op.idResgate||
+        Number(r.valorResgate)!==op.valorResgate||Number(r.valorTroco)!==op.valorTroco)
+      throw Error('Resgate V2 ainda nao confirmado. Retome o mesmo pedido: '+
+        String(r.status||'?'));
+    if (op.privadasTroco.length && !Array.isArray(r.assinaturasTroco))
+      return {status:'PENDENTE',mensagem:'Troco V2 ainda indisponivel; retome depois.'};
+    await QC_gravarAssinadasV2370('RS-T-'+op.idResgate,
+      op.privadasTroco,r.assinaturasTroco||[],senha,sessao);
+    if (r.status==='RESGATE_CANCELADO') {
+      if (!Array.isArray(r.assinaturasDevolucao))
+        return {status:'PENDENTE',mensagem:'Devolucao V2 ainda indisponivel.'};
+      await QC_gravarAssinadasV2370('RS-D-'+op.idResgate,
+        op.privadasDevolucao,r.assinaturasDevolucao,senha,sessao);
+      localStorage.removeItem(QC_chaveResgateV2370(op.idResgate));
+      return {status:'CANCELADO',valor:op.valorResgate};
+    }
+    if (r.status==='RESGATE_CONFIRMADO') {
+      localStorage.removeItem(QC_chaveResgateV2370(op.idResgate));
+      return {status:'CONFIRMADO',valor:op.valorResgate};
+    }
+    return {status:'PENDENTE',valor:op.valorResgate,situacao:r.status,
+      pixRegistrado:true};
+  }
+  window.QC_solicitarResgate278=async function(valor,chavePix) {
+    if (!QC_fichasDisponiveisV2370())
+      return QC_v1SolicitarResgate370(valor,chavePix);
+    if (QC_movV2Ocupado370) throw Error('Outra movimentacao V2 em andamento.');
+    QC_movV2Ocupado370=true;
+    try {
+      const sessao=dadosDaSessao(),senha=await obterSenha265();
+      if (!senha) return {status:'CANCELADO_PELO_USUARIO'};
+      memorizarSenha265(senha,sessao);
+      const valorN=Number(valor),pix=QC_pixNormalizar334(chavePix);
+      if (!Number.isSafeInteger(valorN)||valorN<2||valorN===3||valorN>10000)
+        throw Error('Resgate V2: informe valor inteiro a partir de 2, exceto 3.');
+      QC_conferirMemoriaV2370(sessao);
+      const fichas=QC_fichasDisponiveisV2370();
+      const plano=QC_planejarComposicaoV2366(fichas.map(f=>f.valor),valorN);
+      if (plano.status!=='OK') throw Error(plano.mensagem||plano.status);
+      const devolucao=QC_decomporTrocoV2366(valorN);
+      if (plano.indicesSelecionados.length>20||plano.fichasTroco.length>20||
+          devolucao.length>20) throw Error('Resgate V2 acima de 20 fichas.');
+      await QC_liberacaoV2370('resgates');
+      const confirmou=await QC_confirmarTransferencia332({
+        titulo:'Confirmar resgate V2',destaque:QC_formatoValor291(valorN),
+        linhas:['Chave Pix: '+pix,
+          'Somente o tesoureiro confirmara o pagamento.',
+          'As fichas ficam reservadas ate a conclusao ou cancelamento autorizado.'],
+        rotulo:'Solicitar resgate'
+      });
+      if (!confirmou) return {status:'CANCELADO_PELO_USUARIO'};
+      QC_conferirMemoriaV2370(sessao);
+      const pub=await QC_publicasV2368();
+      const troco=await QC_prepararTrocoV2368(plano.fichasTroco,pub);
+      const devolver=await QC_prepararTrocoV2368(devolucao,pub);
+      const op={versao:2,tipo:'RS',idResgate:crypto.randomUUID().toLowerCase(),
+        valorResgate:valorN,valorTroco:plano.valorTroco,chavePix:pix,
+        fichasEntrada:plano.indicesSelecionados.map(i=>({
+          mensagemHex:fichas[i].mensagemHex,
+          assinaturaHex:fichas[i].assinaturaHex})),
+        trocoCego:troco.saidasCegas,devolucaoCega:devolver.saidasCegas,
+        privadasTroco:troco.privadas,privadasDevolucao:devolver.privadas};
+      await QC_guardarMovV2370(QC_chaveResgateV2370(op.idResgate),op,senha);
+      return QC_retomarResgateV2370(op,senha,sessao);
+    } finally {QC_movV2Ocupado370=false;}
+  };
+  window.QC_meusResgates278=async function() {
+    const [v1,v2]=await Promise.all([
+      QC_v1MeusResgates370(),QC_postResgate278('qc_resgate_v2_meus')
+    ]);
+    if (v2.status!=='OK'||!Array.isArray(v2.pedidos))
+      throw Error('Consulta de resgates V2 indisponivel.');
+    return v1.map(p=>({...p,versao:'V1'})).concat(v2.pedidos.map(p=>({
+      ...p,versao:'V2',
+      possuiRecuperacaoLocal:!!localStorage.getItem(QC_chaveResgateV2370(p.idResgate))
+    })));
+  };
+  window.QC_retomarResgate278=async function(id) {
+    const chave=QC_chaveResgateV2370(id);
+    if (!localStorage.getItem(chave)) return QC_v1RetomarResgate370(id);
+    const sessao=dadosDaSessao(),senha=await obterSenha265();
+    if (!senha) return {status:'CANCELADO_PELO_USUARIO'};
+    const op=await QC_lerMovV2370(chave,senha,'RS');
+    return QC_retomarResgateV2370(op,senha,sessao);
+  };
+  window.QC_pedirCancelamentoResgate278=async function(id) {
+    if (!localStorage.getItem(QC_chaveResgateV2370(id)))
+      return QC_v1CancelarResgate370(id);
+    const r=await QC_postResgate278('qc_resgate_v2_pedir_cancelamento',{
+      idResgate:id});
+    if (!['CANCELAMENTO_SOLICITADO','PENDENTE'].includes(r.status))
+      throw Error('Cancelamento V2 nao registrado: '+String(r.status));
+    return r;
+  };
+  window.QC_resgatesSemConfirmacaoLocal278=function() {
+    const sessao=dadosDaSessao();
+    const prefixo=QC_RS_V2_370+sessao.id+'_';
+    return QC_v1PendenciasResgate370() + (sessao.id ?
+      Object.keys(localStorage).filter(k=>k.startsWith(prefixo)).length:0);
+  };
+
   const painel = document.createElement("section");
   painel.style.marginTop = "20px";
   painel.style.padding = "16px";
@@ -2889,14 +3271,20 @@ function QC_confirmarTransferencia332(opcoes) {
   // PASSO 291 — Migracao de senha local, sem alterar o conteudo das fichas.
   // A senha da conta fica APENAS em memoria nesta guia, nunca em storage.
   function QC_chavesMigracao291(id) {
-    const prefixoResgate="QC_RESGATE_LOCAL_V1_"+id+"_";
+    const prefixosResgate=["QC_RESGATE_LOCAL_V1_"+id+"_",
+      "QC_RESGATE_LOCAL_V2_"+id+"_"];
     const fixas=["QC_FICHAS_ASSINADAS_V1_"+id,
       "QC_FICHAS_CEGAS_PENDENTES_V1_"+id,
       "QC_DOACAO_PENDENTE_V1_"+id,
       "QC_TRANSFERENCIA_ENVIO_V1_"+id,
-      "QC_TRANSFERENCIA_RESGATE_V1_"+id];
+      "QC_TRANSFERENCIA_RESGATE_V1_"+id,
+      "QC_FICHAS_ASSINADAS_V2_"+id,
+      "QC_FICHAS_CEGAS_PENDENTES_V2_"+id,
+      "QC_DOACAO_PENDENTE_V2_"+id,
+      "QC_TRANSFERENCIA_ENVIO_V2_"+id,
+      "QC_TRANSFERENCIA_RESGATE_V2_"+id];
     return [...fixas.filter(k=>localStorage.getItem(k)!==null),
-      ...Object.keys(localStorage).filter(k=>k.startsWith(prefixoResgate))];
+      ...Object.keys(localStorage).filter(k=>prefixosResgate.some(p=>k.startsWith(p)))];
   }
   function QC_recuperarMigracao291(id) {
     const marca="QC_MIGRACAO_SENHA_291_"+id;
