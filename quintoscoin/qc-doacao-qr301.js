@@ -188,7 +188,36 @@
   }
   btn.addEventListener("click",abrir);
   $("qcFecharDoar301").addEventListener("click",fechar);
-  $("qcOkDoar301").addEventListener("click",fechar);
+  // PASSO 381: confirmar e recarregar o saldo SEM atualizar a pagina.
+  // A doacao JA FOI confirmada pelo servidor quando esta tela aparece.
+  // Se a consulta falhar, a janela fica aberta e o OK tenta apenas a
+  // conferencia do saldo; nunca reenvia a doacao nem revela seu valor.
+  $("qcOkDoar301").addEventListener("click",async()=>{
+    if (ocupada) return;
+    ocupada=true;
+    const botao=$("qcOkDoar301");
+    botao.disabled=true;
+    try {
+      if (typeof window.QC_atualizarSaldoReal202 !== "function") {
+        throw Error("Conferencia de saldo indisponivel nesta versao.");
+      }
+      if (typeof window.QC_senhaFichas291 === "function" &&
+          !window.QC_senhaFichas291()) {
+        throw Error("Entre novamente na carteira para conferir o saldo.");
+      }
+      aviso.textContent="Conferindo saldo...";
+      await window.QC_atualizarSaldoReal202();
+      ocupada=false;
+      fechar();
+    } catch(e) {
+      erro("Doacao ja registrada. Nenhuma ficha sera enviada novamente. " +
+        "Nao foi possivel atualizar o saldo: " + String(e.message||e) +
+        ". Toque em OK para tentar a consulta novamente.");
+    } finally {
+      ocupada=false;
+      botao.disabled=false;
+    }
+  });
   modal.addEventListener("click",ev=>{if (ev.target===modal) fechar();});
   $("qcOlhoDoar301").addEventListener("click",()=>{
     campo.type=campo.type==="password"?"text":"password";
