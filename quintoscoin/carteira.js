@@ -575,18 +575,50 @@ window.QC_mostrarRecebimentoConcluido300 = function(dados) {
   montante.textContent=QC_valorReceber295(valor)+" recebidos";
   montante.style.cssText="font-size:24px;color:#fff";
   const mensagem=document.createElement("p");
-  mensagem.textContent="Seu saldo foi atualizado com sucesso.";
+  mensagem.textContent="Fichas verificadas e protegidas. Toque em OK para conferir o novo saldo.";
   mensagem.style.cssText="margin:0;font-size:14px;line-height:1.5";
   const ok=document.createElement("button");
   ok.type="button";
   ok.className="qc-btn-modal-principal";
   ok.textContent="OK";
   ok.style.cssText="min-width:145px;max-width:220px;width:70%;margin-top:10px";
-  ok.addEventListener("click", QC_fecharModalReceber);
+  // PASSO 380 — A assinatura ja terminou. O OK faz SOMENTE leitura:
+  // confere o saldo e as fichas existentes; nunca solicita outra assinatura.
+  const carteiraConclusao = localStorage.getItem("QC_ID_CARTEIRA");
+  const sessaoConclusao = sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
+  ok.addEventListener("click", async function() {
+    if (ok.disabled) return;
+    if (localStorage.getItem("QC_ID_CARTEIRA") !== carteiraConclusao ||
+        sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") !== sessaoConclusao ||
+        !carteiraConclusao || !sessaoConclusao) {
+      mensagem.textContent="A carteira ou sessao mudou. Entre novamente para conferir o saldo.";
+      return;
+    }
+    ok.disabled=true;
+    ok.textContent="Conferindo saldo...";
+    mensagem.textContent="Conferindo assinaturas, gastos e fichas disponiveis...";
+    try {
+      if (typeof window.QC_atualizarSaldoReal202 !== "function") {
+        throw Error("Modulo de conferencia de saldo indisponivel.");
+      }
+      await window.QC_atualizarSaldoReal202();
+      if (localStorage.getItem("QC_ID_CARTEIRA") !== carteiraConclusao ||
+          sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") !== sessaoConclusao) {
+        throw Error("A carteira ou sessao mudou durante a conferencia.");
+      }
+      QC_fecharModalReceber();
+      // A ficha ja foi recebida; retirar o indicador de pedidos quando possivel.
+      QC_atualizarIndicadorReceber300().catch(() => {});
+    } catch (erro) {
+      // Nao oferecer outra emissao: os creditos ja foram assinados e salvos.
+      mensagem.textContent="✅ Fichas recebidas. Nao foi possivel conferir o saldo: " +
+        String(erro?.message || erro) + ". Toque em OK para tentar a consulta novamente.";
+      ok.disabled=false;
+      ok.textContent="OK";
+    }
+  });
   qcConfirmacaoReceber293.append(icone,titulo,montante,mensagem,ok);
   qcConfirmacaoReceber293.focus();
-  // Retirar o aviso imediatamente. Reconsultar o estado sem atrasar o OK.
-  QC_atualizarIndicadorReceber300();
 };
 
 function QC_mostrarFormularioReceber295() {
