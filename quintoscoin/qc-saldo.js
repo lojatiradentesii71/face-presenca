@@ -2783,11 +2783,30 @@ function QC_confirmarTransferencia332(opcoes) {
       });
       if (!r.ok) throw Error('Servidor de saldo indisponivel.');
       const estado=await r.json();
+      const faixa=document.getElementById('qcAvisoTesteV2377');
+      if(faixa) faixa.hidden=(estado&&estado.ambiente)!=='TESTE';
       if (estado?.status!=='OK'||estado.geracao!=='V2'||
           estado.corteConfirmado!==true)
         throw Error('Saldo operacional nao foi liberado pelo servidor.');
       if (dadosDaSessao().id!==id||dadosDaSessao().token!==token)
         throw Error('Sessao alterada durante a conferencia.');
+      // Limpeza unica dos dados de teste apos corte financeiro servidor.
+      if(estado.ambiente==='REAL_PENDENTE' && estado.testesEncerrados===true &&
+         localStorage.getItem('QC_V2_TESTE_LIMPO_377_'+id)!=='SIM') {
+        const nomes=['QC_FICHAS_ASSINADAS_V2_'+id,
+          'QC_FICHAS_CEGAS_PENDENTES_V2_'+id,
+          'QC_DOACAO_PENDENTE_V2_'+id,
+          'QC_TRANSFERENCIA_ENVIO_V2_'+id,
+          'QC_TRANSFERENCIA_RESGATE_V2_'+id];
+        for(const k of nomes)localStorage.removeItem(k);
+        const prefixo='QC_RESGATE_LOCAL_V2_'+id+'_';
+        const extras=[];
+        for(let i=0;i<localStorage.length;i++){
+          const k=localStorage.key(i);if(k&&k.startsWith(prefixo))extras.push(k);
+        }
+        extras.forEach(k=>localStorage.removeItem(k));
+        localStorage.setItem('QC_V2_TESTE_LIMPO_377_'+id,'SIM');
+      }
       memorizarSenha265(segredo,{id,token});
       await QC_conferirV2365(id,token,segredo);
       if (!memoriaV2365||memoriaV2365.id!==id||memoriaV2365.token!==token||
