@@ -1123,10 +1123,24 @@
       tipo:plano.tipo,quantidadeEntradas:plano.indicesSelecionados.length,
       quantidadeTroco:plano.fichasTroco.length
     });
-    if (pre.status!=='PRONTA' || pre.versao!=='V2' || !pre.idSessao ||
-        !/^\d{4}-\d{2}-\d{2}$/.test(String(pre.dia||''))) {
-      throw Error('Doacoes V2 ainda bloqueadas. Nenhuma ficha foi movimentada.');
-    }
+    
+if (pre.status === 'SEM_SESSAO_V2') {
+  throw Error(
+    'Não existe sessão aberta para hoje. ' +
+    'A doação não foi preparada.'
+  );
+}
+
+if (pre.status !== 'PRONTA' ||
+    pre.versao !== 'V2' ||
+    !pre.idSessao ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(String(pre.dia || ''))) {
+  throw Error(
+    'Doações V2 ainda bloqueadas. ' +
+    'Nenhuma ficha foi movimentada.'
+  );
+}
+
     if (pre.dia!==QC_hojeBrasil301()) {
       throw Error('Sessao V2 nao corresponde ao dia atual.');
     }
