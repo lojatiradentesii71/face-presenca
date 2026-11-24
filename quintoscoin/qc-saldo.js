@@ -2550,8 +2550,8 @@ function QC_confirmarTransferencia332(opcoes) {
       if (!senha) return {status:'CANCELADO_PELO_USUARIO'};
       memorizarSenha265(senha,sessao);
       const valorN=Number(valor),pix=QC_pixNormalizar334(chavePix);
-      if (!Number.isSafeInteger(valorN)||valorN<2||valorN===3||valorN>10000)
-        throw Error('Resgate V2: informe valor inteiro a partir de 2, exceto 3.');
+      if (!Number.isSafeInteger(valorN)||valorN<1||valorN>10000)
+        throw Error('Resgate V2: informe um valor inteiro de 1 a 10.000 Qc$.');
       QC_conferirMemoriaV2370(sessao);
       const fichas=QC_fichasDisponiveisV2370();
       const plano=QC_planejarComposicaoV2366(fichas.map(f=>f.valor),valorN);
