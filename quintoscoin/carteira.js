@@ -502,13 +502,14 @@ let qcSequenciaIndicadorReceber300 = 0;
 function QC_contarDisponiveis300(pedidos) {
   let quantidade = 0;
   for (const p of pedidos) {
+    if (p.idEmissao && p.versaoEmissao !== "V2") continue;
     if (p.status !== "AUTORIZADA") continue;
     if (p.situacao === "PRONTA") { quantidade++; continue; }
     if (p.situacao !== "EM_ANDAMENTO") continue;
     // Uma emissao ja completamente recebida pode continuar temporariamente
     // como EM_ANDAMENTO no servidor. Nao sinalizar de novo neste aparelho.
     let local;
-    try { local = QC_estadoLocalRecebimento296(String(p.idEmissao || "")); }
+    try { local = QC_estadoLocalRecebimento296(String(p.idEmissao || ""),"V2"); }
     catch (_) { continue; }  // Armazenamento inconsistente: nao oferecer credito.
     const iniciada = Number(p.quantidadeAssinada) > 0 ||
       Number(p.operacoesExistentes) > 0 || local.armazenadas > 0;
@@ -541,7 +542,8 @@ async function QC_atualizarIndicadorReceber300(pedidosConsultados) {
       QC_mostrarIndicadorReceber300(0);
       return;
     }
-    QC_mostrarIndicadorReceber300(QC_contarDisponiveis300(dados.solicitacoes));
+    QC_mostrarIndicadorReceber300(QC_contarDisponiveis300(
+      dados.solicitacoes.filter(p=>!p.idEmissao||p.versaoEmissao==='V2')));
   } catch (_) {
     // Uma falha de comunicacao nao significa que haja novos creditos.
     if (atual === qcSequenciaIndicadorReceber300) QC_mostrarIndicadorReceber300(0);
@@ -657,7 +659,9 @@ async function QC_carregarPedidosReceber295() {
         !Array.isArray(dados.solicitacoes)) {
       throw Error(dados?.mensagem || "Consulta de emissões indisponível.");
     }
-    const pedidos = dados.solicitacoes;
+    // O historico encerrado fica apenas nos livros internos.
+    const pedidos = dados.solicitacoes.filter(p =>
+      !p.idEmissao || p.versaoEmissao === 'V2');
     QC_atualizarIndicadorReceber300(pedidos);
     const ativos = pedidos.filter(p => p.status === "AUTORIZADA" &&
       ["PRONTA","EM_ANDAMENTO","CONFERIR"].includes(p.situacao));
@@ -706,8 +710,7 @@ async function QC_carregarPedidosReceber295() {
       // A V1 pertence exclusivamente ao piloto historico. Nao emitir V1.
       if (idEmissao && p.versaoEmissao !== "V2") {
         permitir = false;
-        descricao.textContent = "Emissao historica V1 preservada. " +
-          "Novas assinaturas V1 estao desativadas.";
+        descricao.textContent = "Emissao indisponivel para recebimento.";
       }
       if (situacao === "CONFERIR") {
         descricao.textContent = p.mensagem ||
@@ -753,7 +756,7 @@ async function QC_carregarPedidosReceber295() {
               }
             }
             if (versaoEmissao !== "V2") {
-              throw Error("Emissao V1 historica: nao permite nova assinatura.");
+              throw Error("Emissao indisponivel para recebimento.");
             }
             const pronto = {...p, idEmissao:emissao,
               versaoEmissao:"V2", valor, status:"AUTORIZADA"};
@@ -4413,28 +4416,15 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     campo.removeAttribute("max");
     let plano;
     try {
-      // Ao existir saldo V2 conferido, somente ele pode financiar
-      // novos resgates; as fichas V1 permanecem historicas.
-      const saldoV2=typeof window.QC_saldoDisponivelV2370==="function"
+      // Mostrar somente o saldo efetivamente conferido da operacao atual.
+      const saldo=typeof window.QC_saldoDisponivelV2370==='function'
         ? window.QC_saldoDisponivelV2370():null;
-      let saldo;
-      if(Number.isSafeInteger(saldoV2) && saldoV2>0) {
-        saldo=saldoV2;
+      if(!Number.isSafeInteger(saldo)||saldo<0)
+        throw Error('Saldo ainda nao conferido nesta sessao.');
+      if(saldo>0){
         const total=window.QC_planejarMovimentoV2366(saldo);
-        if(!total || total.status!=="OK")
-          throw Error("Nao foi possivel conferir o limite V2.");
-      } else {
-        if(typeof window.QC_planejarMovimento267!=="function")
-          throw Error("Rotina de saldo indisponível.");
-        plano=window.QC_planejarMovimento267(2);
-        saldo=plano && plano.saldoDisponivel;
-        if(!Number.isSafeInteger(saldo) || saldo<0)
-          throw Error("Saldo ainda não verificado nesta sessão.");
-        if(saldo>0) {
-          const total=window.QC_planejarMovimento267(saldo);
-          if(!total || total.status!=="OK")
-            throw Error("Não foi possível conferir o valor máximo resgatável.");
-        }
+        if(!total||total.status!=='OK')
+          throw Error('Nao foi possivel conferir o limite para resgate.');
       }
       maximoResgate333=saldo;
       maximoVisivel333.textContent="Qc$ "+saldo.toLocaleString("pt-BR");
@@ -4463,8 +4453,8 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     // já esteja inválida, verificar também um pedido de antes do patch.
     let memoriaNaoVerificada=false;
     try {
-      memoriaNaoVerificada=typeof window.QC_planejarMovimento267==="function" &&
-        window.QC_planejarMovimento267(2)?.status==="SALDO_NAO_VERIFICADO";
+      memoriaNaoVerificada=typeof window.QC_saldoDisponivelV2370!=="function" ||
+        !Number.isSafeInteger(window.QC_saldoDisponivelV2370());
     } catch(_) {memoriaNaoVerificada=true;}
     const precisa=saldoARever335||memoriaNaoVerificada;
     saldoARever335=false;
@@ -4821,15 +4811,10 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     if(carregando)return;
     carregando=true;lista.textContent="Consultando resgates...";
     try{
-      const [r,v2]=await Promise.all([
-        postar("qc_resgate_pendentes_tesoureiro"),
-        postar("qc_resgate_v2_pendentes_tesoureiro")
-      ]);
-      if(r.status!=="OK"||!Array.isArray(r.pedidos)||
-          v2.status!=="OK"||!Array.isArray(v2.pedidos))
-        throw Error("Lista de resgates invalida.");
-      const pendentes=r.pedidos.map(p=>({...p,versao:'V1'}))
-        .concat(v2.pedidos.map(p=>({...p,versao:'V2'})));
+      const r=await postar("qc_resgate_v2_pendentes_tesoureiro");
+      if(r.status!=="OK"||!Array.isArray(r.pedidos))
+        throw Error("Lista de resgates indisponivel.");
+      const pendentes=r.pedidos;
       lista.replaceChildren();
       const quantidade=pendentes.length;
       esfera.className="qc-esfera-pedidos "+(quantidade ?
@@ -4842,7 +4827,7 @@ function QC_confirmarPagamentoPedido(nome, valor) {
         const item=document.createElement("div");item.className="qc-resgate-linha278";
         const nome=document.createElement("strong");nome.textContent=p.nome;
         const info=document.createElement("p");
-        info.textContent="["+p.versao+"] Qc$ "+Number(p.valor).toLocaleString("pt-BR")+
+        info.textContent="Qc$ "+Number(p.valor).toLocaleString("pt-BR")+
           " · Pix R$ "+Number(p.valor).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+
           " · "+p.solicitadoEm+" · "+p.status;
         const mensagem=document.createElement("p");mensagem.setAttribute("role","status");
@@ -4917,15 +4902,13 @@ function QC_confirmarPagamentoPedido(nome, valor) {
         }
         if(p.status==="PENDENTE"||p.status==="CANCELAMENTO_SOLICITADO"){
           item.append(botao("Confirmar pagamento",
-            p.versao==="V2" ? "qc_resgate_v2_confirmar_pagamento" :
-              "qc_resgate_confirmar_pagamento",
+            "qc_resgate_v2_confirmar_pagamento",
             "Confirma que JA PAGOU R$ "+Number(p.valor).toFixed(2)+" a "+p.nome+
             " fora do sistema? Esta operacao extingue os QCs definitivamente e reduz o lastro."));
         }
         if(p.status==="CANCELAMENTO_SOLICITADO"||p.status==="CANCELAMENTO_APROVADO"){
           item.append(botao("Autorizar cancelamento",
-            p.versao==="V2" ? "qc_resgate_v2_autorizar_cancelamento" :
-              "qc_resgate_autorizar_cancelamento",
+            "qc_resgate_v2_autorizar_cancelamento",
             "Confirma que NENHUM pagamento foi realizado a "+p.nome+
             "? Esta operacao devolve fichas para recuperacao na carteira do irmao."));
         }
