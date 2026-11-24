@@ -1123,24 +1123,13 @@
       tipo:plano.tipo,quantidadeEntradas:plano.indicesSelecionados.length,
       quantidadeTroco:plano.fichasTroco.length
     });
-    
-if (pre.status === 'SEM_SESSAO_V2') {
-  throw Error(
-    'Não existe sessão aberta para hoje. ' +
-    'A doação não foi preparada.'
-  );
-}
-
-if (pre.status !== 'PRONTA' ||
-    pre.versao !== 'V2' ||
-    !pre.idSessao ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(String(pre.dia || ''))) {
-  throw Error(
-    'Doações V2 ainda bloqueadas. ' +
-    'Nenhuma ficha foi movimentada.'
-  );
-}
-
+    if (pre.status === 'SEM_SESSAO_V2') {
+      throw Error('Não existe sessão aberta para hoje. A doação não foi preparada.');
+    }
+    if (pre.status!=='PRONTA' || pre.versao!=='V2' || !pre.idSessao ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(String(pre.dia||''))) {
+      throw Error('Doações V2 ainda bloqueadas. Nenhuma ficha foi movimentada.');
+    }
     if (pre.dia!==QC_hojeBrasil301()) {
       throw Error('Sessao V2 nao corresponde ao dia atual.');
     }
@@ -2374,8 +2363,8 @@ function QC_confirmarTransferencia332(opcoes) {
       const anterior=await QC_lerMovV2370(chave,senha,'TX');
       if (anterior) return await QC_enviarV2370(anterior,senha,sessao);
       const valor=Number(valorSolicitado);
-      if (!Number.isSafeInteger(valor)||valor<2||valor===3||valor>10000)
-        throw Error('Informe valor inteiro a partir de 2 Qc$, exceto 3.');
+      if (!Number.isSafeInteger(valor)||valor<1||valor>10000)
+        throw Error('Informe um valor inteiro de 1 a 10.000 Qc$.');
       QC_conferirMemoriaV2370(sessao);
       const fichas=QC_fichasDisponiveisV2370();
       const plano=QC_planejarComposicaoV2366(fichas.map(f=>f.valor),valor);
@@ -2485,8 +2474,8 @@ function QC_confirmarTransferencia332(opcoes) {
       if (consulta.status!=='PRONTA'||consulta.versao!=='V2')
         throw Error('Transferencia V2 nao esta pronta: '+String(consulta.status));
       const valor=Number(consulta.valorEnviado);
-      if (!Number.isSafeInteger(valor)||valor<2||valor===3||valor>10000)
-        throw Error('Valor V2 recebido invalido.');
+      if (!Number.isSafeInteger(valor)||valor<1||valor>10000)
+        throw Error('Valor V2 recebido inválido.');
       const confirmou=await QC_confirmarTransferencia332({
         titulo:'Confirmar recebimento V2',destaque:QC_formatoValor291(valor),
         linhas:['O servidor verificara o codigo antes de assinar novas fichas.'],
