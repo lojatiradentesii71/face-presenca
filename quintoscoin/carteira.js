@@ -3778,12 +3778,20 @@ async function QC_carregarPainelTesoureiro276(tokenSessao) {
     if (dados.conferencia === "CONFERIDO" &&
         inteiro(dados.circulacao) &&
         inteiro(dados.lastroReservadoBRL) &&
-        dados.lastroReservadoBRL === dados.circulacao) {
+        (dados.lastroReservadoBRL === dados.circulacao ||
+          (dados.ambiente==='TESTE' && dados.lastroReservadoBRL===0))) {
       circulacao.textContent = "Qc$ " + formatoQC2(dados.circulacao);
       lastro.textContent = Number(dados.lastroReservadoBRL)
         .toLocaleString("pt-BR", {style:"currency",currency:"BRL"});
-      aviso.textContent = "Valores calculados a partir dos registros. " +
-        "Confira separadamente o saldo bancário.";
+      if(dados.ambiente==='TESTE') {
+        circulacao.textContent = "Qc$ " + formatoQC2(dados.circulacao);
+        lastro.textContent = "R$ 0,00";
+        aviso.textContent = "TESTE SEM DEPOSITO BANCARIO. Valores apenas simulados; " +
+          "nao correspondem ao lastro real.";
+      } else {
+        aviso.textContent = "Valores calculados a partir dos registros. " +
+          "Confira separadamente o saldo bancário.";
+      }
     } else {
       // Nunca apresenta um lastro hipotético como confirmado.
       circulacao.textContent = "A conferir";
