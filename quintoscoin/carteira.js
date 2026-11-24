@@ -1605,8 +1605,8 @@ qcEnviar275.addEventListener("click", async () => {
   const pendente = typeof window.QC_transferenciaPendente275 === "function" &&
     window.QC_transferenciaPendente275();
   const valor = pendente ? 0 : Number(qcValorEnviar275.value);
-  if (!pendente && (!Number.isSafeInteger(valor) || valor < 2 || valor === 3)) {
-    qcAvisoTransferir275.textContent = "Informe valor inteiro maior ou igual a 2, exceto 3 QC.";
+  if (!pendente && (!Number.isSafeInteger(valor) || valor < 1 || valor > 10000)) {
+    qcAvisoTransferir275.textContent = "Informe um valor inteiro de 1 a 10.000 Qc$.";
     return;
   }
   qcTrabalhando275 = true;
