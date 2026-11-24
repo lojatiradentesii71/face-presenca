@@ -859,12 +859,18 @@ window.QC_inserirRecebimento198 = function(item, pedido) {
       const restantes = pendencias("V2");
       delete restantes[idEmissao];
       localStorage.setItem(chaveArmazenamento("V2"), JSON.stringify(restantes));
-      // O saldo atual e exclusivamente V1. Nunca misturar o saldo V2
-      // enquanto o corte financeiro e o validador de gastos V2 nao existirem.
-      mensagem.textContent = "✅ Fichas V2 recebidas, verificadas e protegidas. " +
-        "A exibicao do saldo V2 depende da ativacao financeira definitiva.";
+      // PASSO 380 — Todas as fichas V2 foram verificadas, gravadas e
+      // a pendencia foi removida: agora exibir a confirmacao ja existente.
+      // A atualizacao de saldo acontece somente ao tocar OK, por leitura.
       botao.remove();
       senhaCampo.remove();
+      if (typeof window.QC_mostrarRecebimentoConcluido300 === "function") {
+        window.QC_mostrarRecebimentoConcluido300({valor:valorAutorizado});
+      } else {
+        // Compatibilidade se carteira.js estiver em cache antigo.
+        mensagem.textContent = "✅ Fichas V2 recebidas e protegidas. " +
+          "Use Conferir saldo para atualizar as fichas sem recarregar a pagina.";
+      }
     } catch (erro) {
       mensagem.textContent = "⚠️ " + erro.message +
         (armazenadasNestaTentativa
