@@ -86,9 +86,17 @@
 
     <p>
       <a href="#" id="linkJaTenhoCarteira">
-        Já tenho uma carteira
+        Já tenho uma carteira neste cadastro
       </a>
     </p>
+    <div id="qcVincularExistente374" style="display:none">
+      <h3>Vincular minha carteira</h3>
+      <p>Em um aparelho novo, informe seu IdCadastro e depois entre com sua senha pessoal.</p>
+      <input id="qcIdCadastroVinculo374" type="text" placeholder="IdCadastro" autocomplete="username">
+      <button id="qcBtnVincular374" type="button">Vincular carteira existente</button>
+      <button id="qcBtnVoltarAtivacao374" type="button">Voltar</button>
+      <p id="qcAvisoVinculo374" role="status"></p>
+    </div>
 
   </div>
 
@@ -112,15 +120,6 @@
 <button id="btnEntrarCarteira">
   Entrar
 </button>
-<p><a href="#" id="qcLinkTrocarCarteira">🔄 Trocar de irmão / carteira</a></p>
-<div id="qcPainelTrocaCarteira" style="display:none;">
-  <p>Informe o IdCadastro de uma carteira já ativada.</p>
-  <input type="text" id="qcOutroIdCadastro" placeholder="IdCadastro do irmão" autocomplete="off">
-  <button type="button" id="qcSelecionarOutraCarteira">Selecionar carteira</button>
-  <button type="button" id="qcCancelarTrocaCarteira">Cancelar</button>
-  <p id="qcMensagemTrocaCarteira" role="status"></p>
-</div>
-
 <p>
   <a href="#" id="linkEsqueciSenha">
     🔑 Esqueci minha senha
@@ -128,13 +127,56 @@
 </p>
 
 <p>
-  <a href="#" id="linkPrimeiroAcesso">
-    Primeiro acesso
-  </a>
+  <a href="#" id="btnAbrirTrocaSenha">🔑 Alterar minha senha</a>
 </p>
 
+<!-- QUINTOSCOIN - ALTERAÇÃO DE SENHA -->
 
- 
+<div id="qcPainelTrocaSenha" style="display:none;">
+
+  <h3>Alterar senha</h3>
+
+  <p>Informe sua senha atual e escolha uma nova.</p>
+
+  <input
+    type="password"
+    id="qcSenhaAtual"
+    placeholder="Senha atual"
+    autocomplete="current-password"
+  >
+
+  <input
+    type="password"
+    id="qcSenhaNova"
+    placeholder="Nova senha (6 a 8 caracteres)"
+    autocomplete="new-password"
+    minlength="6"
+    
+  >
+
+  <input
+    type="password"
+    id="qcSenhaNovaConfirmar"
+    placeholder="Confirmar nova senha"
+    autocomplete="new-password"
+    minlength="6"
+    
+  >
+
+  <p id="qcMensagemTrocaSenha" role="status"></p>
+
+  <button id="btnConfirmarTrocaSenha" type="button">
+    Salvar nova senha
+  </button>
+
+  <button id="btnCancelarTrocaSenha" type="button">
+    Cancelar
+  </button>
+
+</div>
+
+
+
 </div>
 
 <!-- QUINTOSCOIN - ESQUECI MINHA SENHA -->
@@ -275,56 +317,6 @@ style="display:none;">
 <p id="mensagem"></p>
 
 
-<!-- QUINTOSCOIN - ALTERAÇÃO DE SENHA -->
-
-<button id="btnAbrirTrocaSenha" type="button">
-  🔑 Alterar minha senha
-</button>
-
-<div id="qcPainelTrocaSenha" style="display:none;">
-
-  <h3>Alterar senha</h3>
-
-  <p>Informe sua senha atual e escolha uma nova.</p>
-
-  <input
-    type="password"
-    id="qcSenhaAtual"
-    placeholder="Senha atual"
-    autocomplete="current-password"
-  >
-
-  <input
-    type="password"
-    id="qcSenhaNova"
-    placeholder="Nova senha (6 a 8 caracteres)"
-    autocomplete="new-password"
-    minlength="6"
-    
-  >
-
-  <input
-    type="password"
-    id="qcSenhaNovaConfirmar"
-    placeholder="Confirmar nova senha"
-    autocomplete="new-password"
-    minlength="6"
-    
-  >
-
-  <p id="qcMensagemTrocaSenha" role="status"></p>
-
-  <button id="btnConfirmarTrocaSenha" type="button">
-    Salvar nova senha
-  </button>
-
-  <button id="btnCancelarTrocaSenha" type="button">
-    Cancelar
-  </button>
-
-</div>
-
-
 <button id="btnSairCarteira" type="button">
   🚪 Sair da carteira
 </button>
@@ -336,9 +328,9 @@ style="display:none;">
 
   
  <script src="qc-criptografia.js?v=1"></script>
- <script src="carteira.js?v=372"></script>
+ <script src="carteira.js?v=374"></script>
  <script src="qc-fichas.js?v=364"></script>
- <script src="qc-saldo.js?v=372"></script>
+ <script src="qc-saldo.js?v=374"></script>
  <script src="qc-doacao-qr301.js?v=366"></script>
 
   <script src="qc-arrecadacao312.js?v=327"></script>
