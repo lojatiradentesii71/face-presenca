@@ -1005,10 +1005,10 @@ document.getElementById("qcConfirmarReceber")
     if (
       !campo.value.trim() ||
       !Number.isSafeInteger(quantidade) ||
-      quantidade < 2 || quantidade === 3
+      quantidade < 1
     ) {
       mensagem.textContent =
-        "⚠️ Informe uma quantidade inteira a partir de 2 Qc$, exceto 3 Qc$.";
+        "⚠️ Informe uma quantidade inteira positiva de Qc$.";
       return;
     }
 
@@ -1251,8 +1251,8 @@ function QC_crcPix340(texto) {
   return crc.toString(16).toUpperCase().padStart(4,"0");
 }
 function QC_gerarCopiaColaPix340(qtd) {
-  if (!Number.isSafeInteger(qtd) || qtd < 2 || qtd===3 || qtd>999999999) {
-    throw Error("Informe quantidade válida de Qc$ (exceto 1 e 3).");
+  if (!Number.isSafeInteger(qtd) || qtd < 1 || qtd>999999999) {
+    throw Error("Informe uma quantidade inteira positiva de Qc$.");
   }
   const conta = QC_tlvPix340("00","br.gov.bcb.pix")+
     QC_tlvPix340("01",QC_PIX340.chave);
@@ -1760,9 +1760,19 @@ function QC_atualizarBoasVindas291() {
   if (!alvo) return;
   const id = localStorage.getItem(QC_ID_LOCAL);
   const nome = id ? String(localStorage.getItem("QC_NOME_CARTEIRA_"+id)||"").trim() : "";
-  alvo.textContent = nome
-    ? "Bem-vindo, Ir.'. " + nome + ". Digite sua senha para entrar."
-    : "Bem-vindo! Digite sua senha para entrar na carteira.";
+  // PASSO 375: destaque somente no nome; usar DOM seguro, sem innerHTML.
+  if (!nome) {
+    alvo.textContent = "Bem-vindo! Digite sua senha para entrar na carteira.";
+    return;
+  }
+  const destaque = document.createElement("strong");
+  destaque.className = "qc-nome-irmao375";
+  destaque.textContent = nome;
+  alvo.replaceChildren(
+    document.createTextNode("Bem-vindo, Ir.'. "),
+    destaque,
+    document.createTextNode(". Digite sua senha para entrar.")
+  );
 }
 
 async function QC_localizarConta291(dados) {
