@@ -1796,53 +1796,60 @@ async function QC_carregarNome291() {
   }
 }
 
-(function QC_restaurarTrocaDeCarteira291() {
-  const link=document.getElementById("qcLinkTrocarCarteira");
-  const painel=document.getElementById("qcPainelTrocaCarteira");
-  const idCampo=document.getElementById("qcOutroIdCadastro");
-  const selecionar=document.getElementById("qcSelecionarOutraCarteira");
-  const cancelar=document.getElementById("qcCancelarTrocaCarteira");
-  const mensagem=document.getElementById("qcMensagemTrocaCarteira");
-  if (!link||!painel||!idCampo||!selecionar||!cancelar||!mensagem) return;
-  link.addEventListener("click", e=>{
-    e.preventDefault();
-    painel.style.display="block";
-    mensagem.textContent="";
-    idCampo.focus();
-  });
-  cancelar.addEventListener("click",()=>{
-    painel.style.display="none";
-    idCampo.value="";
-    mensagem.textContent="";
-  });
-  selecionar.addEventListener("click",async()=>{
-    const idCadastro=idCampo.value.trim();
-    if(!idCadastro){mensagem.textContent="Informe o IdCadastro.";return;}
-    selecionar.disabled=true;
-    mensagem.textContent="Localizando carteira...";
-    try {
-      const conta=await QC_localizarConta291({idCadastro});
-      // Nunca remover registros com outras carteiras; apenas selecionar o ID.
-      QC_AUTO303.limpar();
-      sessionStorage.removeItem("QC_TOKEN_SESSAO_TESTE");
-      if (window.QC_limparSenhaSessao291) window.QC_limparSenhaSessao291();
-      localStorage.setItem(QC_ID_LOCAL,conta.idCarteira);
-      if(conta.nome) localStorage.setItem("QC_NOME_CARTEIRA_"+conta.idCarteira,conta.nome);
-      const senhaCampo=document.getElementById("qcSenhaLogin");
-      if(senhaCampo) senhaCampo.value="";
-      painel.style.display="none";
-      idCampo.value="";
-      mensagem.textContent="";
-      QC_atualizarBoasVindas291();
-      QC_carregarNome291();
-      QC_mostrarMensagemAcesso("Carteira selecionada. Digite a senha desse irmão.","sucesso");
-    }catch(err){mensagem.textContent="⚠️ "+(err.message||err);}
-    finally{selecionar.disabled=false;}
-  });
-})();
+// PASSO 374: Um aparelho vinculado nao oferece troca de carteira.
+// A vinculacao de uma carteira existente so aparece no primeiro acesso local.
+function QC_modoVinculo374(ativar) {
+  const painel = document.getElementById('qcVincularExistente374');
+  const form = document.getElementById('formAtivacao');
+  if (!painel || !form) return;
+  painel.style.display = ativar ? 'block' : 'none';
+  const ids = ['qcIdCadastro','qcNovaSenha','qcConfirmarSenha',
+               'btnAtivarCarteira'];
+  for (const nome of ids) {
+    const campo = document.getElementById(nome);
+    if (campo) campo.style.display = ativar ? 'none' : '';
+  }
+  const titulo = form.querySelector('h3');
+  if (titulo) titulo.textContent = ativar ? 'Carteira existente' : 'Primeiro acesso';
+  const descricao = form.querySelector('h3 + p');
+  if (descricao) descricao.style.display = ativar ? 'none' : '';
+  const vinculo = document.getElementById('linkJaTenhoCarteira');
+  if (vinculo) vinculo.parentElement.style.display = ativar ? 'none' : '';
+}
+
+document.getElementById('qcBtnVoltarAtivacao374').addEventListener('click', () => {
+  QC_modoVinculo374(false);
+  document.getElementById('qcAvisoVinculo374').textContent = '';
+});
+document.getElementById('qcBtnVincular374').addEventListener('click', async function() {
+  // Nao substituir uma carteira ja identificada neste dispositivo.
+  if (localStorage.getItem(QC_ID_LOCAL)) {
+    QC_mostrarLogin();
+    return;
+  }
+  const campo = document.getElementById('qcIdCadastroVinculo374');
+  const mensagem = document.getElementById('qcAvisoVinculo374');
+  const idCadastro = String(campo.value || '').trim();
+  if (!idCadastro) { mensagem.textContent='Informe seu IdCadastro.';return; }
+  this.disabled = true;
+  mensagem.textContent = 'Localizando sua carteira...';
+  try {
+    const conta = await QC_localizarConta291({idCadastro});
+    if (localStorage.getItem(QC_ID_LOCAL))
+      throw Error('Ja existe uma carteira vinculada neste dispositivo.');
+    localStorage.setItem(QC_ID_LOCAL,conta.idCarteira);
+    if (conta.nome) localStorage.setItem('QC_NOME_CARTEIRA_'+conta.idCarteira,conta.nome);
+    campo.value='';
+    QC_mostrarLogin();
+    QC_mostrarMensagemAcesso('Carteira localizada. Entre com sua senha pessoal.','sucesso');
+  } catch (erro) {
+    mensagem.textContent = '⚠️ ' + String(erro.message || erro);
+  } finally { this.disabled=false; }
+});
 
 function QC_mostrarAtivacao() {
-
+  if (localStorage.getItem(QC_ID_LOCAL)) { QC_mostrarLogin(); return; }
+  QC_modoVinculo374(false);
   document.getElementById("formAtivacao")
     .style.display = "block";
 
@@ -1851,6 +1858,11 @@ function QC_mostrarAtivacao() {
 }
 
 function QC_mostrarLogin() {
+  if (!localStorage.getItem(QC_ID_LOCAL)) { QC_mostrarAtivacao(); return; }
+  const painelSenha = document.getElementById('qcPainelTrocaSenha');
+  const linkSenha = document.getElementById('btnAbrirTrocaSenha');
+  if (painelSenha) painelSenha.style.display='none';
+  if (linkSenha) linkSenha.style.display='';
   QC_atualizarBoasVindas291();
   QC_carregarNome291();
 
@@ -1863,18 +1875,9 @@ function QC_mostrarLogin() {
 
 document.getElementById("linkJaTenhoCarteira")
   .addEventListener("click", function(evento) {
-
     evento.preventDefault();
-    QC_mostrarLogin();
-
-  });
-
-document.getElementById("linkPrimeiroAcesso")
-  .addEventListener("click", function(evento) {
-
-    evento.preventDefault();
-    QC_mostrarAtivacao();
-
+    QC_modoVinculo374(true);
+    document.getElementById('qcIdCadastroVinculo374').focus();
   });
 
 function QC_mostrarMensagemAcesso(texto, tipo) {
@@ -2841,8 +2844,8 @@ async function QC_restaurarSessaoTeste() {
   try {
     if (!token || !id || recuperacao) {
       QC_exibirTelaAcesso();
-      QC_mostrarLogin();
-      QC_carregarNome291();
+      if (id) { QC_mostrarLogin(); QC_carregarNome291(); }
+      else QC_mostrarAtivacao();
       return;
     }
     // Nunca reabrir a carteira somente pela existencia do token local.
@@ -2931,7 +2934,8 @@ function QC_mostrarMensagemTrocaSenha(texto, tipo) {
 
 
 document.getElementById("btnAbrirTrocaSenha")
-  .addEventListener("click", function() {
+  .addEventListener("click", function(evento) {
+    evento.preventDefault();
 
     QC_limparFormularioTrocaSenha();
 
@@ -2974,9 +2978,10 @@ document.getElementById("btnConfirmarTrocaSenha")
       "qcSenhaNovaConfirmar"
     ).value;
 
-    const token = sessionStorage.getItem(
+    let token = sessionStorage.getItem(
       QC_CHAVE_SESSAO
     );
+    let tokenTemporario374 = false;
 
     const botao = document.getElementById(
       "btnConfirmarTrocaSenha"
@@ -2992,9 +2997,9 @@ document.getElementById("btnConfirmarTrocaSenha")
       return;
     }
 
-    if (nova.length < 6) {
+    if (nova.length < 6 || nova.length > 8) {
       QC_mostrarMensagemTrocaSenha(
-        "A senha deve ter pelo menos 6 caracteres.",
+        "A senha deve ter de 6 a 8 caracteres.",
         "erro"
       );
       return;
@@ -3016,36 +3021,45 @@ document.getElementById("btnConfirmarTrocaSenha")
       return;
     }
 
-    if (!token) {
-      QC_mostrarMensagemTrocaSenha(
-        "Sessão não encontrada. Faça login novamente.",
-        "erro"
-      );
+    if (!localStorage.getItem(QC_ID_LOCAL)) {
+      QC_mostrarMensagemTrocaSenha('Carteira nao vinculada neste aparelho.','erro');
       return;
     }
 
-    // Enviar alteração ao servidor
+    // Enviar alteracao ao servidor. Na tela de login, a senha atual
+    // e validada antes de obter uma sessao apenas para esta operacao.
 
     botao.disabled = true;
     botao.textContent = "Alterando senha...";
 
     try {
-
+      if (document.getElementById('telaCarteira').style.display === 'none') {
+        const id = localStorage.getItem(QC_ID_LOCAL);
+        const autenticacao = await QC_enviarLoginAutomatico(id,atual);
+        if (autenticacao.status !== 'OK' || !autenticacao.tokenSessao)
+          throw Error(autenticacao.mensagem || 'Senha atual nao reconhecida.');
+        const validacao = await QC_validarSessaoServidor(autenticacao.tokenSessao);
+        if (validacao.status !== 'OK' || validacao.idCarteira !== id)
+          throw Error('Nao foi possivel autenticar a troca de senha.');
+        token = autenticacao.tokenSessao;
+        sessionStorage.setItem(QC_CHAVE_SESSAO, token);
+        tokenTemporario374 = true;
+      }
+      if (!token) throw Error('Sessao nao encontrada. Entre novamente.');
       const resultado = await QC_enviarAlteracaoSenhaAutomatico(
-        token,
-        atual,
-        nova
+        token,atual,nova
       );
 
       if (resultado.status === "OK") {
         // Senha alterada no servidor. Ajustar tambem a criptografia local.
+        let migracaoPendente374 = false;
         try {
           if(window.QC_migrarSenhaLogin291)
             await window.QC_migrarSenhaLogin291(atual, nova);
         } catch(migracaoErro) {
-          // O antigo segredo continua protegendo as fichas.
-          // No proximo login sera pedida a senha anterior so para migrar.
-          console.warn("Migracao local pendente:",migracaoErro.message);
+          // Nao apagar dados: ainda podem estar protegidos pela senha anterior.
+          migracaoPendente374 = true;
+          console.warn('Migracao local pendente:', migracaoErro.message);
         }
 
         // Remover token da sessão anterior e acesso automatico.
@@ -3069,9 +3083,10 @@ document.getElementById("btnConfirmarTrocaSenha")
           .value = "";
 
         QC_mostrarMensagemAcesso(
-          "Senha alterada com sucesso! " +
-          "Entre novamente utilizando sua nova senha.",
-          "sucesso"
+          migracaoPendente374
+            ? 'Senha da conta alterada. Entre com a nova senha. Preserve a senha anterior: ela podera ser necessaria para recuperar as fichas locais.'
+            : 'Senha alterada com sucesso! Entre com a nova senha.',
+          migracaoPendente374 ? 'erro' : 'sucesso'
         );
 
       } else {
@@ -3108,12 +3123,15 @@ document.getElementById("btnConfirmarTrocaSenha")
       );
 
     } finally {
-
+      if (tokenTemporario374) {
+        QC_AUTO303.limpar();
+        if (sessionStorage.getItem(QC_CHAVE_SESSAO) === token)
+          sessionStorage.removeItem(QC_CHAVE_SESSAO);
+        if (window.QC_limparSenhaSessao291) window.QC_limparSenhaSessao291();
+      }
       botao.disabled = false;
       botao.textContent = "Salvar nova senha";
-
     }
-
   });
 
 
