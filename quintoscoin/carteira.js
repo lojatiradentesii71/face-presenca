@@ -1516,6 +1516,73 @@ const qcResultadoEnvio275 = document.getElementById("qcResultadoEnvio275");
 const qcImagemQR275 = document.getElementById("qcImagemQR275");
 const qcEnviar275 = document.getElementById("qcEnviar275");
 const qcReceber275 = document.getElementById("qcReceber275");
+
+// PASSO 383 — Tela final de transferencia, tanto para quem envia quanto recebe.
+// Nenhuma movimentacao de fichas acontece aqui: apenas apresenta o resultado
+// que o servidor JA confirmou e permite voltar a carteira com o botao OK.
+const qcAbasTransferencia383 = document.getElementById("qcAbaEnviar275").parentElement;
+const qcPainelEnviar383 = document.getElementById("qcPainelEnviar275");
+const qcPainelReceber383 = document.getElementById("qcPainelReceber275");
+const qcConclusaoTransferencia383 = document.createElement("div");
+qcConclusaoTransferencia383.id = "qcConclusaoTransferencia383";
+qcConclusaoTransferencia383.setAttribute("role", "status");
+qcConclusaoTransferencia383.setAttribute("tabindex", "-1");
+qcConclusaoTransferencia383.style.cssText =
+  "display:none;flex-direction:column;align-items:center;" +
+  "justify-content:center;gap:14px;text-align:center;min-height:260px;" +
+  "padding:10px 0";
+const qcIconeConclusao383 = document.createElement("div");
+qcIconeConclusao383.textContent = "✓";
+qcIconeConclusao383.setAttribute("aria-hidden", "true");
+qcIconeConclusao383.style.cssText =
+  "width:54px;height:54px;border-radius:50%;background:#168258;" +
+  "color:#fff;font-size:32px;display:grid;place-items:center;font-weight:bold";
+const qcTituloConclusao383 = document.createElement("h3");
+qcTituloConclusao383.style.cssText = "margin:0;color:#f0cd72;font-size:22px";
+const qcValorConclusao383 = document.createElement("strong");
+qcValorConclusao383.style.cssText = "font-size:24px;color:#fff";
+const qcMensagemConclusao383 = document.createElement("p");
+qcMensagemConclusao383.style.cssText =
+  "margin:0;font-size:14px;line-height:1.5;overflow-wrap:anywhere";
+const qcOkTransferencia383 = document.createElement("button");
+qcOkTransferencia383.id = "qcOkTransferencia383";
+qcOkTransferencia383.type = "button";
+qcOkTransferencia383.className = "qc-btn-modal-principal";
+qcOkTransferencia383.textContent = "OK";
+qcOkTransferencia383.style.cssText =
+  "min-width:145px;max-width:220px;width:70%;min-height:44px;margin-top:10px";
+qcConclusaoTransferencia383.append(
+  qcIconeConclusao383,qcTituloConclusao383,qcValorConclusao383,
+  qcMensagemConclusao383,qcOkTransferencia383
+);
+qcAvisoTransferir275.insertAdjacentElement("afterend",qcConclusaoTransferencia383);
+
+function QC_limparConclusaoTransferencia383() {
+  qcConclusaoTransferencia383.style.display = "none";
+  qcAbasTransferencia383.style.display = "flex";
+  qcPainelEnviar383.style.display = "";
+  qcPainelReceber383.style.display = "";
+  qcAvisoTransferir275.style.display = "";
+}
+function QC_mostrarConclusaoTransferencia383(tipo,valor) {
+  // O status RECEBIDA/CONCLUIDA ja foi devolvido pela rotina V2.
+  // Manter a mensagem real da consulta do saldo, inclusive eventual aviso.
+  const textoConferencia = qcAvisoTransferir275.textContent;
+  const numero = Number(valor);
+  qcTituloConclusao383.textContent = tipo === "envio"
+    ? "Envio concluído!" : "Recebimento concluído!";
+  qcValorConclusao383.textContent = "Qc$ " +
+    numero.toLocaleString("pt-BR") + (tipo === "envio" ? " enviados" : " recebidos");
+  qcMensagemConclusao383.textContent = textoConferencia +
+    " Toque em OK para voltar à carteira.";
+  qcAbasTransferencia383.style.display = "none";
+  qcPainelEnviar383.style.display = "none";
+  qcPainelReceber383.style.display = "none";
+  qcAvisoTransferir275.style.display = "none";
+  qcConclusaoTransferencia383.style.display = "flex";
+  qcOkTransferencia383.focus();
+}
+
 let qcCodigoCompartilhar275 = "";
 let qcTrabalhando275 = false;
 let qcStream275 = null;
@@ -1531,11 +1598,14 @@ function QC_pararCamera275() {
 }
 function QC_fecharTransferencia275() {
   if (qcTrabalhando275) return;
+  QC_limparConclusaoTransferencia383();
   QC_pararCamera275();
   qcCodigoCompartilhar275 = "";
   qcImagemQR275.replaceChildren();
   qcModalTransferir275.style.display = "none";
+  qcBotaoTransferir275.focus();
 }
+qcOkTransferencia383.addEventListener("click", QC_fecharTransferencia275);
 function QC_mostrarAbaTransferencia275(aba) {
   QC_pararCamera275();
   const enviar = aba === "enviar";
@@ -1560,6 +1630,7 @@ function QC_mostrarAbaTransferencia275(aba) {
 }
 qcBotaoTransferir275.addEventListener("click", () => {
   if (!sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")) return;
+  QC_limparConclusaoTransferencia383();
   qcCodigoCompartilhar275 = "";
   qcResultadoEnvio275.hidden = true;
   qcImagemQR275.replaceChildren();
@@ -1694,6 +1765,7 @@ document.getElementById("qcConferirTransf275")
           "✅ " + r.valorEnviado +
           " Qc$ recebidos pelo destinatário. Nova transferência liberada."
         );
+        QC_mostrarConclusaoTransferencia383("envio",r.valorEnviado);
       } else {
         qcAvisoTransferir275.textContent =
           "Aguardando recebimento pelo destinatario (" + r.status + ").";
@@ -1721,6 +1793,7 @@ qcReceber275.addEventListener("click", async () => {
       await QC_atualizarSaldoTransferencia3328(
         "✅ Recebidos " + retorno.valorRecebido + " Qc$."
       );
+      QC_mostrarConclusaoTransferencia383("recebimento",retorno.valorRecebido);
     } else if (retorno.status === "CANCELADO") {
       qcAvisoTransferir275.textContent = "Recebimento cancelado.";
     } else {
