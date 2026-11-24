@@ -400,7 +400,7 @@ qcModalReceber.innerHTML = `
     <input
       id="qcValorReceber"
       type="number"
-      min="2"
+      min="1"
       step="1"
       inputmode="numeric"
       placeholder="Exemplo: 50"
@@ -829,7 +829,7 @@ async function QC_carregarPedidosReceber295() {
       // PASSO 340 — Reabrir o Pix do mesmo pedido PENDENTE, sem gerar outro.
       for(const pedido of aguardando) {
         const quantidade=Number(pedido.valor);
-        if(!Number.isSafeInteger(quantidade)||quantidade<2||quantidade===3) continue;
+        if(!Number.isSafeInteger(quantidade)||quantidade<1) continue;
         const area=document.createElement("div");
         area.style.cssText="border:1px solid #e6c36350;border-radius:10px;"+
           "padding:12px;margin:9px 0";
@@ -1436,7 +1436,7 @@ qcModalTransferir275.innerHTML = `
     <div id="qcPainelEnviar275">
       <label for="qcValorEnviar275" class="qc-label-modal">Quanto deseja transferir?</label>
       <input id="qcValorEnviar275" class="qc-input-modal"
-        type="number" min="2" step="1" inputmode="numeric" placeholder="Exemplo: 8">
+        type="number" min="1" step="1" inputmode="numeric" placeholder="Exemplo: 8">
       <button type="button" id="qcEnviar275" class="qc-btn-modal-principal"
         style="margin:10px 0;width:100%">Continuar</button>
       <div id="qcResultadoEnvio275" hidden style="text-align:center">
@@ -4480,7 +4480,7 @@ function QC_confirmarPagamentoPedido(nome, valor) {
         <small class="qc-resgate-nota333" id="qcNotaResgate333">Calculado pelas fichas disponíveis e verificadas desta carteira.</small>
       </div>
       <label for="qcValorResgate278" class="qc-label-modal">Valor em QC</label>
-      <input id="qcValorResgate278" class="qc-input-modal" type="number" min="2" step="1"
+      <input id="qcValorResgate278" class="qc-input-modal" type="number" min="1" step="1"
         inputmode="numeric" placeholder="Exemplo: 20">
       <label for="qcChavePixResgate334" class="qc-label-modal qc-campo-pix334">Sua chave Pix para receber o pagamento
         <input id="qcChavePixResgate334" class="qc-input-modal" type="text" inputmode="email"
@@ -4807,8 +4807,8 @@ function QC_confirmarPagamentoPedido(nome, valor) {
   enviar.addEventListener("click",async()=>{
     if(ocupado)return;
     const valor=Number(campo.value);
-    if(!campo.value.trim()||!Number.isSafeInteger(valor)||valor<2||valor===3){
-      status.textContent="Informe valor inteiro a partir de 2 QC, exceto 3 QC.";return;
+    if(!campo.value.trim()||!Number.isSafeInteger(valor)||valor<1){
+      status.textContent="Informe um valor inteiro de pelo menos 1 Qc$.";return;
     }
     const chavePix=campoPix.value.trim();
     if(!chavePix) {status.textContent="Informe sua chave Pix antes de solicitar o resgate.";campoPix.focus();return;}
