@@ -18,6 +18,21 @@
     display:block; padding:28px 14px; text-align:center;
     color:#e2ba60; font-size:14px;
   }
+  /* PASSO 375: links de acesso sem fundo, com alinhamento uniforme. */
+  #formLogin #btnAbrirTrocaSenha {
+    display:inline; width:auto; margin:0; padding:0;
+    background:none; border:0; border-radius:0; box-shadow:none;
+    color:#e9c46a; text-decoration:none;
+    font:inherit; cursor:pointer;
+  }
+  #formLogin #btnAbrirTrocaSenha:hover,
+  #formLogin #btnAbrirTrocaSenha:focus-visible {
+    text-decoration:underline;
+  }
+  #formLogin #qcBoasVindas .qc-nome-irmao375 {
+    color:#f3ce74; font-weight:800; font-size:1.11em;
+    letter-spacing:0.15px;
+  }
 </style>
 <script>
   if (
@@ -127,7 +142,7 @@
 </p>
 
 <p>
-  <a href="#" id="btnAbrirTrocaSenha">🔑 Alterar minha senha</a>
+  <a href="#" id="btnAbrirTrocaSenha">🔄 Alterar minha senha</a>
 </p>
 
 <!-- QUINTOSCOIN - ALTERAÇÃO DE SENHA -->
@@ -328,7 +343,7 @@ style="display:none;">
 
   
  <script src="qc-criptografia.js?v=1"></script>
- <script src="carteira.js?v=374"></script>
+ <script src="carteira.js?v=375"></script>
  <script src="qc-fichas.js?v=364"></script>
  <script src="qc-saldo.js?v=374"></script>
  <script src="qc-doacao-qr301.js?v=366"></script>
