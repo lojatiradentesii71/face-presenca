@@ -267,7 +267,7 @@
           http.status + ").");
         const retorno=await http.json();
         if (!retorno || retorno.status!=="OK" || retorno.versao!=="V2" ||
-            retorno.operacoesLiberadas!==false ||
+            typeof retorno.operacoesLiberadas!=="boolean" ||
             !Array.isArray(retorno.resultados) ||
             retorno.resultados.length!==parte.length) {
           throw Error(retorno?.mensagem || "Conferencia V2 nao autorizada.");
@@ -2719,13 +2719,12 @@ function QC_confirmarTransferencia332(opcoes) {
   resumo.textContent = "Segurança e recuperação";
   resumo.style.cssText = "cursor:pointer;font-size:14px;opacity:.9";
   detalhes.append(resumo,backup,restaurarBackup253,arquivoRestaurar253,aviso);
-  // Os controles antigos importam/exportam apenas fichas de teste.
-  // Desabilitar ate integrar backup das fichas da operacao atual.
-  backup.hidden=true;
-  backup.disabled=true;
-  restaurarBackup253.hidden=true;
-  restaurarBackup253.disabled=true;
-  detalhes.hidden=true;
+  // PASSO 374: Backup exclusivo do saldo operacional atual (V2).
+  backup.hidden=false;
+  backup.disabled=false;
+  restaurarBackup253.hidden=false;
+  restaurarBackup253.disabled=false;
+  detalhes.hidden=false;
   titulo.textContent = "Meu saldo";
   conferir.textContent = "Atualizar saldo";
   // Saldo principal ja mostra a verificacao automatica.
@@ -2734,9 +2733,6 @@ function QC_confirmarTransferencia332(opcoes) {
   aviso.hidden = true;
   painel.style.cssText = "padding:0;border:0;margin-top:4px";
   painel.append(titulo, conferir, detalhes);
-  const senhaAcao=document.getElementById("btnAbrirTrocaSenha");
-  const senhaPainel=document.getElementById("qcPainelTrocaSenha");
-  if(senhaAcao && senhaPainel) detalhes.append(senhaAcao,senhaPainel);
   const secao = document.querySelector("#telaCarteira .fichas");
   if (!secao) return;
   // Fichas detalhadas continuam disponiveis, mas recolhidas por padrao.
@@ -2813,297 +2809,270 @@ function QC_confirmarTransferencia332(opcoes) {
     });
   });
 
-  backup.addEventListener("click", () => {
-    aviso.hidden = false;
-    try {
-      if (!dadosDaSessao().token) {
-        throw Error("Entre na carteira primeiro.");
-      }
-      const registros = lerRegistros();
-      if (!Object.keys(registros).length) {
-        throw Error("Nenhuma ficha assinada encontrada.");
-      }
-      const dados = {
-        formato:"QUINTOSCOIN_BACKUP_ASSINADAS_V1",
-        criadoEm:new Date().toISOString(),
-        registrosCifrados:Object.values(registros)
-      };
-      const blob = new Blob([JSON.stringify(dados, null, 2)], {
-        type:"application/json"
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "QuintosCoin_backup_assinadas.json";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-      aviso.textContent = "Backup solicitado. Confira a pasta Downloads.";
-    } catch (erro) {
-      aviso.textContent = "⚠️ " + erro.message;
+  // PASSO 374: Backup/recuperacao de fichas V2, NUNCA fichas do piloto.
+  // Arquivos JSON contem apenas dados cifrados; nenhuma senha ou chave privada.
+  const QC_PREFIXO_PENDENTE_V2_374 = id => [
+    'QC_FICHAS_CEGAS_PENDENTES_V2_'+id,
+    'QC_DOACAO_PENDENTE_V2_'+id,
+    'QC_TRANSFERENCIA_ENVIO_V2_'+id,
+    'QC_TRANSFERENCIA_RESGATE_V2_'+id
+  ];
+  function QC_pendenciasV2374(id) {
+    const prefixoResgate='QC_RESGATE_LOCAL_V2_'+id+'_';
+    // Arquivos vazios como "{}" nao sao operacoes pendentes.
+    const possuiDados = k => {
+      const texto=localStorage.getItem(k);
+      if (!texto) return false;
+      try {
+        const objeto=JSON.parse(texto);
+        return objeto && typeof objeto==='object' && !Array.isArray(objeto)
+          ? Object.keys(objeto).length>0 : true;
+      } catch (_) { return true; } // Dado ilegivel: preservar e bloquear.
+    };
+    return QC_PREFIXO_PENDENTE_V2_374(id).some(possuiDados) ||
+      Object.keys(localStorage).some(k=>k.startsWith(prefixoResgate) && possuiDados(k));
+  }
+  function QC_registrosV2374(id) {
+    const texto=localStorage.getItem('QC_FICHAS_ASSINADAS_V2_'+id);
+    const dados=JSON.parse(texto || '{}');
+    if (!dados || typeof dados!=='object'||Array.isArray(dados))
+      throw Error('Armazenamento de fichas invalido. Nenhum dado foi alterado.');
+    return {texto,registros:dados};
+  }
+  async function QC_validarBackupV2374(registros,senha) {
+    // Ler, decifrar e verificar integridade antes de consultar anonimamente.
+    const itens=await QC_emParalelo343(registros,async ([chave,registro])=>{
+      if (!registro || typeof registro!=='object'||registro.versao!==1)
+        throw Error('Arquivo contem ficha cifrada invalida.');
+      const ficha=await abrir(registro,senha);
+      const valor=Number(ficha?.valor);
+      if (!ficha || ficha.formato!=='QC_FICHA_ASSINADA_V2' ||
+          ![1,2,5,10,50].includes(valor) ||
+          ficha.idChave!=='QC-'+valor+'-V2' ||
+          !/^[0-9a-f]{1024}$/i.test(ficha.assinaturaHex||''))
+        throw Error('Arquivo contem ficha V2 invalida.');
+      const mensagemHex=String(ficha.mensagemHex||'').trim().toLowerCase();
+      const bytes=deHex(mensagemHex);
+      if (bytes.length<80||bytes.length>512)
+        throw Error('Conteudo da ficha V2 fora do tamanho permitido.');
+      const conteudo=new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(32));
+      const rx=/^QUINTOSCOIN\|V2\|(1|2|5|10|50)\|(QC-(?:1|2|5|10|50)-V2)\|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+      const partes=rx.exec(conteudo);
+      if (!partes||Number(partes[1])!==valor||partes[2].toUpperCase()!==ficha.idChave)
+        throw Error('Conteudo da ficha V2 inconsistente.');
+      return {chave,registro,mensagemHex,assinaturaHex:ficha.assinaturaHex.toLowerCase(),valor};
+    });
+    const hashes=new Set();
+    for (const ficha of itens) {
+      if (hashes.has(ficha.mensagemHex)) throw Error('Fichas duplicadas no backup.');
+      hashes.add(ficha.mensagemHex);
     }
+    for(let inicio=0;inicio<itens.length;inicio+=20) {
+      const lote=itens.slice(inicio,inicio+20);
+      const res=await fetch(QC_URL_191,{
+        method:'POST',redirect:'follow',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify({acao:'qc_consultar_gastos_v2_lote',
+          fichas:lote.map(x=>({mensagemHex:x.mensagemHex,assinaturaHex:x.assinaturaHex}))})
+      });
+      if (!res.ok) throw Error('Servidor de verificacao indisponivel.');
+      const resposta=await res.json();
+      if(resposta?.status!=='OK'||resposta.versao!=='V2'||
+          !Array.isArray(resposta.resultados)||resposta.resultados.length!==lote.length)
+        throw Error('Servidor nao validou integralmente as fichas.');
+      resposta.resultados.forEach((r,i)=>{
+        if (!r||!['DISPONIVEL','GASTA'].includes(r.status)||
+            Number(r.valor)!==lote[i].valor)
+          throw Error('Assinatura ou disponibilidade de ficha nao confirmada.');
+        lote[i].situacao=r.status;
+      });
+    }
+    return itens;
+  }
+
+  backup.addEventListener('click', async () => {
+    aviso.hidden=false;
+    const s=dadosDaSessao();
+    if(!s.id||!s.token) {aviso.textContent='Entre na carteira primeiro.';return;}
+    backup.disabled=true;
+    try {
+      if(QC_pendenciasV2374(s.id))
+        throw Error('Conclua ou recupere as operacoes pendentes antes do backup.');
+      const dados=QC_registrosV2374(s.id);
+      const registros=Object.entries(dados.registros);
+      if (!registros.length) throw Error('Ainda nao existem fichas para salvar.');
+      if (registros.length>2000) throw Error('Quantidade de fichas acima do limite de backup.');
+      const senha=await obterSenha265();
+      if (!senha) return;
+      const validadas=await QC_validarBackupV2374(registros,senha);
+      if(dadosDaSessao().id!==s.id||dadosDaSessao().token!==s.token||
+          QC_registrosV2374(s.id).texto!==dados.texto)
+        throw Error('Carteira alterada durante a preparacao do backup.');
+      const pacote={formato:'QUINTOSCOIN_BACKUP_ASSINADAS_V2',versao:2,
+        idCarteira:s.id,criadoEm:new Date().toISOString(),
+        registrosCifrados:Object.fromEntries(registros)};
+      const blob=new Blob([JSON.stringify(pacote,null,2)],{type:'application/json'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;a.download='QuintosCoin_backup_assinadas_V2.json';
+      document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),5000);
+      aviso.textContent='Backup solicitado: '+validadas.length+
+        ' fichas protegidas. Guarde o arquivo e a senha em locais seguros.';
+    }catch(erro){aviso.textContent='⚠️ '+String(erro.message||erro);}
+    finally{backup.disabled=false;}
   });
 
-  // PASSO 253 - Importa apenas fichas novas depois de validar TODAS as
-  // assinaturas e conferir duplicatas com as fichas ja existentes.
-  // A gravacao e unica e nao altera fichas anteriores.
-  restaurarBackup253.addEventListener("click", async () => {
-    aviso.hidden = false;
-    const sessaoInicial = dadosDaSessao();
-    if (!sessaoInicial.id || !sessaoInicial.token) {
-      aviso.textContent = "Entre na carteira primeiro.";
-      return;
-    }
+  // Backup produzido com uma senha anterior pode ser aberto uma unica vez
+  // e recriptografado com a senha ATUAL, sem alterar a senha do servidor.
+  function QC_perguntarSenhaBackup374() {
+    return new Promise(resolve => {
+      const dlg=document.createElement('dialog');
+      dlg.setAttribute('aria-label','Senha do backup');
+      dlg.style.cssText='width:min(92vw,380px);border:1px solid #6a7691;'+
+        'border-radius:16px;padding:20px;background:#17243b;color:#fff;';
+      const titulo=document.createElement('h3');
+      titulo.textContent='Senha usada no backup';
+      const texto=document.createElement('p');
+      texto.textContent='Se o backup foi criado antes de trocar sua senha, '+
+        'informe a senha antiga que protegia essas fichas.';
+      const campo=document.createElement('input');
+      campo.type='password';campo.autocomplete='off';
+      campo.placeholder='Senha anterior do backup';
+      campo.style.cssText='display:block;width:100%;box-sizing:border-box;'+
+        'margin:12px 0;padding:12px;color:#17243b';
+      const botoes=document.createElement('div');
+      botoes.style.cssText='display:flex;gap:10px;justify-content:flex-end';
+      const canc=document.createElement('button');
+      canc.type='button';canc.textContent='Cancelar';
+      const continuar=document.createElement('button');
+      continuar.type='button';continuar.textContent='Conferir backup';
+      botoes.append(canc,continuar);
+      dlg.append(titulo,texto,campo,botoes);
+      document.body.appendChild(dlg);
+      let pronto=false;
+      const fechar=valor=>{
+        if(pronto) return;
+        pronto=true;
+        dlg.close();dlg.remove();campo.value='';resolve(valor);
+      };
+      canc.addEventListener('click',()=>fechar(''));
+      continuar.addEventListener('click',()=>fechar(campo.value));
+      dlg.addEventListener('cancel',e=>{e.preventDefault();fechar('');});
+      campo.addEventListener('keydown',e=>{
+        if(e.key==='Enter'){e.preventDefault();fechar(campo.value);}
+      });
+      dlg.showModal();campo.focus();
+    });
+  }
 
-    const segredo = await obterSenha265();
-    if (!segredo) {
-      aviso.textContent = "Digite a senha das fichas antes de selecionar o backup.";
-      return;
+  restaurarBackup253.addEventListener('click',async () => {
+    aviso.hidden=false;
+    const inicial=dadosDaSessao();
+    if (!inicial.id||!inicial.token) {
+      aviso.textContent='Entre na carteira primeiro.';return;
     }
-
-    arquivoRestaurar253.value = "";
-    arquivoRestaurar253.onchange = async () => {
-      const arquivo = arquivoRestaurar253.files?.[0];
+    if (QC_pendenciasV2374(inicial.id)) {
+      aviso.textContent='⚠️ Conclua as operacoes V2 pendentes antes de recuperar fichas.';return;
+    }
+    const senha=await obterSenha265();
+    if (!senha) return;
+    arquivoRestaurar253.value='';
+    arquivoRestaurar253.onchange=async () => {
+      const arquivo=arquivoRestaurar253.files?.[0];
       if (!arquivo) return;
-
-      restaurarBackup253.disabled = true;
-      conferir.disabled = true;
-      backup.disabled = true;
-      aviso.textContent = "Verificando fichas do backup e da carteira...";
-
+      restaurarBackup253.disabled=true;backup.disabled=true;conferir.disabled=true;
+      aviso.textContent='Conferindo assinaturas e gastos do backup...';
       try {
-        if (!crypto?.subtle || !crypto.randomUUID) {
-          throw Error("Criptografia segura indisponivel.");
+        if(arquivo.size>10*1024*1024) throw Error('Arquivo excede 10 MB.');
+        const pacote=JSON.parse(await arquivo.text());
+        if(pacote?.formato!=='QUINTOSCOIN_BACKUP_ASSINADAS_V2'||
+            pacote.versao!==2||pacote.idCarteira!==inicial.id||
+            !pacote.registrosCifrados||typeof pacote.registrosCifrados!=='object'||
+            Array.isArray(pacote.registrosCifrados))
+          throw Error('Backup nao pertence a esta carteira ou formato invalido.');
+        const entradas=Object.entries(pacote.registrosCifrados);
+        if(!entradas.length||entradas.length>2000)
+          throw Error('Quantidade de fichas de backup invalida.');
+        let senhaBackup=senha;
+        let importadas;
+        try {importadas=await QC_validarBackupV2374(entradas,senhaBackup);}
+        catch(erro) {
+          if(!/Senha da ficha incorreta ou backup danificado/i.test(String(erro.message||erro)))
+            throw erro;
+          const anterior=await QC_perguntarSenhaBackup374();
+          if(!anterior) throw Error('Recuperacao cancelada.');
+          senhaBackup=anterior;
+          importadas=await QC_validarBackupV2374(entradas,senhaBackup);
         }
-        if (arquivo.size > 10 * 1024 * 1024) {
-          throw Error("Arquivo de backup excede o tamanho permitido.");
-        }
-
-        const dados = JSON.parse(await arquivo.text());
-        if (
-          !dados ||
-          dados.formato !== "QUINTOSCOIN_BACKUP_ASSINADAS_V1" ||
-          !Array.isArray(dados.registrosCifrados) ||
-          dados.registrosCifrados.length === 0 ||
-          dados.registrosCifrados.length > 2000
-        ) {
-          throw Error("Formato de backup assinado invalido.");
-        }
-
-        const chaves = new Map();
-        const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
-
-        async function validarFicha253(registro) {
-          const ficha = await abrir(registro, segredo);
-          const valor = ficha?.valor;
-          const idChave = "QC-" + valor + "-V1";
-
-          if (
-            !ficha ||
-            ficha.formato !== "QC_FICHA_ASSINADA_V1" ||
-            ![2, 5, 10].includes(valor) ||
-            ficha.idChave !== idChave ||
-            !/^[0-9a-f]{1024}$/i.test(ficha.assinaturaHex || "")
-          ) {
-            throw Error("Ficha com estrutura invalida.");
-          }
-
-          const mensagemHex = String(ficha.mensagemHex || "").toLowerCase();
-          const mensagem = deHex(mensagemHex);
-          if (mensagem.length < 80) {
-            throw Error("Mensagem da ficha incompleta.");
-          }
-
-          const conteudo = new TextDecoder("utf-8", {fatal:true})
-            .decode(mensagem.subarray(32));
-          const partes = conteudo.split("|");
-          if (
-            partes.length !== 5 ||
-            partes[0] !== "QUINTOSCOIN" ||
-            partes[1] !== "V1" ||
-            partes[2] !== String(valor) ||
-            partes[3] !== idChave ||
-            !uuid.test(partes[4])
-          ) {
-            throw Error("Conteudo da ficha invalido.");
-          }
-
-          let chave = chaves.get(valor);
-          if (!chave) {
-            // Apenas consulta a chave PUBLICA; nao envia a ficha ao servidor.
-            const resposta = await QC_post191("qc_chave_publica_" + valor);
-            const nHex = String(resposta.moduloHex || "").toLowerCase();
-            const eHex = String(resposta.expoenteHex || "").toLowerCase();
-
-            if (
-              resposta.status !== "OK" ||
-              resposta.idChave !== idChave ||
-              !/^[89a-f][0-9a-f]{1023}$/.test(nHex) ||
-              !/^0*10001$/.test(eHex)
-            ) {
-              throw Error("Chave publica de " + valor + " QC indisponivel.");
-            }
-
-            const eNormal = eHex.length % 2 ? "0" + eHex : eHex;
-            chave = await crypto.subtle.importKey(
-              "jwk",
-              {
-                kty:"RSA", n:base64url(deHex(nHex)),
-                e:base64url(deHex(eNormal)),
-                ext:true, key_ops:["verify"]
-              },
-              {name:"RSA-PSS", hash:"SHA-384"}, false, ["verify"]
-            );
-            chaves.set(valor, chave);
-          }
-
-          const confere = await crypto.subtle.verify(
-            {name:"RSA-PSS", saltLength:48}, chave,
-            deHex(ficha.assinaturaHex), mensagem
-          );
-          if (!confere) {
-            throw Error("Assinatura de " + valor + " QC invalida.");
-          }
-
-          // Usar a mensagem assinada como identidade, pois o mesmo QC
-          // pode ter sido salvo com criptografias diferentes.
-          const situacao = await consultarFicha263(ficha);
-          return {mensagemHex, valor, situacao};
-        }
-
-        const mensagensBackup = new Set();
-        const fichasBackup = [];
-        for (const registro of dados.registrosCifrados) {
-          const ficha = await validarFicha253(registro);
-          if (mensagensBackup.has(ficha.mensagemHex)) {
-            throw Error("O backup contem fichas duplicadas.");
-          }
-          mensagensBackup.add(ficha.mensagemHex);
-          fichasBackup.push({registro, ...ficha});
-        }
-
-        // Ler e validar o armazenamento ANTES de propor qualquer gravacao.
-        const chave = chaveLocal();
-        const textoAnterior = localStorage.getItem(chave);
-        const atuais = textoAnterior === null
-          ? {}
-          : JSON.parse(textoAnterior);
-        if (!atuais || typeof atuais !== "object" ||
-            Array.isArray(atuais)) {
-          throw Error("Armazenamento atual da carteira invalido.");
-        }
-
-        const mensagensAtuais = new Set();
-        for (const registro of Object.values(atuais)) {
-          const ficha = await validarFicha253(registro);
-          if (mensagensAtuais.has(ficha.mensagemHex)) {
-            throw Error("A carteira ja contem fichas duplicadas.");
-          }
-          mensagensAtuais.add(ficha.mensagemHex);
-        }
-
-        const gastasNoBackup = fichasBackup.filter(
-          ficha => ficha.situacao === "GASTA"
-        ).length;
-        const disponiveisBackup = fichasBackup.filter(
-          ficha => ficha.situacao === "DISPONIVEL"
-        );
-        const novas = disponiveisBackup.filter(
-          ficha => !mensagensAtuais.has(ficha.mensagemHex)
-        );
-        const repetidas = disponiveisBackup.length - novas.length;
-        memorizarSenha265(segredo, sessaoInicial);
-
-        if (novas.length === 0) {
-          aviso.textContent = "✅ Nenhuma ficha importada: " + repetidas +
-            " ja presente(s) e " + gastasNoBackup +
-            " ja gasta(s). Nenhuma ficha alterada.";
+        const atual=QC_registrosV2374(inicial.id);
+        const existentes=await QC_validarBackupV2374(Object.entries(atual.registros),senha);
+        const idsExistentes=new Set(existentes.map(x=>x.mensagemHex));
+        const gastas=importadas.filter(x=>x.situacao==='GASTA');
+        const repetidas=importadas.filter(x=>x.situacao==='DISPONIVEL' &&
+          idsExistentes.has(x.mensagemHex));
+        const novas=importadas.filter(x=>x.situacao==='DISPONIVEL' &&
+          !idsExistentes.has(x.mensagemHex));
+        if(!novas.length) {
+          aviso.textContent='Nenhuma ficha nova: '+repetidas.length+
+            ' ja presentes, '+gastas.length+' ja gastas.';
           return;
         }
-
-        const totalNovo = novas.reduce((soma, ficha) =>
-          soma + ficha.valor, 0
-        );
-
-        if(typeof window.QC_dialogoQuintos338!=="function") {
-          throw Error("Atualize o aplicativo para confirmar a recuperação pelo modal seguro.");
-        }
-        const permitir = await window.QC_dialogoQuintos338({
-          titulo:"Confirmar recuperação das fichas",
-          texto:"O backup foi validado. Deseja importar somente as fichas disponíveis?",
+        if(typeof window.QC_dialogoQuintos338!=='function')
+          throw Error('Modal seguro de recuperacao indisponivel.');
+        const autorizado=await window.QC_dialogoQuintos338({
+          titulo:'Recuperar fichas assinadas',
+          texto:'O servidor validou as assinaturas. Deseja importar apenas as fichas disponiveis?',
           detalhes:[
-            {rotulo:"NOVAS FICHAS",valor:String(novas.length)},
-            {rotulo:"TOTAL A RECUPERAR",valor:"Qc$ "+totalNovo.toLocaleString("pt-BR")},
-            {rotulo:"JÁ PRESENTES",valor:String(repetidas)},
-            {rotulo:"JÁ GASTAS — IGNORADAS",valor:String(gastasNoBackup)}
-          ],
-          aviso:"Somente fichas disponíveis e verificadas serão importadas. " +
-            "Fichas gastas não retornarão ao saldo.",
-          confirmarTexto:"Importar fichas disponíveis",
-          cancelarTexto:"Não importar"
+            {rotulo:'NOVAS FICHAS',valor:String(novas.length)},
+            {rotulo:'TOTAL A RECUPERAR',valor:QC_formatoValor291(novas.reduce((n,x)=>n+x.valor,0))},
+            {rotulo:'JA PRESENTES',valor:String(repetidas.length)},
+            {rotulo:'JA GASTAS — IGNORADAS',valor:String(gastas.length)}
+          ],confirmarTexto:'Recuperar fichas',cancelarTexto:'Cancelar'
         });
-        if (!permitir) {
-          aviso.textContent = "Restauracao cancelada. Nenhuma ficha alterada.";
-          return;
+        if(!autorizado) {aviso.textContent='Recuperacao cancelada.';return;}
+        const reconfirmadas=await QC_validarBackupV2374(novas.map(x=>[x.chave,x.registro]),senhaBackup);
+        if (reconfirmadas.some(x=>x.situacao!=='DISPONIVEL'))
+          throw Error('Situacao de uma ficha mudou. Nenhum registro foi importado.');
+        if(dadosDaSessao().id!==inicial.id||dadosDaSessao().token!==inicial.token||
+            QC_registrosV2374(inicial.id).texto!==atual.texto||
+            QC_pendenciasV2374(inicial.id))
+          throw Error('Carteira ou operacoes mudaram. Repita a recuperacao.');
+        // Recriptografar sempre usando a senha ATUAL da carteira. Assim,
+        // backups produzidos com senha anterior nao bloqueiam logins futuros.
+        const novasProtegidas=await QC_emParalelo343(novas,async x=>({
+          registro:await QC_cifrar271(await abrir(x.registro,senhaBackup),senha)
+        }));
+        if(dadosDaSessao().id!==inicial.id||dadosDaSessao().token!==inicial.token||
+            QC_registrosV2374(inicial.id).texto!==atual.texto||
+            QC_pendenciasV2374(inicial.id))
+          throw Error('Carteira mudou durante a recriptografia.');
+        const destino=Object.assign(Object.create(null),atual.registros);
+        for(const x of novasProtegidas){
+          let k;
+          do{k='QC-REC-V2-'+crypto.randomUUID();}
+          while(Object.prototype.hasOwnProperty.call(destino,k));
+          destino[k]=x.registro;
         }
-
-        // Verificacoes finais: impedir importacao se a sessao ou os
-        // registros mudaram enquanto o backup era conferido.
-        const sessaoAtual = dadosDaSessao();
-        if (
-          sessaoAtual.id !== sessaoInicial.id ||
-          sessaoAtual.token !== sessaoInicial.token ||
-          localStorage.getItem(chave) !== textoAnterior
-        ) {
-          throw Error("Carteira ou sessao mudou. Repita a restauracao.");
-        }
-
-        const atualizados = Object.assign(Object.create(null), atuais);
-        for (const ficha of novas) {
-          let chaveFicha;
-          do {
-            chaveFicha = "QC-REC-" + crypto.randomUUID();
-          } while (Object.prototype.hasOwnProperty.call(
-            atualizados, chaveFicha
-          ));
-          atualizados[chaveFicha] = ficha.registro;
-        }
-
-        // Uma unica gravacao; nao remove nem substitui fichas antigas.
-        localStorage.setItem(chave, JSON.stringify(atualizados));
-        memoria = null;
+        localStorage.setItem('QC_FICHAS_ASSINADAS_V2_'+inicial.id,
+          JSON.stringify(destino));
+        memoriaV2365=null;
         renderizar();
-
-        const mensagemRecuperacao = "✅ Recuperacao concluida: " +
-          novas.length + " ficha(s), " + totalNovo +
-          " QC disponiveis adicionados. " + repetidas +
-          " repetida(s) e " + gastasNoBackup +
-          " ja gasta(s) ignoradas.";
         try {
           await QC_conferirSaldo291();
-          aviso.textContent = mensagemRecuperacao + " Saldo atualizado.";
-        } catch (erroSaldo) {
-          // Fichas salvas permanecem intactas mesmo que a consulta de
-          // disponibilidade no servidor falhe neste momento.
-          aviso.textContent = mensagemRecuperacao +
-            " Atualizacao do saldo pendente: " + erroSaldo.message;
+          aviso.textContent='✅ Recuperadas '+novas.length+' fichas disponíveis. Saldo atualizado.';
+        }catch(erro) {
+          aviso.textContent='✅ Fichas salvas. Conferencia de saldo pendente: '+
+            String(erro.message||erro);
         }
-
-      } catch (erro) {
-        aviso.textContent = "⚠️ Restauracao nao realizada: " + erro.message;
-      } finally {
-        arquivoRestaurar253.value = "";
-        restaurarBackup253.disabled = false;
-        conferir.disabled = false;
-        backup.disabled = false;
+      }catch(erro){aviso.textContent='⚠️ Nenhuma ficha importada: '+String(erro.message||erro);}
+      finally{
+        arquivoRestaurar253.value='';
+        restaurarBackup253.disabled=false;backup.disabled=false;conferir.disabled=false;
       }
     };
-
     arquivoRestaurar253.click();
   });
-
-
 
 
   // PASSO 291 — Migracao de senha local, sem alterar o conteudo das fichas.
