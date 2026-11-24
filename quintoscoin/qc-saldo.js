@@ -190,26 +190,9 @@
   }
 
   function QC_exibirV2365() {
-    if (!avisoV2365) return;
-    const sessao = dadosDaSessao();
-    const atual = memoriaV2365;
-    if (!atual || atual.id !== sessao.id || atual.token !== sessao.token) {
-      avisoV2365.hidden = true;
-      avisoV2365.textContent = "";
-      return;
-    }
-    avisoV2365.hidden = false;
-    if (atual.erro) {
-      avisoV2365.textContent =
-        "⚠️ Fichas V2 ainda nao conferidas: " + atual.erro +
-        ". Nenhuma ficha V2 foi somada ao saldo.";
-    } else {
-      avisoV2365.textContent =
-        "Fichas V2 conferidas: " + QC_formatoValor291(atual.total) +
-        " (" + atual.quantidade + " disponivel(is), " + atual.gastas +
-        " gasta(s)). Geracao V2 bloqueada para movimentacoes; " +
-        "nao incluida no saldo principal.";
-    }
+    // O saldo operacional e exibido exclusivamente no mostrador principal.
+    // Nao mostrar uma segunda geracao, historicos ou contagem tecnica.
+    if (avisoV2365) { avisoV2365.hidden=true; avisoV2365.textContent=""; }
   }
 
   async function QC_conferirV2365(id, token, senha) {
@@ -222,7 +205,10 @@
       return;
     }
     if (!dados.registros.length) {
-      memoriaV2365 = null;
+      // Carteira nova sem fichas: saldo operacional verdadeiro = zero,
+      // confirmado pelo marco do servidor na consulta de login.
+      memoriaV2365 = {id, token, quantidade:0, gastas:0,
+        total:0, fichas:[], origem:dados.original};
       QC_exibirV2365();
       return;
     }
@@ -317,43 +303,38 @@
   }
 
   function renderizar() {
-    const {id, token} = dadosDaSessao();
-    if (!memoria || memoria.id !== id || memoria.token !== token) {
-      memoria = null;
-    }
-    const saldo = document.getElementById("saldo");
-    const equivalente = document.getElementById("equivalente");
-    const lista = document.getElementById("listaFichas");
-    if (!saldo || !equivalente || !lista) return;
-
-    const rotulo = document.querySelector("#telaCarteira .saldo p");
-    if (rotulo) rotulo.textContent = "Fichas disponiveis e verificadas";
+    const {id,token}=dadosDaSessao();
+    const m=memoriaV2365 && memoriaV2365.id===id &&
+      memoriaV2365.token===token ? memoriaV2365 : null;
+    const saldo=document.getElementById("saldo");
+    const equivalente=document.getElementById("equivalente");
+    const lista=document.getElementById("listaFichas");
+    if (!saldo||!equivalente||!lista) return;
+    const rotulo=document.querySelector("#telaCarteira .saldo p");
+    if (rotulo) rotulo.textContent="Fichas disponiveis e verificadas";
     lista.replaceChildren();
-    if (!memoria) {
-      saldo.textContent = token ? "Qc$ --" : "Qc$ 0,00";
-      equivalente.textContent = token
-        ? "Conferindo saldo..." : "R$ 0,00";
-      lista.textContent = token
-        ? "Aguardando verificação automática."
-        : "Entre na carteira para consultar suas fichas.";
+    if (!m || m.erro) {
+      saldo.textContent=token ? "Qc$ —" : "Qc$ 0,00";
+      equivalente.textContent=token ? "Conferindo saldo..." : "R$ 0,00";
+      lista.textContent=token ?
+        (m&&m.erro ? "Nao foi possivel conferir o saldo. Atualize para tentar novamente." :
+          "Conferindo fichas...") :
+        "Entre na carteira para consultar suas fichas.";
       QC_exibirV2365();
       return;
     }
-
-    saldo.textContent = QC_formatoValor291(memoria.total);
-    equivalente.textContent = memoria.total.toLocaleString("pt-BR", {
-      style: "currency", currency: "BRL"
+    saldo.textContent=QC_formatoValor291(m.total);
+    equivalente.textContent=Number(m.total).toLocaleString("pt-BR",{
+      style:"currency",currency:"BRL"
     });
-    for (const ficha of memoria.fichas) {
-      const div = document.createElement("div");
-      div.className = "ficha";
-      div.textContent = ficha.valor + " QC — " + ficha.idChave +
+    for (const ficha of m.fichas) {
+      const item=document.createElement("div");
+      item.className="ficha";
+      item.textContent="Qc$ "+Number(ficha.valor).toLocaleString("pt-BR")+
         " — assinatura verificada";
-      lista.appendChild(div);
+      lista.appendChild(item);
     }
-    if (!memoria.fichas.length) {
-      lista.textContent = "Nenhuma ficha disponivel nesta carteira.";
-    }
+    if (!m.fichas.length) lista.textContent="Nenhuma ficha disponivel nesta carteira.";
     QC_exibirV2365();
   }
 
@@ -581,17 +562,8 @@
   // Disponibilizar apenas o PLANO matematico ao botao original Doar QC.
   // Nao divulga mensagens, assinaturas, senha ou registros criptografados.
   window.QC_planejarMovimento267 = function(valor) {
-    const {id, token} = dadosDaSessao();
-    if (!id || !token || !memoria ||
-        memoria.id !== id || memoria.token !== token) {
-      return {
-        status:"SALDO_NAO_VERIFICADO",
-        mensagem:"Atualize seu saldo antes de continuar."
-      };
-    }
-    return QC_planejarComposicao267(
-      memoria.fichas.map(f => f.valor), valor
-    );
+    // Compatibilidade de assinatura da interface; nunca consultar fichas antigas.
+    return window.QC_planejarMovimentoV2366(valor);
   };
 
   window.QC_atualizarSaldoReal202 = renderizar;
@@ -1139,7 +1111,7 @@
     if (!atual || atual.id!==inicio.id || atual.token!==inicio.token ||
         !Array.isArray(atual.fichas) || !atual.fichas.length ||
         localStorage.getItem(QC_CHAVE_LOCAL_V2_368(inicio.id))!==atual.origem) {
-      throw Error('Os 18 Qc$ do piloto sao fichas V1. Aguarde fichas V2 conferidas.');
+      throw Error('Nenhuma ficha disponivel para essa doacao.');
     }
     const plano=QC_planejarComposicaoV2366(atual.fichas.map(f=>f.valor),valor);
     if (plano.status!=='OK') throw Error(plano.mensagem||plano.status);
@@ -1279,22 +1251,12 @@
 
   window.QC_estadoDoacaoQR301=async function() {
     const inicio=dadosDaSessao();
-    if (!inicio.id || !inicio.token) throw Error("Entre na carteira.");
-    const pendenteV1=localStorage.getItem(QC_pendenteChave271());
-    const pendenteV2=localStorage.getItem(QC_chavePendenteV2368());
-    if (pendenteV1 && pendenteV2) {
-      throw Error('Doacoes V1 e V2 pendentes ao mesmo tempo. Preserve os dados.');
-    }
-    if (!pendenteV1 && !pendenteV2) return {status:"NENHUMA"};
-    if (pendenteV2) {
-      const segredo=await obterSenha265();
-      if (!segredo) return {status:"CANCELADO"};
-      const op=await QC_lerPendenteV2368(segredo);
-      return {status:op.etapaQR301==="PREPARADA"?"PREPARADA":"ACIONADA"};
-    }
+    if (!inicio.id||!inicio.token) throw Error("Entre na carteira.");
+    const pendente=localStorage.getItem(QC_chavePendenteV2368());
+    if (!pendente) return {status:"NENHUMA"};
     const segredo=await obterSenha265();
     if (!segredo) return {status:"CANCELADO"};
-    const op=await QC_lerPendenteQR301(segredo);
+    const op=await QC_lerPendenteV2368(segredo);
     return {status:op.etapaQR301==="PREPARADA"?"PREPARADA":"ACIONADA"};
   };
 
@@ -1307,14 +1269,6 @@
       if (!inicio.id || !inicio.token) throw Error("Entre na carteira antes de doar.");
       const segredo=await obterSenha265();
       if (!segredo) return {status:"CANCELADO"};
-      if (localStorage.getItem(QC_pendenteChave271()) &&
-          localStorage.getItem(QC_chavePendenteV2368())) {
-        throw Error('Duas doacoes pendentes. Preserve os dados locais.');
-      }
-      if (localStorage.getItem(QC_pendenteChave271())) {
-        const anterior=await QC_lerPendenteQR301(segredo);
-        return {status:anterior.etapaQR301==="PREPARADA"?"PREPARADA":"ACIONADA"};
-      }
       if (localStorage.getItem(QC_chavePendenteV2368())) {
         const anterior=await QC_lerPendenteV2368(segredo);
         return {status:anterior.etapaQR301==="PREPARADA"?"PREPARADA":"ACIONADA"};
@@ -1385,107 +1339,59 @@
   };
 
   window.QC_cancelarDoacaoQR301=async function() {
-    if (movimentando271) throw Error("Há uma doação sendo processada.");
+    if (movimentando271) throw Error('Ha uma doacao em andamento.');
     movimentando271=true;
     try {
       const segredo=await obterSenha265();
-      if (!segredo) return {status:"CANCELADO"};
-      if (localStorage.getItem(QC_chavePendenteV2368())) {
-        if (localStorage.getItem(QC_pendenteChave271())) {
-          throw Error('Duas doacoes pendentes. Preserve os dados.');
-        }
-        const v2=await QC_lerPendenteV2368(segredo);
-        if (v2.etapaQR301!=='PREPARADA') {
-          throw Error('Doacao V2 ja acionada. Use Recuperar operacao.');
-        }
-        localStorage.removeItem(QC_chavePendenteV2368());
-        return {status:'CANCELADA'};
-      }
-      const op=await QC_lerPendenteQR301(segredo);
-      if (!op) return {status:"NENHUMA"};
-      if (op.etapaQR301!=="PREPARADA") {
-        throw Error("A leitura já acionou a doação. Use Recuperar operação, não cancelar.");
-      }
-      localStorage.removeItem(QC_pendenteChave271());
-      return {status:"CANCELADA"};
+      if (!segredo) return {status:'CANCELADO'};
+      const op=await QC_lerPendenteV2368(segredo);
+      if (!op) return {status:'NENHUMA'};
+      if (op.etapaQR301!=='PREPARADA')
+        throw Error('A leitura ja acionou a doacao. Use Recuperar operacao.');
+      localStorage.removeItem(QC_chavePendenteV2368());
+      return {status:'CANCELADA'};
     } finally {movimentando271=false;}
   };
 
   window.QC_efetivarDoacaoQR301=async function(codigoLido) {
-    if (String(codigoLido)!==CODIGO_SACOLA301) {
-      throw Error("O QR Code lido não é o da sacola de doações.");
-    }
-    if (movimentando271) throw Error("Doação já em processamento.");
+    if (String(codigoLido)!==CODIGO_SACOLA301)
+      throw Error('O QR Code lido nao e o da sacola.');
+    if (movimentando271) throw Error('Doacao ja em processamento.');
     movimentando271=true;
     try {
       const inicio=dadosDaSessao();
-      if (!inicio.id || !inicio.token) throw Error("Entre na carteira novamente.");
+      if (!inicio.id||!inicio.token) throw Error('Entre na carteira novamente.');
       const segredo=await obterSenha265();
-      if (!segredo) return {status:"CANCELADO"};
-      if (localStorage.getItem(QC_chavePendenteV2368())) {
-        if (localStorage.getItem(QC_pendenteChave271())) {
-          throw Error('Duas doacoes pendentes. Preserve os dados.');
-        }
-        const v2=await QC_lerPendenteV2368(segredo);
-        if (v2.etapaQR301!=='PREPARADA') {
-          throw Error('Doacao V2 ja acionada. Retome a mesma operacao.');
-        }
-        if (v2.diaQR301!==QC_hojeBrasil301()) {
-          throw Error('Preparo V2 de outro dia. Cancele e prepare novamente.');
-        }
-        QC_conferirSessaoQR301(inicio);
-        v2.etapaQR301='ACIONADA';
-        const cifrada=await QC_cifrar271(v2,segredo);
-        QC_conferirSessaoQR301(inicio);
-        localStorage.setItem(QC_chavePendenteV2368(),JSON.stringify(cifrada));
-        memorizarSenha265(segredo,inicio);
-        return await QC_retomarV2368(v2,segredo,inicio);
-      }
-      const op=await QC_lerPendenteQR301(segredo);
-      if (!op) throw Error("Não existe doação preparada neste aparelho.");
-      if (op.etapaQR301!=="PREPARADA") {
-        throw Error("Esta doação já foi acionada. Recupere a mesma operação.");
-      }
-      if (op.diaQR301!==QC_hojeBrasil301()) {
-        throw Error("A doação foi preparada em outro dia. Cancele e prepare novamente.");
-      }
+      if (!segredo) return {status:'CANCELADO'};
+      const op=await QC_lerPendenteV2368(segredo);
+      if (!op) throw Error('Nao existe doacao preparada neste aparelho.');
+      if (op.etapaQR301!=='PREPARADA')
+        throw Error('A doacao ja foi acionada. Retome a mesma operacao.');
+      if (op.diaQR301!==QC_hojeBrasil301())
+        throw Error('Preparo de outro dia. Cancele e prepare novamente.');
       QC_conferirSessaoQR301(inicio);
-      // O ponto de não-retorno local é salvo ANTES do primeiro POST.
-      // Mesmo após queda de rede, a mesma operação será retomada.
-      op.etapaQR301="ACIONADA";
-      const cifrado=await QC_cifrar271(op,segredo);
+      op.etapaQR301='ACIONADA';
+      const cifrada=await QC_cifrar271(op,segredo);
       QC_conferirSessaoQR301(inicio);
-      localStorage.setItem(QC_pendenteChave271(),JSON.stringify(cifrado));
+      localStorage.setItem(QC_chavePendenteV2368(),JSON.stringify(cifrada));
       memorizarSenha265(segredo,inicio);
-      return await QC_retomar271(op,segredo);
+      return await QC_retomarV2368(op,segredo,inicio);
     } finally {movimentando271=false;}
   };
 
   window.QC_recuperarDoacaoQR301=async function() {
-    if (movimentando271) throw Error("Outra doação está em andamento.");
+    if (movimentando271) throw Error('Outra doacao esta em andamento.');
     movimentando271=true;
     try {
       const inicio=dadosDaSessao();
-      if (!inicio.id || !inicio.token) throw Error("Entre na carteira novamente.");
+      if (!inicio.id||!inicio.token) throw Error('Entre na carteira novamente.');
       const segredo=await obterSenha265();
-      if (!segredo) return {status:"CANCELADO"};
-      if (localStorage.getItem(QC_chavePendenteV2368())) {
-        if (localStorage.getItem(QC_pendenteChave271())) {
-          throw Error('Duas doacoes pendentes. Preserve os dados.');
-        }
-        const v2=await QC_lerPendenteV2368(segredo);
-        if (v2.etapaQR301==='PREPARADA') {
-          throw Error('A sacola ainda nao foi lida. Nenhuma doacao V2 enviada.');
-        }
-        return await QC_retomarV2368(v2,segredo,inicio);
-      }
-      const op=await QC_lerPendenteQR301(segredo);
-      if (!op) return {status:"NENHUMA"};
-      if (op.etapaQR301==="PREPARADA") {
-        throw Error("A sacola ainda não foi lida. Nenhuma doação foi enviada.");
-      }
-      // Recuperação posterior NÃO exige QR de novo e NÃO cria um segundo ID.
-      return await QC_retomar271(op,segredo);
+      if (!segredo) return {status:'CANCELADO'};
+      const op=await QC_lerPendenteV2368(segredo);
+      if (!op) return {status:'NENHUMA'};
+      if (op.etapaQR301==='PREPARADA')
+        throw Error('A sacola ainda nao foi lida. Nenhuma doacao foi enviada.');
+      return await QC_retomarV2368(op,segredo,inicio);
     } finally {movimentando271=false;}
   };
 
@@ -2444,9 +2350,6 @@ function QC_confirmarTransferencia332(opcoes) {
   window.QC_transferirCriar275=async function(valorSolicitado) {
     const sessao=dadosDaSessao(),
       pendenteV2=sessao.id&&localStorage.getItem(QC_TX_V2_370+sessao.id);
-    // Manter retomada historica V1, se existir.
-    if (!pendenteV2 && !QC_fichasDisponiveisV2370())
-      return QC_v1TransferirCriar370(valorSolicitado);
     if (QC_movV2Ocupado370) throw Error('Transferencia V2 em andamento.');
     QC_movV2Ocupado370=true;
     try {
@@ -2456,8 +2359,6 @@ function QC_confirmarTransferencia332(opcoes) {
       const chave=QC_chaveMovV2370(QC_TX_V2_370);
       const anterior=await QC_lerMovV2370(chave,senha,'TX');
       if (anterior) return await QC_enviarV2370(anterior,senha,sessao);
-      if (localStorage.getItem(CHAVE_TX275+sessao.id))
-        throw Error('Transferencia V1 anterior pendente. Recupere antes de continuar.');
       const valor=Number(valorSolicitado);
       if (!Number.isSafeInteger(valor)||valor<2||valor===3||valor>10000)
         throw Error('Informe valor inteiro a partir de 2 Qc$, exceto 3.');
@@ -2495,13 +2396,12 @@ function QC_confirmarTransferencia332(opcoes) {
   };
   window.QC_transferenciaPendente275=function() {
     const {id}=dadosDaSessao();
-    return !!(id&&(localStorage.getItem(QC_TX_V2_370+id)||
-      (QC_v1TXPendente370&&QC_v1TXPendente370())));
+    return !!(id&&localStorage.getItem(QC_TX_V2_370+id));
   };
   window.QC_transferirConsultar275=async function() {
     const sessao=dadosDaSessao();
     if (!sessao.id||!localStorage.getItem(QC_TX_V2_370+sessao.id))
-      return QC_v1TransferirConsultar370();
+      return {status:'NAO_ENCONTRADO'};
     const senha=await obterSenha265();
     if (!senha) return {status:'CANCELADO'};
     const chave=QC_chaveMovV2370(QC_TX_V2_370),
@@ -2537,16 +2437,15 @@ function QC_confirmarTransferencia332(opcoes) {
   }
   window.QC_resgatePendente275=function() {
     const {id}=dadosDaSessao();
-    return !!(id&&(localStorage.getItem(QC_RX_V2_370+id)||
-      (QC_v1RXPendente370&&QC_v1RXPendente370())));
+    return !!(id&&localStorage.getItem(QC_RX_V2_370+id));
   };
   window.QC_transferirResgatar275=async function(codigoLido) {
     const texto=String(codigoLido||'').trim();
     const sessao=dadosDaSessao(),
       rxChave=sessao.id?QC_RX_V2_370+sessao.id:null;
-    if (!rxChave||(!QC_CODIGO_V2_370.test(texto)&&
-        !localStorage.getItem(rxChave)))
-      return QC_v1TransferirResgatar370(codigoLido);
+    if (!rxChave) throw Error('Entre na carteira para receber.');
+    if (!QC_CODIGO_V2_370.test(texto)&&!localStorage.getItem(rxChave))
+      throw Error('Codigo de transferencia nao reconhecido.');
     if (QC_movV2Ocupado370) throw Error('Outra movimentacao V2 em andamento.');
     QC_movV2Ocupado370=true;
     try {
@@ -2565,8 +2464,6 @@ function QC_confirmarTransferencia332(opcoes) {
       }
       const match=QC_CODIGO_V2_370.exec(texto);
       if (!match) throw Error('Codigo de transferencia V2 invalido.');
-      if (localStorage.getItem(CHAVE_RX275+sessao.id))
-        throw Error('Recebimento V1 pendente. Recupere antes de continuar.');
       await QC_liberacaoV2370('transferencias');
       const id=match[1].toLowerCase(),codigo=match[2].toLowerCase();
       const consulta=await QC_postAnonimo271('qc_transferir_v2_consultar',{
@@ -2684,19 +2581,16 @@ function QC_confirmarTransferencia332(opcoes) {
     } finally {QC_movV2Ocupado370=false;}
   };
   window.QC_meusResgates278=async function() {
-    const [v1,v2]=await Promise.all([
-      QC_v1MeusResgates370(),QC_postResgate278('qc_resgate_v2_meus')
-    ]);
-    if (v2.status!=='OK'||!Array.isArray(v2.pedidos))
-      throw Error('Consulta de resgates V2 indisponivel.');
-    return v1.map(p=>({...p,versao:'V1'})).concat(v2.pedidos.map(p=>({
-      ...p,versao:'V2',
+    const r=await QC_postResgate278('qc_resgate_v2_meus');
+    if (r.status!=='OK'||!Array.isArray(r.pedidos))
+      throw Error('Consulta de resgates indisponivel.');
+    return r.pedidos.map(p=>({...p,
       possuiRecuperacaoLocal:!!localStorage.getItem(QC_chaveResgateV2370(p.idResgate))
-    })));
+    }));
   };
   window.QC_retomarResgate278=async function(id) {
     const chave=QC_chaveResgateV2370(id);
-    if (!localStorage.getItem(chave)) return QC_v1RetomarResgate370(id);
+    if (!localStorage.getItem(chave)) throw Error('Solicitacao nao encontrada nesta carteira.');
     const sessao=dadosDaSessao(),senha=await obterSenha265();
     if (!senha) return {status:'CANCELADO_PELO_USUARIO'};
     const op=await QC_lerMovV2370(chave,senha,'RS');
@@ -2704,7 +2598,7 @@ function QC_confirmarTransferencia332(opcoes) {
   };
   window.QC_pedirCancelamentoResgate278=async function(id) {
     if (!localStorage.getItem(QC_chaveResgateV2370(id)))
-      return QC_v1CancelarResgate370(id);
+      throw Error('Solicitacao nao encontrada nesta carteira.');
     const r=await QC_postResgate278('qc_resgate_v2_pedir_cancelamento',{
       idResgate:id});
     if (!['CANCELAMENTO_SOLICITADO','PENDENTE'].includes(r.status))
@@ -2714,8 +2608,8 @@ function QC_confirmarTransferencia332(opcoes) {
   window.QC_resgatesSemConfirmacaoLocal278=function() {
     const sessao=dadosDaSessao();
     const prefixo=QC_RS_V2_370+sessao.id+'_';
-    return QC_v1PendenciasResgate370() + (sessao.id ?
-      Object.keys(localStorage).filter(k=>k.startsWith(prefixo)).length:0);
+    return sessao.id ?
+      Object.keys(localStorage).filter(k=>k.startsWith(prefixo)).length:0;
   };
 
   const painel = document.createElement("section");
@@ -2824,11 +2718,14 @@ function QC_confirmarTransferencia332(opcoes) {
   const resumo = document.createElement("summary");
   resumo.textContent = "Segurança e recuperação";
   resumo.style.cssText = "cursor:pointer;font-size:14px;opacity:.9";
-  detalhes.append(
-    resumo, backup,
-    restaurarBackup253, arquivoRestaurar253,
-    aviso
-  );
+  detalhes.append(resumo,backup,restaurarBackup253,arquivoRestaurar253,aviso);
+  // Os controles antigos importam/exportam apenas fichas de teste.
+  // Desabilitar ate integrar backup das fichas da operacao atual.
+  backup.hidden=true;
+  backup.disabled=true;
+  restaurarBackup253.hidden=true;
+  restaurarBackup253.disabled=true;
+  detalhes.hidden=true;
   titulo.textContent = "Meu saldo";
   conferir.textContent = "Atualizar saldo";
   // Saldo principal ja mostra a verificacao automatica.
@@ -2872,101 +2769,42 @@ function QC_confirmarTransferencia332(opcoes) {
     gavetaPedidos.append(abrirPedidos, pedidos);
   }
 
+  // PASSO 372: somente fichas da geracao operacional ativa entram no saldo.
+  // O marco do corte eh validado NO SERVIDOR antes de exibir 0,00 ou credito.
   const QC_conferirSaldo291 = async () => {
-    const iniciado343=performance.now();
-    const {id, token}=dadosDaSessao();
+    const {id,token}=dadosDaSessao();
     const segredo=await obterSenha265();
-    if (!id || !token) {
-      aviso.textContent="Entre na carteira primeiro.";
-      return;
-    }
-    if (!segredo) {
-      aviso.textContent="Digite a senha usada para proteger a ficha.";
-      return;
-    }
+    if (!id||!token||!segredo) throw Error('Entre na carteira para conferir o saldo.');
     conferir.disabled=true;
-    aviso.textContent="Desbloqueando e verificando assinaturas...";
+    memoriaV2365=null;
+    renderizar();
+    aviso.textContent='Conferindo saldo...';
     try {
-      if(!crypto.subtle) throw Error("Criptografia indisponível.");
-      const conteudoOriginal=localStorage.getItem(chaveLocal());
-      const registros=Object.entries(lerRegistros());
-      const mensagens=new Set();
-      const chaves=new Map();
-      const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
-      const resultados=await QC_emParalelo343(registros,
-          async ([chaveLocalRegistro,registro])=>{
-        const ficha=await abrir(registro,segredo);
-        const valor=ficha?.valor;
-        if(!ficha || ficha.formato!=="QC_FICHA_ASSINADA_V1" ||
-           ![2,5,10].includes(valor) ||
-           ficha.idChave!=="QC-"+valor+"-V1" ||
-           !/^[0-9a-f]{1024}$/i.test(ficha.assinaturaHex||"")) {
-          throw Error("Ficha assinada com estrutura invalida.");
-        }
-        const mensagemHex=String(ficha.mensagemHex||"").toLowerCase();
-        const msg=deHex(mensagemHex);
-        if(msg.length<80) throw Error("Mensagem da ficha incompleta.");
-        const texto=new TextDecoder("utf-8",{fatal:true}).decode(msg.subarray(32));
-        const partes=texto.split("|");
-        if(partes.length!==5 || partes[0]!=="QUINTOSCOIN" ||
-           partes[1]!=="V1" || partes[2]!==String(valor) ||
-           partes[3]!==ficha.idChave || !uuid.test(partes[4])) {
-          throw Error("Conteudo da ficha invalido.");
-        }
-        if(mensagens.has(mensagemHex))
-          throw Error("Ficha duplicada no armazenamento.");
-        mensagens.add(mensagemHex);
-        if(!chaves.has(valor)) chaves.set(valor,QC_publica271(valor));
-        const pub=await chaves.get(valor);
-        if(!(await crypto.subtle.verify({name:"RSA-PSS",saltLength:48},
-              pub.verify,deHex(ficha.assinaturaHex),msg))) {
-          throw Error("Assinatura de ficha de "+valor+" QC nao verificada.");
-        }
-        return {valor,idChave:ficha.idChave,
-          chaveLocalRegistro,mensagemHex:ficha.mensagemHex,
-          assinaturaHex:ficha.assinaturaHex};
+      const r=await fetch(QC_URL_191,{
+        method:'POST',redirect:'follow',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify({acao:'qc_estado_somente_v2_372',tokenSessao:token})
       });
-      const situacoes=await consultarFichasLote361(resultados);
-      const agora=dadosDaSessao();
-      if(agora.id!==id || agora.token!==token ||
-         localStorage.getItem(chaveLocal())!==conteudoOriginal) {
-        throw Error("Carteira alterada durante a conferencia. Verifique novamente.");
-      }
-      const disponiveis=resultados.filter((_,i)=>situacoes[i]==="DISPONIVEL");
-      const fichas=disponiveis.map(r=>({valor:r.valor,idChave:r.idChave}));
-      const gastas=resultados.length-disponiveis.length;
-      cacheFichasConferidas343={id,token,conteudo:conteudoOriginal,
-        fichas:disponiveis.map(r=>({chaveLocalRegistro:r.chaveLocalRegistro,
-          valor:r.valor,mensagemHex:r.mensagemHex,
-          assinaturaHex:r.assinaturaHex}))};
-      memoria={id,token,fichas,gastas,
-        total:fichas.reduce((soma,ficha)=>soma+ficha.valor,0)};
+      if (!r.ok) throw Error('Servidor de saldo indisponivel.');
+      const estado=await r.json();
+      if (estado?.status!=='OK'||estado.geracao!=='V2'||
+          estado.corteConfirmado!==true)
+        throw Error('Saldo operacional nao foi liberado pelo servidor.');
+      if (dadosDaSessao().id!==id||dadosDaSessao().token!==token)
+        throw Error('Sessao alterada durante a conferencia.');
       memorizarSenha265(segredo,{id,token});
+      await QC_conferirV2365(id,token,segredo);
+      if (!memoriaV2365||memoriaV2365.id!==id||memoriaV2365.token!==token||
+          memoriaV2365.erro||!Array.isArray(memoriaV2365.fichas))
+        throw Error('Nao foi possivel conferir as fichas.');
       renderizar();
-      // V1 ja foi renderizado; V2 so consulta se existem fichas locais.
-      // Em falha, V2 permanece bloqueada e nao impacta o saldo V1.
-      await QC_conferirV2365(id, token, segredo);
-      const sessaoFinal365 = dadosDaSessao();
-      if (sessaoFinal365.id !== id || sessaoFinal365.token !== token) {
-        throw Error("Sessao alterada durante a conferencia.");
-      }
-      const duracao=Math.round(performance.now()-iniciado343);
-      console.info("QC_PERF343 saldo concluído em "+duracao+" ms; fichas="+registros.length);
-      aviso.textContent="✅ Saldo disponivel: "+memoria.total+
-        " QC em "+fichas.length+" ficha(s). "+gastas+
-        " ficha(s) ja gastas foram excluidas do saldo.";
+      aviso.textContent='✅ Saldo atualizado.';
     } catch(erro) {
-      cacheFichasConferidas343=null;
-      memoria=null;
       memoriaV2365=null;
       renderizar();
-      console.warn("QC_PERF343 saldo falhou após "+
-        Math.round(performance.now()-iniciado343)+" ms");
-      aviso.textContent="⚠️ "+erro.message;
+      aviso.textContent='⚠️ '+String(erro.message||erro);
       throw erro;
-    } finally {
-      conferir.disabled=false;
-    }
+    } finally {conferir.disabled=false;}
   };
   conferir.addEventListener("click", () => {
     QC_conferirSaldo291().catch(erro => {
