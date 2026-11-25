@@ -496,6 +496,24 @@ qcEstiloReceber300.textContent = `
   #telaCarteira #btnReceber .qc-indicador-receber300[hidden] {
     display:none!important;
   }
+  /* PASSO 391: o indicador sobrevive aos icones reescritos na montagem. */
+  #telaCarteira #btnReceber .qc-indicador-receber300{display:none!important}
+  #telaCarteira #btnReceber.qc-receber-pendente391::after,
+  #telaCarteira #btnReceber.qc-receber-liberado391::after {
+    content:""!important;display:block!important;position:absolute!important;
+    width:12px!important;height:12px!important;min-width:12px!important;
+    min-height:12px!important;top:4px!important;right:4px!important;
+    left:auto!important;bottom:auto!important;border-radius:50%!important;
+    border:1px solid #15243b!important;z-index:5!important;
+    pointer-events:none!important;opacity:1!important;visibility:visible!important;
+    transform:none!important;
+  }
+  #telaCarteira #btnReceber.qc-receber-pendente391::after{
+    background:#ffd04f!important;box-shadow:0 0 0 1px #ffd04f88!important;
+  }
+  #telaCarteira #btnReceber.qc-receber-liberado391::after{
+    background:#2ecc71!important;box-shadow:0 0 0 1px #2ecc7188!important;
+  }
 `;
 document.head.appendChild(qcEstiloReceber300);
 let qcSequenciaIndicadorReceber300 = 0;
@@ -517,39 +535,57 @@ function QC_contarDisponiveis300(pedidos) {
   }
   return quantidade;
 }
-function QC_mostrarIndicadorReceber300(quantidade) {
-  const n = Number(quantidade) || 0;
-  qcIndicadorReceber300.hidden = n < 1;
-  qcIndicadorReceber300.classList.toggle("qc-com-numero300", n > 1);
-  qcIndicadorReceber300.textContent = n > 1 ? String(n > 99 ? "99+" : n) : "";
-  qcBtnReceber.setAttribute("aria-label", n > 0
-    ? "Receber Qc$ — " + n + " recebimento(s) disponivel(is)"
-    : "Receber Qc$");
-  qcIndicadorReceber300.title = n > 0
-    ? n + " recebimento(s) disponivel(is)" : "";
+// PASSO 391 - amarelo: solicitação registrada aguardando o tesoureiro;
+// verde: emissão autorizada e realmente disponível para ser recebida.
+// Uma resposta de rede inválida nunca é interpretada como autorização.
+function QC_mostrarIndicadorReceber300(quantidade, pendentes = 0) {
+  const liberados = Math.max(0, Number(quantidade) || 0);
+  const aguardando = Math.max(0, Number(pendentes) || 0);
+  const verde = liberados > 0;
+  const amarelo = !verde && aguardando > 0;
+  qcIndicadorReceber300.hidden = !verde && !amarelo;
+  qcIndicadorReceber300.textContent = "";
+  qcBtnReceber.classList.toggle("qc-receber-liberado391", verde);
+  qcBtnReceber.classList.toggle("qc-receber-pendente391", amarelo);
+  const descricao = verde
+    ? "Receber Qc$ — " + liberados + " emissão(ões) liberada(s) pelo tesoureiro"
+    : amarelo
+      ? "Receber Qc$ — " + aguardando + " solicitação(ões) aguardando autorização"
+      : "Receber Qc$";
+  qcBtnReceber.setAttribute("aria-label", descricao);
+  qcBtnReceber.title = verde ? "Qc$ liberados para receber" :
+    amarelo ? "Pedido aguardando tesoureiro" : "";
 }
 async function QC_atualizarIndicadorReceber300(pedidosConsultados) {
   const atual = ++qcSequenciaIndicadorReceber300;
   const token = sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
-  if (!token) { QC_mostrarIndicadorReceber300(0); return; }
+  const id = localStorage.getItem("QC_ID_CARTEIRA");
+  if (!token || !id) {QC_mostrarIndicadorReceber300(0,0);return;}
   try {
     const dados = pedidosConsultados
       ? {status:"OK", solicitacoes:pedidosConsultados}
       : await QC_post191("qc_pedidos_receber_296");
     if (atual !== qcSequenciaIndicadorReceber300 ||
-        token !== sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")) return;
-    if (dados?.status !== "OK" || !Array.isArray(dados.solicitacoes)) {
-      QC_mostrarIndicadorReceber300(0);
-      return;
-    }
-    QC_mostrarIndicadorReceber300(QC_contarDisponiveis300(
-      dados.solicitacoes.filter(p=>!p.idEmissao||p.versaoEmissao==='V2')));
+        token !== sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") ||
+        id !== localStorage.getItem("QC_ID_CARTEIRA")) return;
+    if (dados?.status !== "OK" || !Array.isArray(dados.solicitacoes)) return;
+    const pedidos = dados.solicitacoes.filter(p=>
+      !p.idEmissao || p.versaoEmissao==='V2');
+    const liberados = QC_contarDisponiveis300(pedidos);
+    const pendentes = pedidos.filter(p=>p.status==="PENDENTE").length;
+    QC_mostrarIndicadorReceber300(liberados,pendentes);
   } catch (_) {
-    // Uma falha de comunicacao nao significa que haja novos creditos.
-    if (atual === qcSequenciaIndicadorReceber300) QC_mostrarIndicadorReceber300(0);
+    // Preservar último estado validado, sem inventar autorização por falha de rede.
   }
 }
 window.QC_atualizarIndicadorReceber300 = QC_atualizarIndicadorReceber300;
+// A autorização acontece na carteira do tesoureiro. Ao voltar ao app,
+// consultar a situação pelo servidor, sem mexer nas fichas.
+document.addEventListener("visibilitychange",()=>{
+  if(!document.hidden && sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE"))
+    void QC_atualizarIndicadorReceber300();
+});
+
 
 // PASSO 300 - Confirmacao curta, no proprio modal, somente apos
 // todas as fichas terem sido salvas e verificadas e o saldo atualizado.
@@ -915,6 +951,7 @@ async function QC_cancelarPedidoPix341(idAutorizacao, quantidade, botao) {
         "Pedido não cancelado: " + String(retorno?.status||"resposta desconhecida"));
     }
     // A lista sempre é consultada novamente; não se cria nova emissão.
+    void QC_atualizarIndicadorReceber300();
     await QC_carregarPedidosReceber295();
     if(qcModalReceber.style.display==="flex" &&
        qcPedidosReceber295.style.display==="block") {
@@ -1076,6 +1113,11 @@ document.getElementById("qcConfirmarReceber")
       QC_exibirConfirmacaoReceber(quantidade,{
         idAutorizacao:String(resultado.idAutorizacao||"").trim()
       });
+      // Pedido confirmado como PENDENTE pelo servidor: sinalização imediata.
+      // A consulta posterior concilia este estado com outros pedidos liberados.
+      qcSequenciaIndicadorReceber300++;
+      QC_mostrarIndicadorReceber300(0,1);
+      void QC_atualizarIndicadorReceber300();
 
 
     } catch (erro) {
@@ -4691,7 +4733,8 @@ function QC_confirmarPagamentoPedido(nome, valor) {
           throw Error('Nao foi possivel conferir o limite para resgate.');
       }
       maximoResgate333=saldo;
-      maximoVisivel333.textContent="Qc$ "+saldo.toLocaleString("pt-BR");
+      maximoVisivel333.textContent="Qc$ "+saldo.toLocaleString("pt-BR",{
+        minimumFractionDigits:2,maximumFractionDigits:2});
       notaMaximo333.textContent=saldo===0
         ? "Nenhuma ficha disponível para resgate."
         : "Limite baseado nas fichas verificadas. O servidor confirma a disponibilidade ao solicitar.";
@@ -4996,10 +5039,26 @@ function QC_confirmarPagamentoPedido(nome, valor) {
           "Os Qc$ permanecem reservados.";
         campo.value="";campoPix.value="";
         maximoResgate333=null;
-        maximoVisivel333.textContent="Rever saldo";
+        maximoVisivel333.textContent="Conferindo saldo...";
         notaMaximo333.textContent=
-          "As fichas solicitadas permanecem reservadas. Confira novamente o saldo disponível.";
+          "Conferindo no servidor as fichas restantes, sem repetir o resgate.";
         campo.removeAttribute("max");
+        // A reserva foi confirmada: recalcular somente a partir das fichas
+        // verificadas no servidor (nunca simplesmente subtrair o pedido).
+        try {
+          if(typeof window.QC_atualizarSaldoReal202!=="function")
+            throw Error("Conferência de saldo indisponível.");
+          await window.QC_atualizarSaldoReal202();
+          if(sessao336.token!==sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") ||
+             sessao336.id!==localStorage.getItem("QC_ID_CARTEIRA"))
+            throw Error("A carteira mudou durante a conferência.");
+          atualizarMaximoResgate333();
+          saldoARever335=false;
+        } catch(erroSaldo) {
+          maximoVisivel333.textContent="Saldo não conferido";
+          notaMaximo333.textContent="O resgate já está registrado. " +
+            "Não solicite outro até conferir o saldo na carteira.";
+        }
         await atualizarMeus();
       } else {
         status.textContent=r.mensagem||"Operação ainda em andamento; não solicite outro resgate. Retome o mesmo pedido.";
