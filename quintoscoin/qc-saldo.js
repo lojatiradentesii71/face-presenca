@@ -2123,9 +2123,11 @@ function QC_confirmarTransferencia332(opcoes) {
   // Passo 334 - Chave Pix validada localmente, guardada somente no
   // material cifrado da operacao e enviada pelo token autenticado.
   function QC_pixNormalizar334(bruto) {
-    if(typeof bruto!=="string") throw Error("Informe a chave Pix.");
+    if(typeof bruto!=="string") throw Error("Chave Pix invalida.");
     let chave=bruto.trim();
-    if(!chave || chave.length>90 || /[\r\n<>]/.test(chave)) {
+    // PASSO 386 — Pix opcional, sem abrir mão da validação de uma chave informada.
+    if(!chave) return "";
+    if(chave.length>90 || /[\r\n<>]/.test(chave)) {
       throw Error("Informe uma chave Pix valida.");
     }
     if(/^[\d.\-/\s]+$/.test(chave)) chave=chave.replace(/[^0-9]/g,"");
@@ -2548,7 +2550,7 @@ function QC_confirmarTransferencia332(opcoes) {
       return {status:'CONFIRMADO',valor:op.valorResgate};
     }
     return {status:'PENDENTE',valor:op.valorResgate,situacao:r.status,
-      pixRegistrado:true};
+      pixRegistrado:!!op.chavePix};
   }
   window.QC_solicitarResgate278=async function(valor,chavePix) {
     if (!QC_fichasDisponiveisV2370())
@@ -2572,7 +2574,8 @@ function QC_confirmarTransferencia332(opcoes) {
       await QC_liberacaoV2370('resgates');
       const confirmou=await QC_confirmarTransferencia332({
         titulo:'Confirmar resgate V2',destaque:QC_formatoValor291(valorN),
-        linhas:['Chave Pix: '+pix,
+        linhas:[pix ? 'Chave Pix informada: '+pix :
+            'Sem chave Pix. Combine o pagamento fora do aplicativo.',
           'Somente o tesoureiro confirmara o pagamento.',
           'As fichas ficam reservadas ate a conclusao ou cancelamento autorizado.'],
         rotulo:'Solicitar resgate'
