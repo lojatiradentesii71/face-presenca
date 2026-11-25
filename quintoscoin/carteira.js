@@ -2479,6 +2479,7 @@ if (localStorage.getItem(QC_ID_LOCAL)) {
 function QC_exibirTelaAcesso() {
   qcSequenciaIndicadorReceber300++;
   QC_mostrarIndicadorReceber300(0);
+  if(window.QC_limparIndicadorResgate386)window.QC_limparIndicadorResgate386();
 
   document.getElementById("telaAcesso")
     .style.display = "block";
@@ -2510,6 +2511,8 @@ function QC_exibirTelaCarteira() {
     QC_atualizarTela();
   // Sinalizar valores autorizados assim que entrar na carteira.
   QC_atualizarIndicadorReceber300();
+  if(window.QC_atualizarIndicadorResgate386)
+    void window.QC_atualizarIndicadorResgate386();
 
   // Consultar se esta carteira pertence ao tesoureiro.
   QC_atualizarAreaTesoureiro();
@@ -4440,6 +4443,64 @@ function QC_confirmarPagamentoPedido(nome, valor) {
   resgatar.disabled=true;
   acoes.appendChild(resgatar);
 
+  // PASSO 386 — Bolinha amarela de resgates: pedidos em aberto no servidor
+  // ou operações locais protegidas ainda aguardando recuperação.
+  // Não movimenta fichas e não confirma pagamentos.
+  const indicadorResgate386=document.createElement("span");
+  indicadorResgate386.id="qcIndicadorResgate386";
+  indicadorResgate386.className="qc-indicador-resgate386";
+  indicadorResgate386.setAttribute("aria-hidden","true");
+  indicadorResgate386.hidden=true;
+  resgatar.appendChild(indicadorResgate386);
+  let sequenciaIndicadorResgate386=0;
+  function mostrarIndicadorResgate386(n){
+    const quantidade=Math.max(0,Number(n)||0);
+    indicadorResgate386.hidden=quantidade<1;
+    indicadorResgate386.classList.toggle("qc-com-numero386",quantidade>1);
+    indicadorResgate386.textContent=quantidade>1 ? String(Math.min(99,quantidade))+(quantidade>99?"+":"") : "";
+    const descricao=quantidade>0
+      ? "Resgatar Qc$ — "+quantidade+" pendência(s) para acompanhar"
+      : "Resgatar Qc$";
+    resgatar.setAttribute("aria-label",descricao);
+    indicadorResgate386.title=quantidade>0 ? "Resgates a acompanhar: "+quantidade : "";
+  }
+  async function atualizarIndicadorResgate386(pedidosInformados){
+    const atual=++sequenciaIndicadorResgate386;
+    const token=sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
+    const id=localStorage.getItem("QC_ID_CARTEIRA");
+    if(!token||!id){mostrarIndicadorResgate386(0);return;}
+    // Preservar o aviso de uma solicitação guardada no aparelho, mesmo
+    // se a conexão estiver fora do ar. A listagem inclui pedidos locais
+    // que ainda não foram gravados no servidor (Passo 385).
+    let locais=0;
+    try {locais=typeof window.QC_resgatesSemConfirmacaoLocal278==="function"
+      ? window.QC_resgatesSemConfirmacaoLocal278():0;} catch(_) {}
+    mostrarIndicadorResgate386(locais);
+    try {
+      const pedidos=Array.isArray(pedidosInformados) ? pedidosInformados :
+        await window.QC_meusResgates278();
+      if(atual!==sequenciaIndicadorResgate386||
+         token!==sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")||
+         id!==localStorage.getItem("QC_ID_CARTEIRA"))return;
+      if(!Array.isArray(pedidos))return;
+      const ids=new Set();
+      for(const p of pedidos){
+        const estado=String(p?.status||"").trim().toUpperCase();
+        if(!estado || (estado==="CONFIRMADO"||estado==="CANCELADO") &&
+           !p?.possuiRecuperacaoLocal)continue;
+        ids.add(String(p.idResgate||""));
+      }
+      mostrarIndicadorResgate386(Math.max(locais,ids.size));
+    }catch(_){
+      // Uma falha de consulta não transforma um pedido local em inexistente.
+    }
+  }
+  window.QC_atualizarIndicadorResgate386=atualizarIndicadorResgate386;
+  window.QC_limparIndicadorResgate386=function(){
+    sequenciaIndicadorResgate386++;
+    mostrarIndicadorResgate386(0);
+  };
+
   // Layout simplificado: Doar tem prioridade visual.
   const estilo=document.createElement("style");
   estilo.textContent=`
@@ -4448,7 +4509,36 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     #telaCarteira #btnDoar {grid-column:1/-1;grid-row:1;background:#168055!important;color:white!important;border:1px solid #2c9b71!important;font-size:20px!important;font-weight:750;padding:20px 12px;box-shadow:0 7px 18px #0002}
     #telaCarteira #btnReceber {grid-column:1;grid-row:2}
     #telaCarteira #btnTransferir {grid-column:2;grid-row:2}
-    #telaCarteira #btnResgatar {grid-column:3;grid-row:2}
+    #telaCarteira #btnResgatar {grid-column:3;grid-row:2;position:relative}
+    #telaCarteira #btnResgatar .qc-indicador-resgate386 {
+      position:absolute;top:5px;right:5px;min-width:10px;height:10px;
+      box-sizing:border-box;border-radius:20px;background:#ffd04f;
+      border:1px solid #15243b;box-shadow:0 0 0 1px #ffd04f66;
+      color:#18243a;font-size:10px;font-weight:800;line-height:16px;
+      text-align:center;padding:0;pointer-events:none
+    }
+    #telaCarteira #btnResgatar .qc-indicador-resgate386.qc-com-numero386 {
+      min-width:19px;height:19px;top:3px;right:3px;line-height:17px;padding:0 3px
+    }
+    #telaCarteira #btnResgatar .qc-indicador-resgate386[hidden] {display:none!important}
+    /* PASSO 386 — A janela inteira cabe na área visível no Android.
+       A barra superior/inferior do navegador e o teclado mudam a altura dinâmica. */
+    #qcModalResgate278 {
+      box-sizing:border-box;padding:12px;
+      padding-top:max(12px,env(safe-area-inset-top));
+      padding-bottom:max(12px,env(safe-area-inset-bottom));
+      align-items:center;justify-content:center;
+    }
+    #qcModalResgate278 > .qc-modal-card {
+      box-sizing:border-box;min-height:0;flex:0 1 auto;
+      width:100%;max-width:440px;
+      max-height:calc(100vh - 24px);
+      max-height:calc(100dvh - 24px);
+      overflow-y:auto;overflow-x:hidden;
+      overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
+      touch-action:pan-y;
+    }
+    #qcModalResgate278 #qcListaMeusResgates278 {overflow-wrap:anywhere}
     #qcModalResgate278 [hidden], #qcAreaResgatesTesoureiro278 [hidden] {display:none!important}
     .qc-resgate-linha278 {border:1px solid #ffffff28;border-radius:10px;margin:10px 0;padding:11px}
     .qc-resgate-linha278 p {margin:5px 0;font-size:13px;overflow-wrap:anywhere}
@@ -4482,12 +4572,12 @@ function QC_confirmarPagamentoPedido(nome, valor) {
       <label for="qcValorResgate278" class="qc-label-modal">Valor em QC</label>
       <input id="qcValorResgate278" class="qc-input-modal" type="number" min="1" step="1"
         inputmode="numeric" placeholder="Exemplo: 20">
-      <label for="qcChavePixResgate334" class="qc-label-modal qc-campo-pix334">Sua chave Pix para receber o pagamento
+      <label for="qcChavePixResgate334" class="qc-label-modal qc-campo-pix334">Sua chave Pix para receber o pagamento (opcional)
         <input id="qcChavePixResgate334" class="qc-input-modal" type="text" inputmode="email"
           autocomplete="off" autocapitalize="off" spellcheck="false"
-          maxlength="90" placeholder="CPF, e-mail, celular ou chave aleatória" required>
+          maxlength="90" placeholder="Opcional: CPF, e-mail, celular ou chave aleatória">
       </label>
-      <p id="qcAjudaPix334">A chave será enviada somente ao tesoureiro para realizar o pagamento. Confira-a antes de solicitar.</p>
+      <p id="qcAjudaPix334">A chave Pix é opcional. Se informada, será enviada somente ao tesoureiro. O pagamento, por Pix ou outro meio, será combinado fora do aplicativo.</p>
       <div class="qc-modal-botoes">
         <button id="qcSolicitarResgate278" type="button" class="qc-btn-modal-principal">Solicitar resgate</button>
         <button id="qcCancelarTelaResgate278" type="button" class="qc-btn-modal-secundario">Voltar</button>
@@ -4587,6 +4677,7 @@ function QC_confirmarPagamentoPedido(nome, valor) {
   }
   function fechar() {
     if(ocupado)return;
+    void atualizarIndicadorResgate386();
     pararObservacaoSaldo333();
     modal.style.display="none";
     // O mesmo caminho é usado por Voltar, X e toque fora da janela.
@@ -4628,6 +4719,7 @@ function QC_confirmarPagamentoPedido(nome, valor) {
       lista.textContent="Atualize a pagina para carregar os resgates.";return;
     }
     const pedidos=await window.QC_meusResgates278();
+    void atualizarIndicadorResgate386(pedidos);
     lista.replaceChildren();
     if(!pedidos.length){lista.textContent="Nenhum resgate solicitado.";return;}
     pedidos.forEach(p=>{
@@ -4792,6 +4884,9 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     if(!sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")) return;
     status.textContent="";campo.value="";campoPix.value="";modal.style.display="flex";
     saldoARever335=false;
+    const cartaoResgate386=modal.querySelector(".qc-modal-card");
+    if(cartaoResgate386)cartaoResgate386.scrollTop=0;
+    void atualizarIndicadorResgate386();
     atualizarMaximoResgate333();
     // Se o saldo terminar de carregar enquanto a janela está aberta,
     // atualizamos o valor exibido, sem recarregar o navegador.
@@ -4814,7 +4909,6 @@ function QC_confirmarPagamentoPedido(nome, valor) {
       status.textContent="Informe um valor inteiro de pelo menos 1 Qc$.";return;
     }
     const chavePix=campoPix.value.trim();
-    if(!chavePix) {status.textContent="Informe sua chave Pix antes de solicitar o resgate.";campoPix.focus();return;}
     atualizarMaximoResgate333();
     if(maximoResgate333!==null && valor>maximoResgate333) {
       status.textContent="O valor informado supera o saldo disponível para resgate.";return;
@@ -4863,8 +4957,9 @@ function QC_confirmarPagamentoPedido(nome, valor) {
       saldoARever335=true;
       const r=await window.QC_solicitarResgate278(valor,chavePix);
       if(r.status==="CANCELADO_PELO_USUARIO") status.textContent="Operacao cancelada.";
-      else if(r.status==="PENDENTE" && r.situacao && r.pixRegistrado===true){
-        status.textContent="✅ Resgate e chave Pix registrados. Aguarde o pagamento do tesoureiro. " +
+      else if(r.status==="PENDENTE" && r.situacao){
+        status.textContent="✅ Resgate registrado. Aguarde o tesoureiro. " +
+          (chavePix ? "A chave Pix foi informada. " : "Pagamento combinado fora do aplicativo. ")+
           "Os Qc$ permanecem reservados.";
         campo.value="";campoPix.value="";
         maximoResgate333=null;
@@ -5089,6 +5184,10 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     botao.innerHTML=svg+'<span>'+rotulos[id]+'</span>';
     // O icone do botao e gerado no final do script: preservar o indicador.
     if (id === "btnReceber") botao.appendChild(qcIndicadorReceber300);
+    if (id === "btnResgatar") {
+      const indicador=document.getElementById("qcIndicadorResgate386");
+      if(indicador)botao.appendChild(indicador);
+    }
     botao.setAttribute('aria-label',rotulos[id]);
   }
   const estilo=document.createElement('style');
