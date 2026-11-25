@@ -4456,6 +4456,10 @@ function QC_confirmarPagamentoPedido(nome, valor) {
   function mostrarIndicadorResgate386(n){
     const quantidade=Math.max(0,Number(n)||0);
     indicadorResgate386.hidden=quantidade<1;
+    // PASSO 387: desenhar o alerta diretamente no botão, por ::after.
+    // A classe permanece mesmo quando o conteúdo interno é recriado
+    // pela rotina que acrescenta ícones nos botões da carteira.
+    resgatar.classList.toggle("qc-resgate-pendente387",quantidade>0);
     indicadorResgate386.classList.toggle("qc-com-numero386",quantidade>1);
     indicadorResgate386.textContent=quantidade>1 ? String(Math.min(99,quantidade))+(quantidade>99?"+":"") : "";
     const descricao=quantidade>0
@@ -4496,6 +4500,14 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     }
   }
   window.QC_atualizarIndicadorResgate386=atualizarIndicadorResgate386;
+  // PASSO 387: ao voltar para a aba, conciliar o estado com o servidor.
+  // Apenas leitura; nenhum resgate, pagamento ou movimento de fichas.
+  document.addEventListener("visibilitychange",()=>{
+    if(!document.hidden && sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") &&
+       document.getElementById("telaCarteira")?.style.display!=="none") {
+      void atualizarIndicadorResgate386();
+    }
+  });
   window.QC_limparIndicadorResgate386=function(){
     sequenciaIndicadorResgate386++;
     mostrarIndicadorResgate386(0);
@@ -4521,6 +4533,27 @@ function QC_confirmarPagamentoPedido(nome, valor) {
       min-width:19px;height:19px;top:3px;right:3px;line-height:17px;padding:0 3px
     }
     #telaCarteira #btnResgatar .qc-indicador-resgate386[hidden] {display:none!important}
+    /* PASSO 387: bolinha associada ao proprio botao.
+       Nao depende de span, icone, texto ou ordem de insercao dos filhos. */
+    #telaCarteira #btnResgatar .qc-indicador-resgate386 {display:none!important}
+    #telaCarteira #btnResgatar.qc-resgate-pendente387::after {
+      content:""!important;
+      position:absolute!important;
+      display:block!important;
+      box-sizing:border-box!important;
+      width:12px!important;height:12px!important;
+      min-width:12px!important;min-height:12px!important;
+      top:4px!important;right:4px!important;left:auto!important;bottom:auto!important;
+      border-radius:50%!important;
+      background:#ffd04f!important;
+      border:1px solid #15243b!important;
+      box-shadow:0 0 0 1px #ffd04f88!important;
+      z-index:5!important;
+      pointer-events:none!important;
+      opacity:1!important;
+      visibility:visible!important;
+      transform:none!important;
+    }
     /* PASSO 386 — A janela inteira cabe na área visível no Android.
        A barra superior/inferior do navegador e o teclado mudam a altura dinâmica. */
     #qcModalResgate278 {
