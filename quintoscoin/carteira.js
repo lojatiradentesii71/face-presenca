@@ -4603,6 +4603,7 @@ function QC_confirmarPagamentoPedido(nome, valor) {
   }
   function rotuloEstado(st) {
     return ({PENDENTE:"Aguardando tesoureiro",
+      PREPARADO_LOCAL:"Protegido no aparelho; ainda nao confirmado no servidor",
       CRIANDO:"Preparando",
       CANCELAMENTO_SOLICITADO:"Cancelamento solicitado",
       CANCELAMENTO_APROVADO:"Aguardando devolucao",
@@ -4631,7 +4632,9 @@ function QC_confirmarPagamentoPedido(nome, valor) {
     if(!pedidos.length){lista.textContent="Nenhum resgate solicitado.";return;}
     pedidos.forEach(p=>{
       const item=document.createElement("div");item.className="qc-resgate-linha278";
-      const nome=document.createElement("strong");nome.textContent=p.valor+" QC";
+      const nome=document.createElement("strong");
+      nome.textContent=(typeof p.valor==="number" && Number.isSafeInteger(p.valor) && p.valor>=1)
+        ? p.valor+" QC" : "Resgate preparado no aparelho";
       const situacao=document.createElement("p");situacao.className="qc-resgate-status278";
       situacao.textContent=rotuloEstado(p.status)+" · "+p.solicitadoEm;
       item.append(nome,situacao);
@@ -4716,8 +4719,8 @@ function QC_confirmarPagamentoPedido(nome, valor) {
         linha.className="qc-resgate-linha278";
         linha.style.cssText="font-size:13px;line-height:1.45;margin:7px 0;"+
           "overflow-wrap:anywhere";
-        const valor=Number(p.valor);
-        const valorTexto=Number.isSafeInteger(valor)&&valor>=0 ?
+        const valor=p.valor===null?NaN:Number(p.valor);
+        const valorTexto=Number.isSafeInteger(valor)&&valor>=1 ?
           "Qc$ "+valor.toLocaleString("pt-BR") : "Valor não informado";
         const estado=rotuloEstado(String(p.status||""));
         const data=String(p.solicitadoEm||"");
