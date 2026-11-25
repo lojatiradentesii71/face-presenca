@@ -722,6 +722,58 @@ function QC_estadoLocalRecebimento296(idEmissao, versaoEmissao = "V1") {
 // PASSO 392 — O usuario confirma uma unica vez; a assinatura e a conferencia
 // seguem em sequencia, com retomada pela mesma emissao em caso de falha.
 let qcRecebimentoOcupado392 = false;
+
+// PASSO 393 — Uma consulta travada nao pode prender a janela indefinidamente.
+// Promise.race nao repete nem cancela escritas no servidor: se a resposta se
+// perder, o proximo passo e consultar a MESMA autorizacao, nunca criar outra.
+function QC_esperarResposta393(promessa, limiteMs, mensagem) {
+  let alarme;
+  const limite = new Promise((_, rejeitar) => {
+    alarme = setTimeout(() => rejeitar(Error(mensagem)), limiteMs);
+  });
+  return Promise.race([Promise.resolve(promessa), limite])
+    .finally(() => clearTimeout(alarme));
+}
+
+// Atualizacao automatica apenas dos indicadores (SOMENTE LEITURA).
+// Evitar requisicoes em segundo plano, concorrencia com recebimentos e
+// consultas sucessivas quando a rede estiver lenta. Retorno nao e push:
+// pode levar ate um ciclo para a nova autorizacao aparecer.
+let qcIndicadoresAutoEmAndamento393 = false;
+let qcUltimaVerificacaoAuto393 = 0;
+async function QC_verificarIndicadoresAuto393() {
+  const token = sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
+  const carteira = localStorage.getItem("QC_ID_CARTEIRA");
+  const tela = document.getElementById("telaCarteira");
+  const agora = Date.now();
+  if (document.hidden || !token || !carteira || !tela ||
+      getComputedStyle(tela).display === "none" ||
+      qcRecebimentoOcupado392 || qcIndicadoresAutoEmAndamento393 ||
+      (document.getElementById("qcModalReceber")?.style.display === "flex") ||
+      agora - qcUltimaVerificacaoAuto393 < 30000) return;
+  qcIndicadoresAutoEmAndamento393 = true;
+  qcUltimaVerificacaoAuto393 = agora;
+  try {
+    await QC_esperarResposta393(
+      QC_atualizarIndicadorReceber300(), 25000,
+      "Consulta de indicador demorou demais.");
+    if (typeof window.QC_atualizarIndicadorResgate386 === "function") {
+      await QC_esperarResposta393(
+        window.QC_atualizarIndicadorResgate386(), 25000,
+        "Consulta de resgates demorou demais.");
+    }
+  } catch (erro) {
+    // Na falha de rede, conservar a ultima cor confirmada.
+    // O proximo ciclo consulta novamente sem alterar saldos nem fichas.
+    console.warn("QuintosCoin: verificacao automatica de indicadores", erro);
+  } finally {
+    qcIndicadoresAutoEmAndamento393 = false;
+  }
+}
+setInterval(() => { void QC_verificarIndicadoresAuto393(); }, 40000);
+window.addEventListener("focus", () => {
+  void QC_verificarIndicadoresAuto393();
+});
 function QC_exibirLiberacao392(pedido, iniciar) {
   qcPedidosReceber295.style.display = "none";
   qcFormularioReceber293.forEach(el=>{el.style.display="none";});
@@ -740,11 +792,19 @@ function QC_exibirLiberacao392(pedido, iniciar) {
     "Elas serão assinadas, verificadas e protegidas automaticamente.";
   descricao.style.cssText="font-size:14px;line-height:1.55;margin:0";
   const ok=QC_botaoReceber295("OK",true);
-  ok.style.cssText="width:100%;min-height:48px;margin-top:8px";
+  // O botão não deve ocupar toda a largura ou crescer com o rótulo de espera.
+  ok.style.cssText="width:160px!important;max-width:80%;min-height:44px;"+
+    "padding:9px 18px;margin:8px auto 0;flex:0 0 auto;"+
+    "box-sizing:border-box;white-space:nowrap;font-size:15px";
   const mensagem=document.createElement("p");
   mensagem.setAttribute("role","status");
   mensagem.style.cssText="font-size:13px;line-height:1.5;margin:0;overflow-wrap:anywhere";
-  qcConfirmacaoReceber293.append(titulo,valor,descricao,ok,mensagem);
+  // Indicador explícito: o elemento técnico de recebimento fica oculto.
+  const spinner=document.createElement("span");
+  spinner.className="qc-espera-roda297";
+  spinner.setAttribute("aria-hidden","true");
+  spinner.style.cssText="display:none;width:19px;height:19px;margin:0 auto";
+  qcConfirmacaoReceber293.append(titulo,valor,descricao,ok,spinner,mensagem);
   ok.addEventListener("click",async()=>{
     if(qcRecebimentoOcupado392)return;
     const token=sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
@@ -756,8 +816,10 @@ function QC_exibirLiberacao392(pedido, iniciar) {
     }
     qcRecebimentoOcupado392=true;
     ok.disabled=true;
-    ok.textContent="Processando recebimento...";
-    descricao.textContent="Aguarde a verificação das fichas. Não feche esta janela.";
+    ok.textContent="Recebendo...";
+    spinner.style.display="inline-block";
+    descricao.textContent="As fichas serão preparadas e assinadas no celular. " +
+      "A janela fechará somente após a conferência do saldo.";
     mensagem.textContent="Conferindo autorização...";
     const concluir=async()=>{
       if(token!==sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")||
@@ -771,17 +833,22 @@ function QC_exibirLiberacao392(pedido, iniciar) {
          id!==localStorage.getItem("QC_ID_CARTEIRA"))
         throw Error("Sessao alterada durante a conferencia.");
       qcRecebimentoOcupado392=false;
+      spinner.style.display="none";
       QC_fecharModalReceber();
       void QC_atualizarIndicadorReceber300();
     };
     const falhar=erro=>{
+      if(!qcRecebimentoOcupado392) return; // Uma falha não aparece duas vezes.
       qcRecebimentoOcupado392=false;
-      ok.disabled=true; // Evitar repetir o primeiro pedido sem conciliar o servidor.
-      ok.textContent="Consulte o pedido";
+      spinner.style.display="none";
+      ok.disabled=true; // Evitar repetir sem conciliar o servidor.
+      ok.textContent="Verificar pedido";
       mensagem.textContent="⚠️ "+String(erro?.message||erro)+
-        ". O material protegido foi preservado. Consulte o mesmo pedido para retomar.";
-      const voltar=QC_botaoReceber295("Voltar aos pedidos");
-      voltar.addEventListener("click",QC_carregarPedidosReceber295);
+        ". Não solicite outra emissão nem limpe os dados do celular. " +
+        "Consulte a mesma autorização para retomar com segurança.";
+      const voltar=QC_botaoReceber295("Consultar pedido existente");
+      voltar.style.maxWidth="260px";
+      voltar.addEventListener("click",()=>{ void QC_carregarPedidosReceber295(); });
       qcConfirmacaoReceber293.appendChild(voltar);
     };
     try {
@@ -893,35 +960,39 @@ async function QC_carregarPedidosReceber295() {
           "Receber " + QC_valorReceber295(valor), true);
         cartao.append(botao,mensagem,acoes);
         const iniciarRecebimento392=async opcoes392=>{
-          // Preparar a MESMA emissao liberada, nunca outra autorizacao.
-          const encerrar=QC_ESPERA295.iniciar("Recebendo fichas...",null,mensagem);
-          try {
-            let emissao=idEmissao;
-            let versaoEmissao=p.versaoEmissao;
-            if(!emissao){
-              const preparado=await QC_post191("qc_preparar_emissao",{
+          // Preparar a MESMA emissão liberada; não solicitar novos créditos.
+          let emissao=idEmissao;
+          let versaoEmissao=p.versaoEmissao;
+          if(!emissao){
+            opcoes392.aoProgresso?.("Conferindo a autorização com o servidor...");
+            const preparado=await QC_esperarResposta393(
+              QC_post191("qc_preparar_emissao",{
                 idAutorizacao:p.idAutorizacao
-              });
-              emissao=String(preparado?.idEmissao||
-                preparado?.emissao?.idEmissao||"").trim();
-              versaoEmissao=preparado?.versaoFicha;
-              if(!/^QC-EM-[0-9a-f-]{36}$/i.test(emissao)||
-                 versaoEmissao!=="V2")
-                throw Error(preparado?.mensagem||"A emissao V2 ainda nao foi liberada.");
-            }
-            if(versaoEmissao!=="V2") throw Error("Emissao V2 indisponivel.");
-            const pronto={...p,idEmissao:emissao,
-              versaoEmissao:"V2",valor,status:"AUTORIZADA"};
-            if(typeof window.QC_inserirAcao195!=="function"||
-               typeof window.QC_inserirRecebimento198!=="function")
-              throw Error("Modulo de recebimento indisponivel.");
-            acoes.replaceChildren();
-            // Fichas pendentes são recuperadas com o mesmo IdEmissao.
-            // Passo 392 une preparar + assinar, sem novos cliques.
-            window.QC_inserirAcao195(acoes,pronto,opcoes392);
-            // Nenhum botao tecnico e exposto no fluxo simplificado.
-            acoes.style.display="none";
-          } finally {encerrar();}
+              }), 50000,
+              "O servidor demorou a responder à preparação. " +
+              "Não sabemos ainda se a emissão foi preparada.");
+            if(preparado?.status==="ERRO")
+              throw Error(preparado.mensagem||"Preparação não autorizada.");
+            emissao=String(preparado?.idEmissao||
+              preparado?.emissao?.idEmissao||"").trim();
+            versaoEmissao=preparado?.versaoFicha;
+            if(!/^QC-EM-[0-9a-f-]{36}$/i.test(emissao)||
+               versaoEmissao!=="V2")
+              throw Error(preparado?.mensagem||
+                "A emissão V2 ainda não foi confirmada pelo servidor.");
+          }
+          if(versaoEmissao!=="V2") throw Error("Emissão V2 indisponível.");
+          opcoes392.aoProgresso?.("Autorização conferida. Preparando fichas...");
+          const pronto={...p,idEmissao:emissao,
+            versaoEmissao:"V2",valor,status:"AUTORIZADA"};
+          if(typeof window.QC_inserirAcao195!=="function"||
+             typeof window.QC_inserirRecebimento198!=="function")
+            throw Error("Módulo de recebimento indisponível.");
+          acoes.replaceChildren();
+          // Preparação/assinatura usam este mesmo IdEmissao e os callbacks
+          // de conclusão/erro do qc-fichas.js. Nenhuma confirmação extra.
+          window.QC_inserirAcao195(acoes,pronto,opcoes392);
+          acoes.style.display="none";
         };
         disponiveis392.push({pedido:p,iniciar:iniciarRecebimento392});
         botao.addEventListener("click",()=>QC_exibirLiberacao392(p,iniciarRecebimento392));
