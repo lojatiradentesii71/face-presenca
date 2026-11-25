@@ -2513,6 +2513,16 @@ function QC_confirmarTransferencia332(opcoes) {
         return {status:'PENDENTE',mensagem:'Assinatura V2 pendente. Retome este pedido.'};
       if (r.status==='RESGATES_V2_BLOQUEADOS'||r.status==='FICHA_V2_INDISPONIVEL')
         throw Error('Resgate V2 indisponivel; preserve o pedido e confira o servidor.');
+      // PASSO 385: nao ocultar a resposta de erro tentando consultar de novo.
+      // O pedido local cifrado e mantido com o MESMO identificador.
+      if (!r || r.status==='ERRO' || ![
+          'RESGATE_PENDENTE','RESGATE_CANCELAMENTO_SOLICITADO',
+          'RESGATE_CANCELAMENTO_APROVADO','RESGATE_CONFIRMADO','RESGATE_CANCELADO'
+        ].includes(r.status)) {
+        throw Error('Servidor nao confirmou a criacao do resgate V2: '+
+          String(r?.mensagem||r?.status||'Resposta invalida')+
+          '. Retome este mesmo pedido no acompanhamento; nao crie outro.');
+      }
       r=await QC_postResgate278('qc_resgate_v2_consultar',pedido);
     }
     if (!['RESGATE_PENDENTE','RESGATE_CANCELAMENTO_SOLICITADO',
@@ -2587,9 +2597,29 @@ function QC_confirmarTransferencia332(opcoes) {
     const r=await QC_postResgate278('qc_resgate_v2_meus');
     if (r.status!=='OK'||!Array.isArray(r.pedidos))
       throw Error('Consulta de resgates indisponivel.');
-    return r.pedidos.map(p=>({...p,
+    const pedidos=r.pedidos.map(p=>({...p,
       possuiRecuperacaoLocal:!!localStorage.getItem(QC_chaveResgateV2370(p.idResgate))
     }));
+    // PASSO 385: pedido cifrado existe no aparelho, mas ainda nao no servidor.
+    // Mostrar uma possibilidade de RETOMAR o mesmo ID, sem revelar ou decifrar
+    // fichas, senha ou chave Pix; nunca criar outro resgate automaticamente.
+    const sessao=dadosDaSessao();
+    if (sessao.token!==sessionStorage.getItem('QC_TOKEN_SESSAO_TESTE') ||
+        sessao.id!==localStorage.getItem('QC_ID_CARTEIRA'))
+      throw Error('A sessao mudou durante a conferencia de resgates.');
+    const prefixo=QC_RS_V2_370+sessao.id+'_';
+    const registrados=new Set(pedidos.map(p=>String(p.idResgate).toLowerCase()));
+    for (const chave of Object.keys(localStorage)) {
+      if (!chave.startsWith(prefixo)) continue;
+      const id=chave.slice(prefixo.length).toLowerCase();
+      if (!QC_UUID_368.test(id) || registrados.has(id)) continue;
+      registrados.add(id);
+      pedidos.unshift({
+        idResgate:id,valor:null,status:'PREPARADO_LOCAL',
+        solicitadoEm:'Aguardando recuperacao',possuiRecuperacaoLocal:true
+      });
+    }
+    return pedidos;
   };
   window.QC_retomarResgate278=async function(id) {
     const chave=QC_chaveResgateV2370(id);
