@@ -522,7 +522,15 @@ function QC_contarDisponiveis300(pedidos) {
   for (const p of pedidos) {
     if (p.idEmissao && p.versaoEmissao !== "V2") continue;
     if (p.status !== "AUTORIZADA") continue;
-    if (p.situacao === "PRONTA") { quantidade++; continue; }
+    if (p.situacao === "PRONTA") {
+      // Nao anunciar novo recebimento se esta emissao ja foi salva aqui.
+      // O servidor continua sendo a fonte de autorizacao.
+      try {
+        const local=QC_estadoLocalRecebimento296(String(p.idEmissao||""),"V2");
+        if (local.armazenadas>0 && !local.pendente) continue;
+      } catch (_) { continue; }
+      quantidade++;continue;
+    }
     if (p.situacao !== "EM_ANDAMENTO") continue;
     // Uma emissao ja completamente recebida pode continuar temporariamente
     // como EM_ANDAMENTO no servidor. Nao sinalizar de novo neste aparelho.
@@ -711,6 +719,81 @@ function QC_estadoLocalRecebimento296(idEmissao, versaoEmissao = "V1") {
   return {pendente:!!pendentes[idEmissao], armazenadas:quant};
 }
 
+// PASSO 392 — O usuario confirma uma unica vez; a assinatura e a conferencia
+// seguem em sequencia, com retomada pela mesma emissao em caso de falha.
+let qcRecebimentoOcupado392 = false;
+function QC_exibirLiberacao392(pedido, iniciar) {
+  qcPedidosReceber295.style.display = "none";
+  qcFormularioReceber293.forEach(el=>{el.style.display="none";});
+  qcConfirmacaoReceber293.replaceChildren();
+  qcConfirmacaoReceber293.style.cssText =
+    "display:flex;flex-direction:column;align-items:center;"+
+    "justify-content:center;gap:13px;text-align:center;min-height:250px";
+  const titulo=document.createElement("h3");
+  titulo.textContent="Qc$ liberados pelo tesoureiro";
+  titulo.style.cssText="font-size:21px;color:#e6c363;margin:0";
+  const valor=document.createElement("strong");
+  valor.textContent=QC_valorReceber295(pedido.valor);
+  valor.style.cssText="font-size:27px;color:#fff";
+  const descricao=document.createElement("p");
+  descricao.textContent="Toque em OK para receber suas fichas. " +
+    "Elas serão assinadas, verificadas e protegidas automaticamente.";
+  descricao.style.cssText="font-size:14px;line-height:1.55;margin:0";
+  const ok=QC_botaoReceber295("OK",true);
+  ok.style.cssText="width:100%;min-height:48px;margin-top:8px";
+  const mensagem=document.createElement("p");
+  mensagem.setAttribute("role","status");
+  mensagem.style.cssText="font-size:13px;line-height:1.5;margin:0;overflow-wrap:anywhere";
+  qcConfirmacaoReceber293.append(titulo,valor,descricao,ok,mensagem);
+  ok.addEventListener("click",async()=>{
+    if(qcRecebimentoOcupado392)return;
+    const token=sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
+    const id=localStorage.getItem("QC_ID_CARTEIRA");
+    if(!token||!id||typeof window.QC_senhaFichas291!=="function"||
+       !window.QC_senhaFichas291()) {
+      mensagem.textContent="Entre novamente na carteira para receber os Qc$.";
+      return;
+    }
+    qcRecebimentoOcupado392=true;
+    ok.disabled=true;
+    ok.textContent="Processando recebimento...";
+    descricao.textContent="Aguarde a verificação das fichas. Não feche esta janela.";
+    mensagem.textContent="Conferindo autorização...";
+    const concluir=async()=>{
+      if(token!==sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")||
+         id!==localStorage.getItem("QC_ID_CARTEIRA"))
+        throw Error("Sessao alterada durante o recebimento.");
+      if(typeof window.QC_atualizarSaldoReal202!=="function")
+        throw Error("Conferencia de saldo indisponivel.");
+      mensagem.textContent="Fichas recebidas. Conferindo saldo...";
+      await window.QC_atualizarSaldoReal202();
+      if(token!==sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")||
+         id!==localStorage.getItem("QC_ID_CARTEIRA"))
+        throw Error("Sessao alterada durante a conferencia.");
+      qcRecebimentoOcupado392=false;
+      QC_fecharModalReceber();
+      void QC_atualizarIndicadorReceber300();
+    };
+    const falhar=erro=>{
+      qcRecebimentoOcupado392=false;
+      ok.disabled=true; // Evitar repetir o primeiro pedido sem conciliar o servidor.
+      ok.textContent="Consulte o pedido";
+      mensagem.textContent="⚠️ "+String(erro?.message||erro)+
+        ". O material protegido foi preservado. Consulte o mesmo pedido para retomar.";
+      const voltar=QC_botaoReceber295("Voltar aos pedidos");
+      voltar.addEventListener("click",QC_carregarPedidosReceber295);
+      qcConfirmacaoReceber293.appendChild(voltar);
+    };
+    try {
+      await iniciar({
+        automatico:true,aoConcluir:concluir,aoErro:falhar,
+        aoProgresso:texto=>{mensagem.textContent=texto;}
+      });
+    }catch(erro){falhar(erro);}
+  });
+  qcConfirmacaoReceber293.focus();
+}
+
 async function QC_carregarPedidosReceber295() {
   const consulta = ++qcConsultaReceber295;
   QC_mostrarListaReceber295();
@@ -747,6 +830,7 @@ async function QC_carregarPedidosReceber295() {
         : "Nenhum recebimento novo disponível.";
     qcPedidosReceber295.appendChild(titulo);
 
+    const disponiveis392=[];
     for (const p of ativos) {
       const valor = Number(p.valor);
       const situacao = p.situacao;
@@ -772,7 +856,8 @@ async function QC_carregarPedidosReceber295() {
       const local = QC_estadoLocalRecebimento296(idEmissao, p.versaoEmissao);
       const parcialmenteAssinado = Number(p.quantidadeAssinada) > 0 ||
         Number(p.operacoesExistentes) > 0 || local.armazenadas > 0;
-      let permitir = situacao === "PRONTA" ||
+      const jaRecebidoLocal = local.armazenadas > 0 && !local.pendente;
+      let permitir = (situacao === "PRONTA" && !jaRecebidoLocal) ||
         (situacao === "EM_ANDAMENTO" &&
           (local.pendente || !parcialmenteAssinado));
       // A V1 pertence exclusivamente ao piloto historico. Nao emitir V1.
@@ -780,7 +865,10 @@ async function QC_carregarPedidosReceber295() {
         permitir = false;
         descricao.textContent = "Emissao indisponivel para recebimento.";
       }
-      if (situacao === "CONFERIR") {
+      if (jaRecebidoLocal && situacao === "PRONTA") {
+        descricao.textContent = "As fichas desta emissao ja foram armazenadas " +
+          "neste aparelho. Confira o saldo; nao prepare novas fichas.";
+      } else if (situacao === "CONFERIR") {
         descricao.textContent = p.mensagem ||
           "Os registros desta emissão precisam de conferência. Nenhuma assinatura será solicitada.";
         permitir = false;
@@ -804,52 +892,39 @@ async function QC_carregarPedidosReceber295() {
           local.pendente ? "Continuar recebimento" :
           "Receber " + QC_valorReceber295(valor), true);
         cartao.append(botao,mensagem,acoes);
-        botao.addEventListener("click",async () => {
-          botao.disabled = true;
-          const encerrar = QC_ESPERA295.iniciar("Preparando o recebimento...", botao, mensagem);
+        const iniciarRecebimento392=async opcoes392=>{
+          // Preparar a MESMA emissao liberada, nunca outra autorizacao.
+          const encerrar=QC_ESPERA295.iniciar("Recebendo fichas...",null,mensagem);
           try {
-            let emissao = idEmissao;
-            let versaoEmissao = p.versaoEmissao;
-            if (!emissao) {
-              const preparado = await QC_post191("qc_preparar_emissao", {
+            let emissao=idEmissao;
+            let versaoEmissao=p.versaoEmissao;
+            if(!emissao){
+              const preparado=await QC_post191("qc_preparar_emissao",{
                 idAutorizacao:p.idAutorizacao
               });
-              emissao = String(preparado?.idEmissao ||
-                preparado?.emissao?.idEmissao || "").trim();
-              versaoEmissao = preparado?.versaoFicha;
-              if (!/^QC-EM-[0-9a-f-]{36}$/i.test(emissao) ||
-                  versaoEmissao !== "V2") {
-                throw Error(preparado?.mensagem ||
-                  "A emissao V2 ainda nao foi liberada.");
-              }
+              emissao=String(preparado?.idEmissao||
+                preparado?.emissao?.idEmissao||"").trim();
+              versaoEmissao=preparado?.versaoFicha;
+              if(!/^QC-EM-[0-9a-f-]{36}$/i.test(emissao)||
+                 versaoEmissao!=="V2")
+                throw Error(preparado?.mensagem||"A emissao V2 ainda nao foi liberada.");
             }
-            if (versaoEmissao !== "V2") {
-              throw Error("Emissao indisponivel para recebimento.");
-            }
-            const pronto = {...p, idEmissao:emissao,
-              versaoEmissao:"V2", valor, status:"AUTORIZADA"};
-            if (typeof window.QC_inserirAcao195 !== "function" ||
-                typeof window.QC_inserirRecebimento198 !== "function") {
-              throw Error("Módulo de recebimento indisponível.");
-            }
+            if(versaoEmissao!=="V2") throw Error("Emissao V2 indisponivel.");
+            const pronto={...p,idEmissao:emissao,
+              versaoEmissao:"V2",valor,status:"AUTORIZADA"};
+            if(typeof window.QC_inserirAcao195!=="function"||
+               typeof window.QC_inserirRecebimento198!=="function")
+              throw Error("Modulo de recebimento indisponivel.");
             acoes.replaceChildren();
-            window.QC_inserirAcao195(acoes, pronto);
-            window.QC_inserirRecebimento198(acoes, pronto);
-            // Preparação na sessão atual, sem pedir outra senha.
-            // A confirmação de assinatura continua sendo uma ação separada.
-            const preparar = acoes.querySelector("button");
-            if (preparar && preparar.textContent.startsWith("Preparar recebimento") &&
-                typeof window.QC_senhaFichas291 === "function" &&
-                window.QC_senhaFichas291()) preparar.click();
-            botao.style.display="none";
-            mensagem.textContent = "Continue a emissão abaixo. " +
-              "As assinaturas serão verificadas antes de integrar o saldo.";
-          } catch (erro) {
-            mensagem.textContent="⚠️ " + erro.message +
-              " Confira o estado do pedido antes de repetir.";
-            botao.disabled=false;
-          } finally { encerrar(); }
-        });
+            // Fichas pendentes são recuperadas com o mesmo IdEmissao.
+            // Passo 392 une preparar + assinar, sem novos cliques.
+            window.QC_inserirAcao195(acoes,pronto,opcoes392);
+            // Nenhum botao tecnico e exposto no fluxo simplificado.
+            acoes.style.display="none";
+          } finally {encerrar();}
+        };
+        disponiveis392.push({pedido:p,iniciar:iniciarRecebimento392});
+        botao.addEventListener("click",()=>QC_exibirLiberacao392(p,iniciarRecebimento392));
       } else {
         cartao.append(mensagem);
       }
@@ -887,6 +962,13 @@ async function QC_carregarPedidosReceber295() {
     const novo = QC_botaoReceber295("+ Solicitar novos Qc$");
     novo.addEventListener("click",QC_mostrarFormularioReceber295);
     qcPedidosReceber295.appendChild(novo);
+    // Um unico pedido liberado: o clique na bolinha verde abre diretamente
+    // a tela simples de liberacao, sem a lista nem botoes tecnicos.
+    if(disponiveis392.length===1 &&
+       qcModalReceber.style.display==="flex") {
+      const unico=disponiveis392[0];
+      QC_exibirLiberacao392(unico.pedido,unico.iniciar);
+    }
   } catch (erro) {
     if (consulta !== qcConsultaReceber295 ||
         qcModalReceber.style.display !== "flex") return;
@@ -908,7 +990,7 @@ function QC_abrirModalReceber() {
 }
 
 function QC_fecharModalReceber() {
-  if (qcCancelandoPedidoPix341) return;
+  if (qcCancelandoPedidoPix341 || qcRecebimentoOcupado392) return;
   qcConsultaReceber295++; // descarta resposta de consultas encerradas
   qcModalReceber.style.display = "none";
   document.getElementById("qcMensagemReceber").textContent = "";
