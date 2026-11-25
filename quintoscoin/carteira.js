@@ -1,5444 +1,2394 @@
-// QUINTOSCOIN - PASSO 331 - PAINEL DO TESOUREIRO (base 291)
-// QUINTOSCOIN - PASSO 291 - LOGIN, NOME E INTERFACE SIMPLIFICADA
-// Mantem as funcoes do Passo 278 e acrescenta o cliente de API ausente.
-// IMPORTANTE: esta funcao e somente para rotas autenticadas.
-// Doacoes e transferencias anonimas continuam com fetch proprio.
-const QC_URL_191 = "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-
-
-// PASSO 338 — Confirmações e avisos no padrão visual do QuintosCoin.
-// Não executa ações financeiras: apenas devolve a escolha do usuário.
-function QC_dialogoQuintos338(opcoes = {}) {
-  return new Promise(resolver => {
-    if (document.getElementById("qcDialogoQuintos338")) {
-      resolver(false);
-      return;
+// PASSO 377 — Emitir SOMENTE fichas V2 de teste em operacoes autorizadas.
+// As chaves V2 de teste ficam temporariamente sob os mesmos IDs publicos V2,
+// mas sao pares RSA DISTINTOS das definitivas. A reversao invalida as fichas.
+function QC_exigirPrimeiraEmissaoV2375(idEmissao, valor) {
+  const p=PropertiesService.getScriptProperties();
+  const id=String(idEmissao||'').trim().toLowerCase();
+  if (p.getProperty('QC_V2_MODO')!=='TESTE' ||
+      p.getProperty('QC_V2_TESTES_LIBERADOS')!=='SIM' ||
+      p.getProperty('QC_V2_T_PUBLICAS_INSTALADAS')!=='SIM' ||
+      p.getProperty('QC_V1_FINANCEIRO_ENCERRADO')!=='SIM' ||
+      !/^qc-em-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(id)) {
+    throw new Error('Emissao V2 nao liberada no ambiente de testes.');
+  }
+  if (valor!==undefined) {
+    const n=Number(valor);
+    if (!Number.isSafeInteger(n)||n<1||n>200)
+      throw new Error('Emissao de teste limitada a 1..200 Qc$ por pedido.');
+    // Limite agregado conservador para impedir emissao infinita por erro.
+    const ss=SpreadsheetApp.getActiveSpreadsheet();
+    const a=ss.getSheetByName('QC_CotasEmissao');
+    const e=ss.getSheetByName('QC_Emissoes');
+    if(!a||!e) throw new Error('Livros de emissao ausentes.');
+    const cot=a.getDataRange().getValues(), em=e.getDataRange().getValues();
+    const ci=cot[0].map(x=>String(x).trim());
+    const ei=em[0].map(x=>String(x).trim());
+    const cChave=ci.indexOf('IdChave'), cEm=ci.indexOf('IdEmissao');
+    const eID=ei.indexOf('IdEmissao'), eVal=ei.indexOf('ValorAutorizado');
+    if([cChave,cEm,eID,eVal].some(i=>i<0)) throw new Error('Livros incompletos.');
+    const emitidas=new Set(cot.slice(1).filter(r=>
+      /^QC-(?:1|2|5|10|50)-V2$/.test(String(r[cChave]).trim()))
+      .map(r=>String(r[cEm]).trim().toLowerCase()));
+    let total=0;
+    for(const r of em.slice(1)) {
+      const k=String(r[eID]).trim().toLowerCase();
+      if(!emitidas.has(k)) continue;
+      const q=Number(r[eVal]);
+      if(!Number.isSafeInteger(q)||q<0) throw new Error('Emissao V2 invalida.');
+      total+=q;
     }
-    const overlay = document.createElement("div");
-    overlay.id = "qcDialogoQuintos338";
-    overlay.className = "qc-modal-overlay";
-    overlay.style.cssText = "display:flex;z-index:30000;padding:12px;" +
-      "box-sizing:border-box;padding-top:max(12px,env(safe-area-inset-top));" +
-      "padding-bottom:max(12px,env(safe-area-inset-bottom))";
-
-    const cartao = document.createElement("div");
-    cartao.className = "qc-modal-card";
-    cartao.setAttribute("role", "alertdialog");
-    cartao.setAttribute("aria-modal", "true");
-    cartao.setAttribute("aria-labelledby", "qcTituloDialogo338");
-    cartao.style.cssText = "box-sizing:border-box;max-height:calc(100vh - 24px);" +
-      "max-height:calc(100dvh - 24px);overflow-y:auto;overflow-x:hidden;" +
-      "-webkit-overflow-scrolling:touch;width:100%;max-width:440px;";
-
-    const topo = document.createElement("div");
-    topo.className = "qc-modal-topo";
-    const titulo = document.createElement("h3");
-    titulo.id = "qcTituloDialogo338";
-    titulo.textContent = String(opcoes.titulo || "Confirmar operação");
-    topo.appendChild(titulo);
-    cartao.appendChild(topo);
-
-    if (opcoes.texto) {
-      const texto = document.createElement("p");
-      texto.className = "qc-modal-texto";
-      texto.textContent = String(opcoes.texto);
-      texto.style.cssText = "white-space:pre-line;overflow-wrap:anywhere";
-      cartao.appendChild(texto);
-    }
-
-    const detalhes = Array.isArray(opcoes.detalhes) ? opcoes.detalhes : [];
-    if (detalhes.length) {
-      const dados = document.createElement("div");
-      dados.style.cssText = "border:1px solid #e2ba6055;border-radius:10px;" +
-        "padding:12px;margin:12px 0;display:flex;flex-direction:column;gap:9px";
-      for (const item of detalhes) {
-        const linha = document.createElement("div");
-        linha.style.cssText = "display:flex;flex-direction:column;gap:3px";
-        const rotulo = document.createElement("span");
-        rotulo.style.cssText = "font-size:12px;opacity:.8";
-        rotulo.textContent = String(item?.rotulo || "");
-        const valor = document.createElement("strong");
-        valor.style.cssText = "font-size:15px;overflow-wrap:anywhere";
-        valor.textContent = String(item?.valor ?? "");
-        linha.append(rotulo,valor);
-        dados.appendChild(linha);
-      }
-      cartao.appendChild(dados);
-    }
-
-    let campoCodigo = null;
-    if (typeof opcoes.codigo === "string") {
-      const rotuloCodigo = document.createElement("label");
-      rotuloCodigo.className = "qc-label-modal";
-      rotuloCodigo.textContent = "Código para copiar";
-      campoCodigo = document.createElement("textarea");
-      campoCodigo.className = "qc-input-modal";
-      campoCodigo.readOnly = true;
-      campoCodigo.rows = 4;
-      campoCodigo.value = opcoes.codigo;
-      campoCodigo.setAttribute("aria-label", "Código para copiar manualmente");
-      campoCodigo.style.cssText = "width:100%;box-sizing:border-box;" +
-        "resize:vertical;overflow-wrap:anywhere;margin:8px 0";
-      campoCodigo.addEventListener("click", () => campoCodigo.select());
-      cartao.append(rotuloCodigo,campoCodigo);
-    }
-
-    if (opcoes.aviso) {
-      const aviso = document.createElement("p");
-      aviso.className = "qc-modal-texto";
-      aviso.setAttribute("role", "note");
-      aviso.textContent = String(opcoes.aviso);
-      aviso.style.cssText = "border-left:3px solid #e2ba60;" +
-        "padding-left:10px;margin:13px 0;overflow-wrap:anywhere";
-      cartao.appendChild(aviso);
-    }
-
-    const acoes = document.createElement("div");
-    acoes.className = "qc-modal-botoes";
-    acoes.style.cssText = "display:flex;flex-direction:column;gap:9px;" +
-      "margin-top:15px;width:100%";
-    const principal = document.createElement("button");
-    principal.type = "button";
-    principal.className = "qc-btn-modal-principal";
-    principal.textContent = String(opcoes.confirmarTexto || "Confirmar");
-    principal.style.cssText = "width:100%;min-height:44px;box-sizing:border-box";
-
-    const secundario = document.createElement("button");
-    secundario.type = "button";
-    secundario.className = "qc-btn-modal-secundario";
-    secundario.textContent = String(opcoes.cancelarTexto || "Voltar sem confirmar");
-    secundario.style.cssText = "width:100%;min-height:44px;box-sizing:border-box";
-    acoes.appendChild(principal);
-    if (!opcoes.somenteInformativo) acoes.appendChild(secundario);
-    cartao.appendChild(acoes);
-    overlay.appendChild(cartao);
-
-    const focoAnterior = document.activeElement;
-    const overflowAnterior = document.body.style.overflow;
-    document.body.appendChild(overlay);
-    document.body.style.overflow = "hidden";
-    let encerrado = false;
-    function encerrar(aceito) {
-      if (encerrado) return;
-      encerrado = true;
-      document.removeEventListener("keydown", teclado, true);
-      overlay.remove();
-      document.body.style.overflow = overflowAnterior;
-      if (focoAnterior && focoAnterior.isConnected &&
-          typeof focoAnterior.focus === "function") focoAnterior.focus();
-      resolver(aceito);
-    }
-    function teclado(e) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        encerrar(false);
-      } else if (e.key === "Tab") {
-        const primeiro = principal;
-        const ultimo = opcoes.somenteInformativo ? principal : secundario;
-        if (e.shiftKey && document.activeElement === primeiro) {
-          e.preventDefault();ultimo.focus();
-        } else if (!e.shiftKey && document.activeElement === ultimo) {
-          e.preventDefault();primeiro.focus();
-        }
-      }
-    }
-    principal.addEventListener("click", () => encerrar(true));
-    secundario.addEventListener("click", () => encerrar(false));
-    overlay.addEventListener("click", e => {
-      if (e.target === overlay) encerrar(false);
-    });
-    document.addEventListener("keydown", teclado, true);
-    if (campoCodigo) {
-      campoCodigo.focus();
-      campoCodigo.select();
-    } else if (opcoes.somenteInformativo) principal.focus();
-    else secundario.focus();  // A escolha segura é não executar a operação.
-  });
+    if(total+(emitidas.has(id)?0:n)>300)
+      throw new Error('Teto agregado de 300 Qc$ de teste atingido.');
+  }
 }
-window.QC_dialogoQuintos338 = QC_dialogoQuintos338;
 
-// PASSO 297 - Espera discreta JUNTO ao botao ou mensagem da operacao.
-// Nao bloqueia, nao escurece nem cobre a tela. Nao altera requisicoes.
-const QC_ESPERA295 = (() => {
-  const estilo = document.createElement("style");
-  estilo.textContent = `
-    @keyframes qc-girar297 { to { transform: rotate(360deg); } }
-    .qc-espera-roda297 {
-      display:inline-block;width:15px;height:15px;flex:none;
-      box-sizing:border-box;border:2px solid #e2ba60aa;
-      border-top-color:#fff;border-radius:50%;vertical-align:-3px;
-      animation:qc-girar297 .8s linear infinite;
-    }
-    button > .qc-espera-roda297 { margin-left:8px; }
-    .qc-espera-inline297 {
-      display:inline-flex;gap:7px;align-items:center;
-      margin-left:8px;vertical-align:middle;
-    }
-    .qc-espera-mensagem297 {
-      display:flex;align-items:center;gap:8px;min-height:20px;
-      font-size:12px;color:#e2ba60;margin:8px 0;
-    }
-    .qc-espera-mensagem297 > .qc-espera-roda297 { margin:0; }
-    @media (prefers-reduced-motion:reduce) {
-      .qc-espera-roda297 { animation-duration:2s; }
-    }
-  `;
-  document.head.appendChild(estilo);
 
-  let ultimoBotao = null;
-  let instanteClique = 0;
-  document.addEventListener("click", evento => {
-    const botao = evento.target?.closest?.("button");
-    if (botao) {
-      ultimoBotao = botao;
-      instanteClique = Date.now();
-    }
-  }, true);
+function QC_prepararEmissaoCarteira185(tokenSessao, idAutorizacao) {
 
-  const ativos = new WeakMap();
-  function visivel(el) {
-    if (!(el instanceof HTMLElement) || !el.isConnected) return false;
-    if (!el.getClientRects().length) return false;
-    let pai = el;
-    while (pai && pai instanceof HTMLElement) {
-      const css = getComputedStyle(pai);
-      if (css.display === "none" || css.visibility === "hidden") return false;
-      pai = pai.parentElement;
-    }
-    return true;
-  }
-  function modalVisivel() {
-    return [...document.querySelectorAll(".qc-modal-overlay, [role=dialog]")]
-      .reverse().find(visivel) || null;
-  }
-  function alvoMensagem(modal) {
-    const raiz = modal || document;
-    const seletores = modal
-      ? "#qcPedidosReceber295 [role=status], [role=status], .qc-modal-mensagem"
-      : "#qcMensagemAcesso, #qcMensagemTesoureiro, #qcMensagemTrocaSenha, " +
-        "#mensagem, #qcMensagemCopia, [role=status]";
-    const candidatos = [...raiz.querySelectorAll(seletores)].filter(visivel);
-    return candidatos.find(el =>
-      /consult|aguard|process|carreg|prepar|assin|verific/i.test(el.textContent)) ||
-      candidatos[0] || null;
-  }
-  // Uma unica roldana por elemento, mesmo com varias chamadas simultaneas.
-  function ocupar(el, tipo, mensagem) {
-    let registro = ativos.get(el);
-    if (registro) {
-      registro.quantidade++;
-      return () => liberar(el);
-    }
-    const roda = document.createElement("span");
-    roda.className = "qc-espera-roda297";
-    roda.setAttribute("aria-hidden", "true");
-    roda.title = mensagem;
-    const elemento = tipo === "botao" ? roda : document.createElement("span");
-    if (tipo !== "botao") {
-      elemento.className = "qc-espera-inline297";
-      elemento.append(roda);
-    }
-    const ocupadoAntes = el.getAttribute("aria-busy");
-    el.setAttribute("aria-busy", "true");
-    el.appendChild(elemento);
-    ativos.set(el, {quantidade:1,elemento,ocupadoAntes});
-    return () => liberar(el);
-  }
-  function liberar(el) {
-    const reg = ativos.get(el);
-    if (!reg) return;
-    reg.quantidade--;
-    if (reg.quantidade > 0) return;
-    reg.elemento.remove();
-    if (reg.ocupadoAntes === null) el.removeAttribute("aria-busy");
-    else el.setAttribute("aria-busy", reg.ocupadoAntes);
-    ativos.delete(el);
+  const id = String(idAutorizacao || "").trim();
+
+  if (!id) {
+    throw new Error("Autorização não informada.");
   }
 
-  // Chamadas explicitas podem passar (mensagem, botao, campoDaMensagem).
-  // Chamadas de fetch sem alvo usam o botao acionado ou a mensagem visivel.
-  function iniciar(mensagem = "Consultando o QuintosCoin...", botao, campo) {
-    const acionado = botao instanceof HTMLButtonElement ? botao :
-      (Date.now() - instanteClique < 1300 ? ultimoBotao : null);
-    const liberacoes = [];
-    let avisoTemporario = null;
-    let terminou = false;
-    const atraso = setTimeout(() => {
-      if (terminou) return;
-      const modal = modalVisivel();
-      const botaoVisivel = acionado && visivel(acionado) &&
-        (!modal || modal.contains(acionado)) ? acionado : null;
-      if (botaoVisivel) liberacoes.push(ocupar(botaoVisivel,"botao",mensagem));
-      const campoVisivel = campo && visivel(campo) ? campo :
-        (!botaoVisivel ? alvoMensagem(modal) : null);
-      if (campoVisivel && campoVisivel !== botaoVisivel) {
-        liberacoes.push(ocupar(campoVisivel,"mensagem",mensagem));
-      }
-      if (!botaoVisivel && !campoVisivel) {
-        // Se nao existe uma mensagem apropriada, cria uma no proprio contexto.
-        const container = (modal && modal.querySelector(".qc-modal-card")) ||
-          [...document.querySelectorAll("#telaCarteira, #telaAcesso")]
-            .find(visivel);
-        if (container) {
-          avisoTemporario = document.createElement("p");
-          avisoTemporario.className = "qc-espera-mensagem297";
-          avisoTemporario.setAttribute("role","status");
-          avisoTemporario.textContent = mensagem;
-          container.appendChild(avisoTemporario);
-          liberacoes.push(ocupar(avisoTemporario,"mensagem",mensagem));
-        }
-      }
-    }, 160); // Operacoes rapidas nao ficam piscando.
-    return () => {
-      if (terminou) return;
-      terminou = true;
-      clearTimeout(atraso);
-      liberacoes.forEach(soltar => soltar());
-      if (avisoTemporario) avisoTemporario.remove();
+  // PASSO 363: nao reutilizar o assinador V1 nem criar novas emissoes
+  // enquanto o piloto V1 e o fluxo completo V2 nao forem encerrados.
+  // Falha fechada ANTES de obter lock ou alterar qualquer planilha.
+  const flags363 = PropertiesService.getScriptProperties();
+  if (flags363.getProperty('QC_V2_MODO') !== 'TESTE' ||
+      flags363.getProperty('QC_V2_TESTES_LIBERADOS') !== 'SIM' ||
+      flags363.getProperty("QC_EMISSAO_REAL_ATIVA") !== "SIM" ||
+      flags363.getProperty("QC_V2_RECEBIMENTO_ATIVO") !== "SIM" ||
+      flags363.getProperty("QC_V1_FINANCEIRO_ENCERRADO") !== "SIM") {
+    return {
+      status: "EMISSAO_V2_BLOQUEADA",
+      mensagem: "Emissao V2 ainda nao liberada. O financeiro V1 sera encerrado antes do inicio real.",
+      fichasEmitidas: 0,
+      assinaturaPermitida: false
     };
   }
-  return {iniciar};
-})();
-window.QC_iniciarEspera295 = QC_ESPERA295.iniciar;
 
-// Abrange consultas, login, saldo, pedidos, doacoes e recebimentos.
-// Nunca altera parametros, corpo, token nem resposta das requisicoes.
-const QC_fetchOriginal295 = window.fetch.bind(window);
-window.fetch = function(...argumentos) {
-  const destino = typeof argumentos[0] === "string"
-    ? argumentos[0] : (argumentos[0]?.url || "");
-  if (!/^https:\/\/script\.google\.com\/macros\/s\//i.test(destino)) {
-    return QC_fetchOriginal295(...argumentos);
-  }
-  const finalizar = QC_ESPERA295.iniciar("Consultando o QuintosCoin...");
-  try {
-    return Promise.resolve(QC_fetchOriginal295(...argumentos)).finally(finalizar);
-  } catch (erro) {
-    finalizar();
-    throw erro;
-  }
-};
-
-
-async function QC_post191(acao, parametros = {}) {
-  if (typeof acao !== "string" || !/^qc_[a-z0-9_]+$/.test(acao)) {
-    throw new Error("Acao do QuintosCoin invalida.");
-  }
-  if (!parametros || typeof parametros !== "object" || Array.isArray(parametros)) {
-    throw new Error("Parametros da requisicao invalidos.");
-  }
-  const tokenSessao = sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
-  if (!tokenSessao) {
-    throw new Error("Sua sessao expirou. Entre na carteira novamente.");
-  }
-  const resposta = await fetch(QC_URL_191, {
-    method: "POST",
-    redirect: "follow",
-    headers: {"Content-Type": "text/plain;charset=utf-8"},
-    body: JSON.stringify({ ...parametros, acao, tokenSessao })
-  });
-  if (!resposta.ok) {
-    throw new Error("Falha de comunicacao com o Apps Script. HTTP " + resposta.status);
-  }
-  return await resposta.json();
-}
-
-// QUINTOSCOIN - PASSO 278 - CARTEIRA COM RESGATE E DOACAO EM DESTAQUE
-const QC_CHAVE_CARTEIRA = "QC_CARTEIRA_TESTE";
-
-function QC_lerCarteira() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
 
   try {
-    const dados = JSON.parse(
-      localStorage.getItem(QC_CHAVE_CARTEIRA) || "[]"
+
+    const sessao = QC_validarTokenSessaoTeste(tokenSessao);
+
+    if (sessao.status !== "OK") {
+      throw new Error("Sessão expirada. Entre novamente.");
+    }
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    function tabela(nome, campos) {
+
+      const aba = ss.getSheetByName(nome);
+
+      if (!aba) {
+        throw new Error("Aba ausente: " + nome);
+      }
+
+      const dados = aba.getDataRange().getValues();
+      const cab = dados[0].map(v => String(v).trim());
+      const col = campo => cab.indexOf(campo);
+
+      if (campos.some(campo => col(campo) < 0)) {
+        throw new Error("Colunas ausentes: " + nome);
+      }
+
+      return { aba, dados, col };
+    }
+
+    const car = tabela("QC_Carteiras", [
+      "IdCarteira", "IdCadastro",
+      "Status", "Ambiente", "AlgoritmoSenha"
+    ]);
+
+    const aut = tabela("QC_Autorizacoes", [
+      "IdAutorizacao", "IdCadastro",
+      "Valor", "Status", "AutorizadaPor",
+      "DataAutorizacao", "IdEmissao"
+    ]);
+
+    const em = tabela("QC_Emissoes", [
+      "IdEmissao", "IdAutorizacao",
+      "ValorAutorizado", "QuantidadeFichas",
+      "Status", "DataCriacao", "DataConclusao"
+    ]);
+
+    const cot = tabela("QC_CotasEmissao", [
+      "IdCota", "IdEmissao", "Denominacao",
+      "IdChave", "QuantidadePermitida",
+      "QuantidadeAssinada", "Status"
+    ]);
+
+    const op = tabela(
+      "QC_OperacoesAssinatura",
+      ["IdEmissao"]
     );
 
-    return Array.isArray(dados) ? dados : [];
+    // Identificar o proprietário pela sessão.
+    const donos = car.dados.slice(1).filter(linha =>
+      String(linha[car.col("IdCarteira")]).trim()
+        === sessao.idCarteira &&
+      String(linha[car.col("Status")]).trim()
+        === "ATIVA" &&
+      String(linha[car.col("Ambiente")]).trim()
+        === "PRODUCAO" &&
+      String(linha[car.col("AlgoritmoSenha")]).trim()
+        === "PBKDF2_V2"
+    );
 
-  } catch (erro) {
-    console.error("Erro ao ler carteira:", erro);
-    return [];
-  }
-}
-
-function QC_atualizarTela() {
-  // Nunca apresentar o saldo demonstrativo QC_CARTEIRA_TESTE como saldo real.
-  // O modulo qc-saldo.js valida assinaturas e consulta fichas gastas.
-  if (typeof window.QC_atualizarSaldoReal202 === "function") {
-    window.QC_atualizarSaldoReal202();
-  }
-}
-
-
-const qcBtnReceber = document.getElementById("btnReceber");
-
-const qcModalReceber = document.createElement("div");
-
-qcModalReceber.id = "qcModalReceber";
-qcModalReceber.className = "qc-modal-overlay";
-
-qcModalReceber.innerHTML = `
-  <div class="qc-modal-card">
-    <div class="qc-modal-topo">
-      <h3>Receber QuintosCoin</h3>
-      <button
-        type="button"
-        id="qcFecharReceber"
-        class="qc-modal-fechar"
-      >×</button>
-    </div>
-
-    <p class="qc-modal-texto">
-      Informe a quantidade de QuintosCoin que deseja solicitar ao tesoureiro.
-    </p>
-
-    <label for="qcValorReceber" class="qc-label-modal">
-      Quantidade de QuintosCoin
-    </label>
-
-    <input
-      id="qcValorReceber"
-      type="number"
-      min="1"
-      step="1"
-      inputmode="numeric"
-      placeholder="Exemplo: 50"
-      class="qc-input-modal"
-    >
-
-    <div class="qc-modal-botoes">
-      <button
-        type="button"
-        id="qcConfirmarReceber"
-        class="qc-btn-modal-principal"
-      >
-        Solicitar QuintosCoin
-      </button>
-
-      <button
-        type="button"
-        id="qcCancelarReceber"
-        class="qc-btn-modal-secundario"
-      >
-        Cancelar
-      </button>
-    </div>
-
-    <p id="qcMensagemReceber" class="qc-modal-mensagem"></p>
-  </div>
-`;
-
-document.body.appendChild(qcModalReceber);
-// PASSO 340 — Rolagem acessível em celulares quando o Pix é apresentado.
-const qcEstiloPixReceber340=document.createElement("style");
-qcEstiloPixReceber340.textContent=`
-  #qcModalReceber {box-sizing:border-box;padding:12px;
-    padding-top:max(12px,env(safe-area-inset-top));
-    padding-bottom:max(12px,env(safe-area-inset-bottom));}
-  #qcModalReceber>.qc-modal-card {box-sizing:border-box;
-    min-height:0;max-height:calc(100vh - 24px);
-    max-height:calc(100dvh - 24px);overflow-y:auto;overflow-x:hidden;
-    overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
-  #qcReceberPix340 svg{max-width:100%;height:auto}
-`;
-document.head.appendChild(qcEstiloPixReceber340);
-
-// PASSO 293 - A confirmacao aparece NA MESMA JANELA do formulario.
-// Preservar os elementos originais preserva tambem seus eventos de clique.
-const qcCartaoReceber293 = qcModalReceber.querySelector(".qc-modal-card");
-const qcFormularioReceber293 = Array.from(qcCartaoReceber293.children);
-const qcConfirmacaoReceber293 = document.createElement("div");
-qcConfirmacaoReceber293.id = "qcConfirmacaoReceber293";
-qcConfirmacaoReceber293.setAttribute("role", "status");
-qcConfirmacaoReceber293.setAttribute("tabindex", "-1");
-qcConfirmacaoReceber293.style.cssText =
-  "display:none;flex-direction:column;align-items:center;" +
-  "justify-content:center;gap:14px;text-align:center;min-height:300px";
-qcCartaoReceber293.appendChild(qcConfirmacaoReceber293);
-
-// PASSO 295 - Pedidos autorizados dentro do proprio modal Receber Qc$.
-// Os identificadores do pedido sao obtidos pelo token autenticado da carteira.
-const qcPedidosReceber295 = document.createElement("div");
-qcPedidosReceber295.id = "qcPedidosReceber295";
-qcPedidosReceber295.setAttribute("role", "region");
-qcPedidosReceber295.setAttribute("aria-label", "Solicitacoes de recebimento");
-qcPedidosReceber295.style.display = "none";
-qcCartaoReceber293.insertBefore(
-  qcPedidosReceber295, qcConfirmacaoReceber293
-);
-let qcConsultaReceber295 = 0;
-// PASSO 341: bloqueia cliques repetidos enquanto o servidor confirma o cancelamento.
-let qcCancelandoPedidoPix341 = false;
-
-// PASSO 300 - Indicador de valores disponiveis no botao RECEBER Qc$.
-// So conta pedidos efetivamente recebiveis; CONFERIR nao gera alerta.
-const qcIndicadorReceber300 = document.createElement("span");
-qcIndicadorReceber300.id = "qcIndicadorReceber300";
-qcIndicadorReceber300.className = "qc-indicador-receber300";
-qcIndicadorReceber300.setAttribute("aria-hidden", "true");
-qcIndicadorReceber300.hidden = true;
-qcBtnReceber.appendChild(qcIndicadorReceber300);
-const qcEstiloReceber300 = document.createElement("style");
-qcEstiloReceber300.textContent = `
-  #telaCarteira #btnReceber { position:relative; }
-  #telaCarteira #btnReceber .qc-indicador-receber300 {
-    position:absolute;top:5px;right:5px;min-width:10px;height:10px;
-    box-sizing:border-box;border-radius:20px;background:#ffd04f;
-    border:1px solid #15243b;box-shadow:0 0 0 1px #ffd04f66;
-    font-size:10px;font-weight:800;line-height:16px;text-align:center;
-    color:#18243a;padding:0;pointer-events:none;
-  }
-  #telaCarteira #btnReceber .qc-indicador-receber300.qc-com-numero300 {
-    min-width:19px;height:19px;top:3px;right:3px;line-height:17px;
-    padding:0 3px;
-  }
-  #telaCarteira #btnReceber .qc-indicador-receber300[hidden] {
-    display:none!important;
-  }
-  /* PASSO 391: o indicador sobrevive aos icones reescritos na montagem. */
-  #telaCarteira #btnReceber .qc-indicador-receber300{display:none!important}
-  #telaCarteira #btnReceber.qc-receber-pendente391::after,
-  #telaCarteira #btnReceber.qc-receber-liberado391::after {
-    content:""!important;display:block!important;position:absolute!important;
-    width:12px!important;height:12px!important;min-width:12px!important;
-    min-height:12px!important;top:4px!important;right:4px!important;
-    left:auto!important;bottom:auto!important;border-radius:50%!important;
-    border:1px solid #15243b!important;z-index:5!important;
-    pointer-events:none!important;opacity:1!important;visibility:visible!important;
-    transform:none!important;
-  }
-  #telaCarteira #btnReceber.qc-receber-pendente391::after{
-    background:#ffd04f!important;box-shadow:0 0 0 1px #ffd04f88!important;
-  }
-  #telaCarteira #btnReceber.qc-receber-liberado391::after{
-    background:#2ecc71!important;box-shadow:0 0 0 1px #2ecc7188!important;
-  }
-`;
-document.head.appendChild(qcEstiloReceber300);
-let qcSequenciaIndicadorReceber300 = 0;
-function QC_contarDisponiveis300(pedidos) {
-  let quantidade = 0;
-  for (const p of pedidos) {
-    if (p.idEmissao && p.versaoEmissao !== "V2") continue;
-    if (p.status !== "AUTORIZADA") continue;
-    if (p.situacao === "PRONTA") {
-      // Nao anunciar novo recebimento se esta emissao ja foi salva aqui.
-      // O servidor continua sendo a fonte de autorizacao.
-      try {
-        const local=QC_estadoLocalRecebimento296(String(p.idEmissao||""),"V2");
-        if (local.armazenadas>0 && !local.pendente) continue;
-      } catch (_) { continue; }
-      quantidade++;continue;
+    if (donos.length !== 1) {
+      throw new Error("Carteira não autorizada.");
     }
-    if (p.situacao !== "EM_ANDAMENTO") continue;
-    // Uma emissao ja completamente recebida pode continuar temporariamente
-    // como EM_ANDAMENTO no servidor. Nao sinalizar de novo neste aparelho.
-    let local;
-    try { local = QC_estadoLocalRecebimento296(String(p.idEmissao || ""),"V2"); }
-    catch (_) { continue; }  // Armazenamento inconsistente: nao oferecer credito.
-    const iniciada = Number(p.quantidadeAssinada) > 0 ||
-      Number(p.operacoesExistentes) > 0 || local.armazenadas > 0;
-    if (local.pendente || !iniciada) quantidade++;
-  }
-  return quantidade;
-}
-// PASSO 391 - amarelo: solicitação registrada aguardando o tesoureiro;
-// verde: emissão autorizada e realmente disponível para ser recebida.
-// Uma resposta de rede inválida nunca é interpretada como autorização.
-function QC_mostrarIndicadorReceber300(quantidade, pendentes = 0) {
-  const liberados = Math.max(0, Number(quantidade) || 0);
-  const aguardando = Math.max(0, Number(pendentes) || 0);
-  const verde = liberados > 0;
-  const amarelo = !verde && aguardando > 0;
-  qcIndicadorReceber300.hidden = !verde && !amarelo;
-  qcIndicadorReceber300.textContent = "";
-  qcBtnReceber.classList.toggle("qc-receber-liberado391", verde);
-  qcBtnReceber.classList.toggle("qc-receber-pendente391", amarelo);
-  const descricao = verde
-    ? "Receber Qc$ — " + liberados + " emissão(ões) liberada(s) pelo tesoureiro"
-    : amarelo
-      ? "Receber Qc$ — " + aguardando + " solicitação(ões) aguardando autorização"
-      : "Receber Qc$";
-  qcBtnReceber.setAttribute("aria-label", descricao);
-  qcBtnReceber.title = verde ? "Qc$ liberados para receber" :
-    amarelo ? "Pedido aguardando tesoureiro" : "";
-}
-async function QC_atualizarIndicadorReceber300(pedidosConsultados) {
-  const atual = ++qcSequenciaIndicadorReceber300;
-  const token = sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
-  const id = localStorage.getItem("QC_ID_CARTEIRA");
-  if (!token || !id) {QC_mostrarIndicadorReceber300(0,0);return;}
-  try {
-    const dados = pedidosConsultados
-      ? {status:"OK", solicitacoes:pedidosConsultados}
-      : await QC_post191("qc_pedidos_receber_296");
-    if (atual !== qcSequenciaIndicadorReceber300 ||
-        token !== sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") ||
-        id !== localStorage.getItem("QC_ID_CARTEIRA")) return;
-    if (dados?.status !== "OK" || !Array.isArray(dados.solicitacoes)) return;
-    const pedidos = dados.solicitacoes.filter(p=>
-      !p.idEmissao || p.versaoEmissao==='V2');
-    const liberados = QC_contarDisponiveis300(pedidos);
-    const pendentes = pedidos.filter(p=>p.status==="PENDENTE").length;
-    QC_mostrarIndicadorReceber300(liberados,pendentes);
-  } catch (_) {
-    // Preservar último estado validado, sem inventar autorização por falha de rede.
-  }
-}
-window.QC_atualizarIndicadorReceber300 = QC_atualizarIndicadorReceber300;
-// A autorização acontece na carteira do tesoureiro. Ao voltar ao app,
-// consultar a situação pelo servidor, sem mexer nas fichas.
-document.addEventListener("visibilitychange",()=>{
-  if(!document.hidden && sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE"))
-    void QC_atualizarIndicadorReceber300();
-});
 
+    const idCadastro = String(
+      donos[0][car.col("IdCadastro")]
+    ).trim();
 
-// PASSO 300 - Confirmacao curta, no proprio modal, somente apos
-// todas as fichas terem sido salvas e verificadas e o saldo atualizado.
-window.QC_mostrarRecebimentoConcluido300 = function(dados) {
-  const valor = Number(dados?.valor);
-  if (!Number.isSafeInteger(valor) || valor <= 0 ||
-      qcModalReceber.style.display !== "flex") return;
-  qcFormularioReceber293.forEach(el => { el.style.display="none"; });
-  qcPedidosReceber295.style.display = "none";
-  qcConfirmacaoReceber293.replaceChildren();
-  qcConfirmacaoReceber293.style.cssText =
-    "display:flex;flex-direction:column;align-items:center;"+
-    "justify-content:center;gap:14px;text-align:center;min-height:260px";
-  const icone=document.createElement("div");
-  icone.textContent="✓";
-  icone.style.cssText="width:54px;height:54px;border-radius:50%;"+
-    "background:#168258;color:#fff;font-size:32px;display:grid;"+
-    "place-items:center;font-weight:bold";
-  const titulo=document.createElement("h3");
-  titulo.textContent="Recebimento concluído!";
-  titulo.style.cssText="margin:0;color:#f0cd72;font-size:22px";
-  const montante=document.createElement("strong");
-  montante.textContent=QC_valorReceber295(valor)+" recebidos";
-  montante.style.cssText="font-size:24px;color:#fff";
-  const mensagem=document.createElement("p");
-  mensagem.textContent="Fichas verificadas e protegidas. Toque em OK para conferir o novo saldo.";
-  mensagem.style.cssText="margin:0;font-size:14px;line-height:1.5";
-  const ok=document.createElement("button");
-  ok.type="button";
-  ok.className="qc-btn-modal-principal";
-  ok.textContent="OK";
-  ok.style.cssText="min-width:145px;max-width:220px;width:70%;margin-top:10px";
-  // PASSO 380 — A assinatura ja terminou. O OK faz SOMENTE leitura:
-  // confere o saldo e as fichas existentes; nunca solicita outra assinatura.
-  const carteiraConclusao = localStorage.getItem("QC_ID_CARTEIRA");
-  const sessaoConclusao = sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
-  ok.addEventListener("click", async function() {
-    if (ok.disabled) return;
-    if (localStorage.getItem("QC_ID_CARTEIRA") !== carteiraConclusao ||
-        sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") !== sessaoConclusao ||
-        !carteiraConclusao || !sessaoConclusao) {
-      mensagem.textContent="A carteira ou sessao mudou. Entre novamente para conferir o saldo.";
-      return;
-    }
-    ok.disabled=true;
-    ok.textContent="Conferindo saldo...";
-    mensagem.textContent="Conferindo assinaturas, gastos e fichas disponiveis...";
-    try {
-      if (typeof window.QC_atualizarSaldoReal202 !== "function") {
-        throw Error("Modulo de conferencia de saldo indisponivel.");
-      }
-      await window.QC_atualizarSaldoReal202();
-      if (localStorage.getItem("QC_ID_CARTEIRA") !== carteiraConclusao ||
-          sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") !== sessaoConclusao) {
-        throw Error("A carteira ou sessao mudou durante a conferencia.");
-      }
-      QC_fecharModalReceber();
-      // A ficha ja foi recebida; retirar o indicador de pedidos quando possivel.
-      QC_atualizarIndicadorReceber300().catch(() => {});
-    } catch (erro) {
-      // Nao oferecer outra emissao: os creditos ja foram assinados e salvos.
-      mensagem.textContent="✅ Fichas recebidas. Nao foi possivel conferir o saldo: " +
-        String(erro?.message || erro) + ". Toque em OK para tentar a consulta novamente.";
-      ok.disabled=false;
-      ok.textContent="OK";
-    }
-  });
-  qcConfirmacaoReceber293.append(icone,titulo,montante,mensagem,ok);
-  qcConfirmacaoReceber293.focus();
-};
+    // Localizar a autorização aprovada.
+    const autorizacoes = aut.dados.slice(1).filter(linha =>
+      String(linha[aut.col("IdAutorizacao")]).trim()
+        === id
+    );
 
-function QC_mostrarFormularioReceber295() {
-  qcPedidosReceber295.style.display = "none";
-  qcFormularioReceber293.forEach(elemento => {elemento.style.display = "";});
-  qcConfirmacaoReceber293.style.display = "none";
-}
-function QC_mostrarListaReceber295() {
-  qcFormularioReceber293.forEach((elemento, indice) => {
-    elemento.style.display = indice === 0 ? "" : "none";
-  });
-  qcConfirmacaoReceber293.style.display = "none";
-  qcPedidosReceber295.style.display = "block";
-}
-function QC_avisoReceber295(texto) {
-  const p = document.createElement("p");
-  p.setAttribute("role", "status");
-  p.style.cssText = "color:#e6c363;font-size:13px;line-height:1.5;margin:10px 0";
-  p.textContent = texto;
-  return p;
-}
-function QC_botaoReceber295(texto, primario = false) {
-  const b = document.createElement("button");
-  b.type = "button";
-  b.className = primario ? "qc-btn-modal-principal" : "qc-btn-modal-secundario";
-  b.textContent = texto;
-  b.style.cssText = "width:100%;margin-top:10px";
-  return b;
-}
-function QC_valorReceber295(valor) {
-  return "Qc$ " + Number(valor).toLocaleString("pt-BR", {
-    minimumFractionDigits:2,maximumFractionDigits:2
-  });
-}
-
-// PASSO 296 - Metadados LOCAIS apenas para retomar emissao deste aparelho.
-// Nunca considera um registro criptografado como prova de credito:
-// a situacao da assinatura vem do servidor e o saldo valida o conteudo.
-function QC_estadoLocalRecebimento296(idEmissao, versaoEmissao = "V1") {
-  const idCarteira = localStorage.getItem("QC_ID_CARTEIRA") || "";
-  if (!idCarteira || !idEmissao) return {pendente:false, armazenadas:0};
-  function ler(chave) {
-    const v = JSON.parse(localStorage.getItem(chave) || "{}");
-    if (!v || typeof v !== "object" || Array.isArray(v)) {
-      throw Error("Dados locais de recebimento inconsistentes.");
-    }
-    return v;
-  }
-  const versao = versaoEmissao === "V2" ? "V2" : "V1";
-  const pendentes = ler("QC_FICHAS_CEGAS_PENDENTES_" + versao + "_" + idCarteira);
-  const assinadas = ler("QC_FICHAS_ASSINADAS_" + versao + "_" + idCarteira);
-  const quant = Object.keys(assinadas).filter(k =>
-    k === idEmissao || k.startsWith(idEmissao + "_")).length;
-  return {pendente:!!pendentes[idEmissao], armazenadas:quant};
-}
-
-// PASSO 392 — O usuario confirma uma unica vez; a assinatura e a conferencia
-// seguem em sequencia, com retomada pela mesma emissao em caso de falha.
-let qcRecebimentoOcupado392 = false;
-
-// PASSO 393 — Uma consulta travada nao pode prender a janela indefinidamente.
-// Promise.race nao repete nem cancela escritas no servidor: se a resposta se
-// perder, o proximo passo e consultar a MESMA autorizacao, nunca criar outra.
-function QC_esperarResposta393(promessa, limiteMs, mensagem) {
-  let alarme;
-  const limite = new Promise((_, rejeitar) => {
-    alarme = setTimeout(() => rejeitar(Error(mensagem)), limiteMs);
-  });
-  return Promise.race([Promise.resolve(promessa), limite])
-    .finally(() => clearTimeout(alarme));
-}
-
-// Atualizacao automatica apenas dos indicadores (SOMENTE LEITURA).
-// Evitar requisicoes em segundo plano, concorrencia com recebimentos e
-// consultas sucessivas quando a rede estiver lenta. Retorno nao e push:
-// pode levar ate um ciclo para a nova autorizacao aparecer.
-let qcIndicadoresAutoEmAndamento393 = false;
-let qcUltimaVerificacaoAuto393 = 0;
-async function QC_verificarIndicadoresAuto393() {
-  const token = sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
-  const carteira = localStorage.getItem("QC_ID_CARTEIRA");
-  const tela = document.getElementById("telaCarteira");
-  const agora = Date.now();
-  if (document.hidden || !token || !carteira || !tela ||
-      getComputedStyle(tela).display === "none" ||
-      qcRecebimentoOcupado392 || qcIndicadoresAutoEmAndamento393 ||
-      (document.getElementById("qcModalReceber")?.style.display === "flex") ||
-      agora - qcUltimaVerificacaoAuto393 < 30000) return;
-  qcIndicadoresAutoEmAndamento393 = true;
-  qcUltimaVerificacaoAuto393 = agora;
-  try {
-    await QC_esperarResposta393(
-      QC_atualizarIndicadorReceber300(), 25000,
-      "Consulta de indicador demorou demais.");
-    if (typeof window.QC_atualizarIndicadorResgate386 === "function") {
-      await QC_esperarResposta393(
-        window.QC_atualizarIndicadorResgate386(), 25000,
-        "Consulta de resgates demorou demais.");
-    }
-  } catch (erro) {
-    // Na falha de rede, conservar a ultima cor confirmada.
-    // O proximo ciclo consulta novamente sem alterar saldos nem fichas.
-    console.warn("QuintosCoin: verificacao automatica de indicadores", erro);
-  } finally {
-    qcIndicadoresAutoEmAndamento393 = false;
-  }
-}
-setInterval(() => { void QC_verificarIndicadoresAuto393(); }, 40000);
-window.addEventListener("focus", () => {
-  void QC_verificarIndicadoresAuto393();
-});
-function QC_exibirLiberacao392(pedido, iniciar) {
-  qcPedidosReceber295.style.display = "none";
-  qcFormularioReceber293.forEach(el=>{el.style.display="none";});
-  qcConfirmacaoReceber293.replaceChildren();
-  qcConfirmacaoReceber293.style.cssText =
-    "display:flex;flex-direction:column;align-items:center;"+
-    "justify-content:center;gap:13px;text-align:center;min-height:250px";
-  const titulo=document.createElement("h3");
-  titulo.textContent="Qc$ liberados pelo tesoureiro";
-  titulo.style.cssText="font-size:21px;color:#e6c363;margin:0";
-  const valor=document.createElement("strong");
-  valor.textContent=QC_valorReceber295(pedido.valor);
-  valor.style.cssText="font-size:27px;color:#fff";
-  const descricao=document.createElement("p");
-  descricao.textContent="Toque em OK para receber suas fichas. " +
-    "Elas serão assinadas, verificadas e protegidas automaticamente.";
-  descricao.style.cssText="font-size:14px;line-height:1.55;margin:0";
-  const ok=QC_botaoReceber295("OK",true);
-  // O botão não deve ocupar toda a largura ou crescer com o rótulo de espera.
-  ok.style.cssText="width:160px!important;max-width:80%;min-height:44px;"+
-    "padding:9px 18px;margin:8px auto 0;flex:0 0 auto;"+
-    "box-sizing:border-box;white-space:nowrap;font-size:15px";
-  const mensagem=document.createElement("p");
-  mensagem.setAttribute("role","status");
-  mensagem.style.cssText="font-size:13px;line-height:1.5;margin:0;overflow-wrap:anywhere";
-  // Indicador explícito: o elemento técnico de recebimento fica oculto.
-  const spinner=document.createElement("span");
-  spinner.className="qc-espera-roda297";
-  spinner.setAttribute("aria-hidden","true");
-  spinner.style.cssText="display:none;width:19px;height:19px;margin:0 auto";
-  qcConfirmacaoReceber293.append(titulo,valor,descricao,ok,spinner,mensagem);
-  ok.addEventListener("click",async()=>{
-    if(qcRecebimentoOcupado392)return;
-    const token=sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
-    const id=localStorage.getItem("QC_ID_CARTEIRA");
-    if(!token||!id||typeof window.QC_senhaFichas291!=="function"||
-       !window.QC_senhaFichas291()) {
-      mensagem.textContent="Entre novamente na carteira para receber os Qc$.";
-      return;
-    }
-    qcRecebimentoOcupado392=true;
-    ok.disabled=true;
-    ok.textContent="Recebendo...";
-    spinner.style.display="inline-block";
-    descricao.textContent="As fichas serão preparadas e assinadas no celular. " +
-      "A janela fechará somente após a conferência do saldo.";
-    mensagem.textContent="Conferindo autorização...";
-    const concluir=async()=>{
-      if(token!==sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")||
-         id!==localStorage.getItem("QC_ID_CARTEIRA"))
-        throw Error("Sessao alterada durante o recebimento.");
-      if(typeof window.QC_atualizarSaldoReal202!=="function")
-        throw Error("Conferencia de saldo indisponivel.");
-      mensagem.textContent="Fichas recebidas. Conferindo saldo...";
-      await window.QC_atualizarSaldoReal202();
-      if(token!==sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")||
-         id!==localStorage.getItem("QC_ID_CARTEIRA"))
-        throw Error("Sessao alterada durante a conferencia.");
-      qcRecebimentoOcupado392=false;
-      spinner.style.display="none";
-      QC_fecharModalReceber();
-      void QC_atualizarIndicadorReceber300();
-    };
-    const falhar=erro=>{
-      if(!qcRecebimentoOcupado392) return; // Uma falha não aparece duas vezes.
-      qcRecebimentoOcupado392=false;
-      spinner.style.display="none";
-      ok.disabled=true; // Evitar repetir sem conciliar o servidor.
-      ok.textContent="Verificar pedido";
-      mensagem.textContent="⚠️ "+String(erro?.message||erro)+
-        ". Não solicite outra emissão nem limpe os dados do celular. " +
-        "Consulte a mesma autorização para retomar com segurança.";
-      const voltar=QC_botaoReceber295("Consultar pedido existente");
-      voltar.style.maxWidth="260px";
-      voltar.addEventListener("click",()=>{ void QC_carregarPedidosReceber295(); });
-      qcConfirmacaoReceber293.appendChild(voltar);
-    };
-    try {
-      await iniciar({
-        automatico:true,aoConcluir:concluir,aoErro:falhar,
-        aoProgresso:texto=>{mensagem.textContent=texto;}
-      });
-    }catch(erro){falhar(erro);}
-  });
-  qcConfirmacaoReceber293.focus();
-}
-
-async function QC_carregarPedidosReceber295() {
-  const consulta = ++qcConsultaReceber295;
-  QC_mostrarListaReceber295();
-  qcPedidosReceber295.replaceChildren(
-    QC_avisoReceber295("Conferindo as autorizacoes e as assinaturas...")
-  );
-  try {
-    // NAO utilizar apenas o status AUTORIZADA: ele permanece em historicos
-    // ja emitidos. A rota 296 cruza autorizacao, emissao, cotas e assinaturas.
-    const dados = await QC_post191("qc_pedidos_receber_296");
-    if (consulta !== qcConsultaReceber295 ||
-        qcModalReceber.style.display !== "flex") return;
-    if (!dados || dados.status !== "OK" ||
-        !Array.isArray(dados.solicitacoes)) {
-      throw Error(dados?.mensagem || "Consulta de emissões indisponível.");
-    }
-    // O historico encerrado fica apenas nos livros internos.
-    const pedidos = dados.solicitacoes.filter(p =>
-      !p.idEmissao || p.versaoEmissao === 'V2');
-    QC_atualizarIndicadorReceber300(pedidos);
-    const ativos = pedidos.filter(p => p.status === "AUTORIZADA" &&
-      ["PRONTA","EM_ANDAMENTO","CONFERIR"].includes(p.situacao));
-    const assinados = pedidos.filter(p => p.status === "AUTORIZADA" &&
-      p.situacao === "ASSINADA");
-    const aguardando = pedidos.filter(p => p.status === "PENDENTE");
-    qcPedidosReceber295.replaceChildren();
-    const titulo = document.createElement("p");
-    titulo.style.cssText="margin:10px 0 12px;line-height:1.5";
-    const disponiveis300 = QC_contarDisponiveis300(pedidos);
-    titulo.textContent = disponiveis300 > 0
-      ? "Disponível para receber: " + disponiveis300
-      : ativos.some(p => p.situacao === "CONFERIR")
-        ? "Não há novos recebimentos disponíveis. Veja a pendência abaixo."
-        : "Nenhum recebimento novo disponível.";
-    qcPedidosReceber295.appendChild(titulo);
-
-    const disponiveis392=[];
-    for (const p of ativos) {
-      const valor = Number(p.valor);
-      const situacao = p.situacao;
-      const idEmissao = String(p.idEmissao || "");
-      const cartao = document.createElement("section");
-      cartao.style.cssText = "background:#1d3554;border:1px solid #e6c36355;" +
-        "border-radius:12px;padding:15px;margin-bottom:12px";
-      const tituloPedido = document.createElement("strong");
-      tituloPedido.style.cssText = "color:#e6c363;display:block;margin-bottom:6px";
-      tituloPedido.textContent = QC_valorReceber295(valor) + " — " +
-        (situacao === "PRONTA" ? "AUTORIZADO" :
-         situacao === "EM_ANDAMENTO" ? "EM ANDAMENTO" : "CONFERIR");
-      const info = document.createElement("p");
-      info.style.cssText = "font-size:12px;color:#d7dce6;margin:5px 0";
-      info.textContent = "Solicitado em: " + (p.dataSolicitacao || "Data não informada") +
-        " · Pedido: " + String(p.idAutorizacao || "").slice(0,8);
-      const descricao = document.createElement("p");
-      descricao.style.cssText = "font-size:13px;line-height:1.5;margin:8px 0";
-      const mensagem = document.createElement("p");
-      mensagem.setAttribute("role","status");
-      mensagem.style.cssText = "font-size:13px;line-height:1.5;margin-top:8px";
-      const acoes = document.createElement("div");
-      const local = QC_estadoLocalRecebimento296(idEmissao, p.versaoEmissao);
-      const parcialmenteAssinado = Number(p.quantidadeAssinada) > 0 ||
-        Number(p.operacoesExistentes) > 0 || local.armazenadas > 0;
-      const jaRecebidoLocal = local.armazenadas > 0 && !local.pendente;
-      let permitir = (situacao === "PRONTA" && !jaRecebidoLocal) ||
-        (situacao === "EM_ANDAMENTO" &&
-          (local.pendente || !parcialmenteAssinado));
-      // A V1 pertence exclusivamente ao piloto historico. Nao emitir V1.
-      if (idEmissao && p.versaoEmissao !== "V2") {
-        permitir = false;
-        descricao.textContent = "Emissao indisponivel para recebimento.";
-      }
-      if (jaRecebidoLocal && situacao === "PRONTA") {
-        descricao.textContent = "As fichas desta emissao ja foram armazenadas " +
-          "neste aparelho. Confira o saldo; nao prepare novas fichas.";
-      } else if (situacao === "CONFERIR") {
-        descricao.textContent = p.mensagem ||
-          "Os registros desta emissão precisam de conferência. Nenhuma assinatura será solicitada.";
-        permitir = false;
-      } else if (idEmissao && p.versaoEmissao !== "V2") {
-        // Manter a mensagem de bloqueio da versao historica V1.
-      } else if (situacao === "EM_ANDAMENTO" && !permitir) {
-        descricao.textContent = "Esta emissão já tem operações iniciadas. " +
-          "Para continuar, use o dispositivo onde as fichas foram preparadas " +
-          "ou recupere o backup antes de tentar outra emissão.";
-      } else if (situacao === "EM_ANDAMENTO" && local.pendente) {
-        descricao.textContent = "Fichas preparadas neste aparelho. " +
-          "Continue o recebimento sem gerar novas fichas.";
-      } else if (situacao === "EM_ANDAMENTO") {
-        descricao.textContent = "Emissão preparada, aguardando assinatura das fichas.";
-      } else {
-        descricao.textContent = "Autorizado pelo tesoureiro. Pronto para receber.";
-      }
-      cartao.append(tituloPedido,info,descricao);
-      if (permitir) {
-        const botao = QC_botaoReceber295(
-          local.pendente ? "Continuar recebimento" :
-          "Receber " + QC_valorReceber295(valor), true);
-        cartao.append(botao,mensagem,acoes);
-        const iniciarRecebimento392=async opcoes392=>{
-          // Preparar a MESMA emissão liberada; não solicitar novos créditos.
-          let emissao=idEmissao;
-          let versaoEmissao=p.versaoEmissao;
-          if(!emissao){
-            opcoes392.aoProgresso?.("Conferindo a autorização com o servidor...");
-            const preparado=await QC_esperarResposta393(
-              QC_post191("qc_preparar_emissao",{
-                idAutorizacao:p.idAutorizacao
-              }), 50000,
-              "O servidor demorou a responder à preparação. " +
-              "Não sabemos ainda se a emissão foi preparada.");
-            if(preparado?.status==="ERRO")
-              throw Error(preparado.mensagem||"Preparação não autorizada.");
-            emissao=String(preparado?.idEmissao||
-              preparado?.emissao?.idEmissao||"").trim();
-            versaoEmissao=preparado?.versaoFicha;
-            if(!/^QC-EM-[0-9a-f-]{36}$/i.test(emissao)||
-               versaoEmissao!=="V2")
-              throw Error(preparado?.mensagem||
-                "A emissão V2 ainda não foi confirmada pelo servidor.");
-          }
-          if(versaoEmissao!=="V2") throw Error("Emissão V2 indisponível.");
-          opcoes392.aoProgresso?.("Autorização conferida. Preparando fichas...");
-          const pronto={...p,idEmissao:emissao,
-            versaoEmissao:"V2",valor,status:"AUTORIZADA"};
-          if(typeof window.QC_inserirAcao195!=="function"||
-             typeof window.QC_inserirRecebimento198!=="function")
-            throw Error("Módulo de recebimento indisponível.");
-          acoes.replaceChildren();
-          // Preparação/assinatura usam este mesmo IdEmissao e os callbacks
-          // de conclusão/erro do qc-fichas.js. Nenhuma confirmação extra.
-          window.QC_inserirAcao195(acoes,pronto,opcoes392);
-          acoes.style.display="none";
-        };
-        disponiveis392.push({pedido:p,iniciar:iniciarRecebimento392});
-        botao.addEventListener("click",()=>QC_exibirLiberacao392(p,iniciarRecebimento392));
-      } else {
-        cartao.append(mensagem);
-      }
-      qcPedidosReceber295.appendChild(cartao);
-    }
-    if (aguardando.length) {
-      qcPedidosReceber295.appendChild(QC_avisoReceber295(
-        aguardando.length === 1
-          ? "Você também tem 1 pedido aguardando autorização do tesoureiro."
-          : "Você também tem " + aguardando.length +
-            " pedidos aguardando autorização do tesoureiro."
-      ));
-      // PASSO 340 — Reabrir o Pix do mesmo pedido PENDENTE, sem gerar outro.
-      for(const pedido of aguardando) {
-        const quantidade=Number(pedido.valor);
-        if(!Number.isSafeInteger(quantidade)||quantidade<1) continue;
-        const area=document.createElement("div");
-        area.style.cssText="border:1px solid #e6c36350;border-radius:10px;"+
-          "padding:12px;margin:9px 0";
-        const resumo=document.createElement("p");
-        resumo.textContent=QC_valorReceber295(quantidade)+
-          " · Pedido pendente · " + String(pedido.dataSolicitacao||"");
-        resumo.style.cssText="font-size:13px;line-height:1.5;margin:0";
-        const verPix=QC_botaoReceber295("Ver Pix deste pedido");
-        verPix.addEventListener("click",()=>{
-          QC_exibirConfirmacaoReceber(quantidade,{
-            reabrir:true,
-            idAutorizacao:String(pedido.idAutorizacao||"").trim()
-          });
-        });
-        area.append(resumo,verPix);
-        qcPedidosReceber295.appendChild(area);
-      }
-    }
-    const novo = QC_botaoReceber295("+ Solicitar novos Qc$");
-    novo.addEventListener("click",QC_mostrarFormularioReceber295);
-    qcPedidosReceber295.appendChild(novo);
-    // Um unico pedido liberado: o clique na bolinha verde abre diretamente
-    // a tela simples de liberacao, sem a lista nem botoes tecnicos.
-    if(disponiveis392.length===1 &&
-       qcModalReceber.style.display==="flex") {
-      const unico=disponiveis392[0];
-      QC_exibirLiberacao392(unico.pedido,unico.iniciar);
-    }
-  } catch (erro) {
-    if (consulta !== qcConsultaReceber295 ||
-        qcModalReceber.style.display !== "flex") return;
-    QC_mostrarListaReceber295();
-    qcPedidosReceber295.replaceChildren(QC_avisoReceber295(
-      "⚠️ Consulta indisponível: " + erro.message +
-      ". Não será iniciada outra emissão até a situação ser conferida."
-    ));
-    const repetir = QC_botaoReceber295("Tentar novamente");
-    repetir.addEventListener("click", QC_carregarPedidosReceber295);
-    qcPedidosReceber295.appendChild(repetir);
-  }
-}
-
-function QC_abrirModalReceber() {
-  document.getElementById("qcMensagemReceber").textContent = "";
-  qcModalReceber.style.display = "flex";
-  QC_carregarPedidosReceber295();
-}
-
-function QC_fecharModalReceber() {
-  if (qcCancelandoPedidoPix341 || qcRecebimentoOcupado392) return;
-  qcConsultaReceber295++; // descarta resposta de consultas encerradas
-  qcModalReceber.style.display = "none";
-  document.getElementById("qcMensagemReceber").textContent = "";
-}
-
-// PASSO 341 — Cancelamento de pedido de RECEBIMENTO, nunca de Pix bancário.
-// A rota autentica a carteira e só permite a transição PENDENTE -> CANCELADA.
-async function QC_cancelarPedidoPix341(idAutorizacao, quantidade, botao) {
-  if(qcCancelandoPedidoPix341) return;
-  const id=String(idAutorizacao||"").trim();
-  if(!/^[0-9a-f-]{36}$/i.test(id)) {
-    const aviso=QC_avisoReceber295(
-      "Não foi possível identificar o pedido. Volte à lista e consulte novamente.");
-    qcConfirmacaoReceber293.appendChild(aviso);
-    return;
-  }
-  const aceito=await QC_dialogoQuintos338({
-    titulo:"Cancelar pedido de recebimento",
-    texto:"Deseja cancelar esta solicitação de QuintosCoin?",
-    detalhes:[{rotulo:"PEDIDO",valor:id.slice(0,8)},
-      {rotulo:"VALOR SOLICITADO",valor:QC_valorReceber295(quantidade)}],
-    aviso:"Cancele somente se AINDA NÃO FEZ O PIX. " +
-      "Se você já pagou, não cancele: fale com o tesoureiro. " +
-      "Este cancelamento não estorna pagamentos bancários. " +
-      "Pedidos já autorizados não podem ser cancelados por aqui.",
-    confirmarTexto:"Sim, cancelar pedido",
-    cancelarTexto:"Manter pedido"
-  });
-  if(!aceito) return;
-  qcCancelandoPedidoPix341=true;
-  if(botao) botao.disabled=true;
-  const status=QC_avisoReceber295("Solicitando cancelamento ao servidor...");
-  qcConfirmacaoReceber293.appendChild(status);
-  try {
-    const retorno=await QC_post191("qc_cancelar_pedido_pix_341",{
-      idAutorizacao:id
-    });
-    if(retorno?.status!=="CANCELADA") {
-      throw Error(retorno?.mensagem ||
-        "Pedido não cancelado: " + String(retorno?.status||"resposta desconhecida"));
-    }
-    // A lista sempre é consultada novamente; não se cria nova emissão.
-    void QC_atualizarIndicadorReceber300();
-    await QC_carregarPedidosReceber295();
-    if(qcModalReceber.style.display==="flex" &&
-       qcPedidosReceber295.style.display==="block") {
-      qcPedidosReceber295.insertBefore(
-        QC_avisoReceber295("✅ Pedido cancelado no servidor. Nenhum Qc$ foi emitido. " +
-          "Se já houve Pix, contate o tesoureiro sobre o pagamento."),
-        qcPedidosReceber295.firstChild
+    if (autorizacoes.length !== 1) {
+      throw new Error(
+        "Autorização não encontrada ou duplicada."
       );
     }
-  } catch(erro) {
-    status.textContent="⚠️ " + String(erro.message||erro) +
-      ". Consulte a lista de pedidos antes de tentar novamente.";
-  } finally {
-    qcCancelandoPedidoPix341=false;
-    if(botao && botao.isConnected) botao.disabled=false;
-  }
-}
 
-function QC_exibirConfirmacaoReceber(quantidade, opcoes={}) {
-  const reabrir=!!opcoes.reabrir;
-  const idAutorizacao=String(opcoes.idAutorizacao||"").trim();
-  qcPedidosReceber295.style.display = "none";
-  // Substituir visualmente o formulario pela confirmacao dentro do modal.
-  qcFormularioReceber293.forEach(elemento => {
-    elemento.style.display = "none";
-  });
-  qcConfirmacaoReceber293.replaceChildren();
-
-  const titulo = document.createElement("h3");
-  titulo.textContent = reabrir ? "Pix para pedido pendente" :
-    "✅ Solicitação registrada!";
-  titulo.style.cssText = "margin:0;color:#e6c363;font-size:21px";
-
-  const valor = document.createElement("div");
-  valor.textContent = quantidade + " QC solicitados";
-  valor.style.cssText = "font-size:24px;font-weight:700;color:#fff";
-
-  const situacao = document.createElement("div");
-  situacao.textContent = "⏳ Status: PENDENTE";
-  situacao.style.cssText = "font-weight:700;color:#e6c363";
-
-  const descricao = document.createElement("p");
-  descricao.textContent =
-    "Pedido pendente de autorização do tesoureiro. " +
-    "O Pix pode ser pago no banco, mas os Qc$ só serão creditados " +
-    "após a confirmação do tesoureiro e a assinatura das fichas.";
-  descricao.style.cssText = "margin:0;line-height:1.5";
-
-  const fechar = document.createElement("button");
-  fechar.type = "button";
-  fechar.className = "qc-btn-modal-principal";
-  fechar.textContent = reabrir ? "Voltar aos pedidos" : "OK";
-  fechar.style.cssText = "margin-top:8px;width:100%;min-height:44px;"+
-    "box-sizing:border-box;";
-  fechar.addEventListener("click", reabrir ?
-    QC_carregarPedidosReceber295 : QC_fecharModalReceber);
-
-  // Ação distinta: cancelar o PEDIDO no servidor, e não só fechar o Pix.
-  const cancelarPedido=document.createElement("button");
-  cancelarPedido.type="button";
-  cancelarPedido.className="qc-btn-modal-secundario";
-  cancelarPedido.textContent=reabrir ? "Cancelar pedido" : "Cancelar";
-  cancelarPedido.style.cssText="width:100%;min-height:44px;"+
-    "box-sizing:border-box;border-color:#da8a8a;";
-  const idValido=/^[0-9a-f-]{36}$/i.test(idAutorizacao);
-  cancelarPedido.disabled=!idValido;
-  cancelarPedido.addEventListener("click",()=>
-    QC_cancelarPedidoPix341(idAutorizacao,quantidade,cancelarPedido));
-  const botoesPix=document.createElement("div");
-  botoesPix.style.cssText="display:flex;flex-direction:column;"+
-    "gap:9px;width:100%;box-sizing:border-box;margin-top:8px";
-  botoesPix.append(fechar,cancelarPedido);
-  if(!idValido) {
-    const orientacao=QC_avisoReceber295(
-      "Para cancelar com segurança, volte à lista e consulte o pedido atualizado.");
-    botoesPix.appendChild(orientacao);
-  }
-
-  // O Pix é gerado localmente. Mesmo que ele falhe, a solicitação
-  // previamente confirmada como PENDENTE continua registrada no servidor.
-  const pagamentoPix=QC_montarPagamentoPix340(quantidade);
-  qcConfirmacaoReceber293.append(
-    titulo, valor, situacao, descricao, pagamentoPix, botoesPix
-  );
-  qcConfirmacaoReceber293.style.display = "flex";
-  qcModalReceber.style.display = "flex";
-  qcConfirmacaoReceber293.focus();
-}
-
-qcBtnReceber.addEventListener("click", function() {
-  QC_abrirModalReceber();
-});
-
-document.getElementById("qcFecharReceber")
-  .addEventListener("click", function() {
-    QC_fecharModalReceber();
-  });
-
-document.getElementById("qcCancelarReceber")
-  .addEventListener("click", function() {
-    QC_fecharModalReceber();
-  });
-
-qcModalReceber.addEventListener("click", function(e) {
-  if (e.target === qcModalReceber) {
-    QC_fecharModalReceber();
-  }
-});
-
-document.getElementById("qcConfirmarReceber")
-  .addEventListener("click", async function() {
-
-    const botao = this;
-
-    const campo = document.getElementById("qcValorReceber");
-    const mensagem = document.getElementById("qcMensagemReceber");
-
-    const quantidade = Number(campo.value);
+    const a = autorizacoes[0];
 
     if (
-      !campo.value.trim() ||
-      !Number.isSafeInteger(quantidade) ||
-      quantidade < 1
+      String(a[aut.col("IdCadastro")]).trim()
+        !== idCadastro
     ) {
-      mensagem.textContent =
-        "⚠️ Informe uma quantidade inteira positiva de Qc$.";
-      return;
-    }
-
-    const token = sessionStorage.getItem(QC_CHAVE_SESSAO);
-
-    if (!token) {
-      mensagem.textContent =
-        "⚠️ Sessão expirada. Entre novamente.";
-      return;
-    }
-
-    botao.disabled = true;
-    botao.textContent = "Enviando solicitação...";
-    mensagem.textContent = "";
-
-    try {
-
-      const resultado = await QC_enviarSolicitacaoCreditos(
-        token,
-        quantidade
+      throw new Error(
+        "Esta autorização não pertence à carteira."
       );
+    }
 
-      if (resultado.status !== "PENDENTE") {
+    if (
+      String(a[aut.col("Status")]).trim()
+        !== "AUTORIZADA" ||
+      !a[aut.col("AutorizadaPor")] ||
+      !a[aut.col("DataAutorizacao")]
+    ) {
+      throw new Error(
+        "Autorização ainda não aprovada pelo tesoureiro."
+      );
+    }
+
+    const valor = Number(a[aut.col("Valor")]);
+    const idEmissao = "QC-EM-" + id;
+    QC_exigirPrimeiraEmissaoV2375(idEmissao, valor);
+
+    // PASSO 363: novas emissoes SOMENTE V2; as anteriores V1 nao sao
+    // replanejadas e os seus identificadores e historico permanecem intactos.
+    const plano = QC_planejarCotasEmissaoV2362(valor, idEmissao);
+
+    // Exigir chaves V2 ativas para CADA cota antes de qualquer escrita.
+    // O status atual AGUARDANDO_INTEGRACAO falha fechado, intencionalmente.
+    const abaChaves363 = ss.getSheetByName("QC_ChavesAssinatura");
+    if (!abaChaves363) throw new Error("Cadastro de chaves ausente.");
+    const chaves363 = abaChaves363.getDataRange().getValues();
+    const hChaves363 = chaves363[0].map(v => String(v).trim());
+    const cChave363 = campo => hChaves363.indexOf(campo);
+    if (["IdChave", "Denominacao", "Versao", "Status", "ModuloPublico", "ExpoentePublico"]
+        .some(campo => cChave363(campo) < 0)) {
+      throw new Error("Cabecalhos de chaves incompletos.");
+    }
+    for (const cota363 of plano.cotas) {
+      const linhas363 = chaves363.slice(1).filter(r =>
+        String(r[cChave363("IdChave")] || "").trim() === cota363.idChave
+      );
+      if (linhas363.length !== 1) throw new Error("Chave V2 ausente ou duplicada.");
+      const r363 = linhas363[0];
+      if (Number(r363[cChave363("Denominacao")]) !== cota363.denominacao ||
+          Number(r363[cChave363("Versao")]) !== 2 ||
+          String(r363[cChave363("Status")]).trim() !== "ATIVA" ||
+          !/^[89a-f][0-9a-f]{1023}$/i.test(String(r363[cChave363("ModuloPublico")]).trim()) ||
+          !/^0*10001$/i.test(String(r363[cChave363("ExpoentePublico")]).trim())) {
+        throw new Error("Chave V2 nao ativa ou invalida: " + cota363.idChave);
+      }
+    }
+
+    // Não preparar novamente emissões que
+    // já tenham operações de assinatura.
+    if (op.dados.slice(1).some(r =>
+      String(r[op.col("IdEmissao")]).trim()
+        === idEmissao
+    )) {
+      throw new Error(
+        "Esta emissão já possui operações registradas."
+      );
+    }
+
+    const vinculo = String(
+      a[aut.col("IdEmissao")] || ""
+    ).trim();
+
+    if (vinculo && vinculo !== idEmissao) {
+      throw new Error(
+        "Autorização vinculada a outra emissão."
+      );
+    }
+
+    // Conferir emissões existentes.
+    const anteriores = em.dados.slice(1).filter(linha =>
+      String(linha[em.col("IdEmissao")]).trim()
+        === idEmissao ||
+      String(linha[em.col("IdAutorizacao")]).trim()
+        === id
+    );
+
+    if (anteriores.length > 1) {
+      throw new Error("Emissões duplicadas.");
+    }
+
+    if (anteriores.length) {
+
+      const r = anteriores[0];
+
+      if (
+        String(r[em.col("IdEmissao")]).trim()
+          !== idEmissao ||
+        String(r[em.col("IdAutorizacao")]).trim()
+          !== id ||
+        Number(r[em.col("ValorAutorizado")])
+          !== valor ||
+        Number(r[em.col("QuantidadeFichas")])
+          !== plano.quantidadeFichas ||
+        String(r[em.col("Status")]).trim()
+          !== "AGUARDANDO_ASSINATURA"
+      ) {
         throw new Error(
-          resultado.mensagem ||
-          "Não foi possível registrar a solicitação."
+          "Emissão existente não está na etapa de preparação."
         );
       }
 
+    } else if (vinculo) {
 
-      campo.value = "";
-      // Mostrar a confirmação na própria janela, sem tocar no saldo.
-      QC_exibirConfirmacaoReceber(quantidade,{
-        idAutorizacao:String(resultado.idAutorizacao||"").trim()
-      });
-      // Pedido confirmado como PENDENTE pelo servidor: sinalização imediata.
-      // A consulta posterior concilia este estado com outros pedidos liberados.
-      qcSequenciaIndicadorReceber300++;
-      QC_mostrarIndicadorReceber300(0,1);
-      void QC_atualizarIndicadorReceber300();
-
-
-    } catch (erro) {
-
-      mensagem.textContent =
-        "⚠️ " + erro.message +
-        " Se houve falha de comunicação, consulte o tesoureiro antes de solicitar novamente.";
-
-    } finally {
-
-      botao.disabled = false;
-      botao.textContent = "Solicitar QuintosCoin";
-
-    }
-
-  });
-
-
-// PASSO 301 - Doacoes com QR Code da sacola.
-// A janela e a camera sao configuradas por qc-doacao-qr301.js,
-// apos o modulo qc-saldo.js. Nenhum gasto e feito neste arquivo.
-
-// Gerador QR local para codigos de transferencia. QR Model 2, versao 10-L.
-// Nao utiliza servidor externo nem transmite o conteudo.
-function QC_matrizQR275(texto) {
-  const bytes = new TextEncoder().encode(texto);
-  const blocosInfo = [[86,68],[86,68],[87,69],[87,69]];
-  const capacidade = blocosInfo.reduce((s,b)=>s+b[1],0);
-  // V10: cabecalho de 4 bits + comprimento de 16 bits + carga em bytes.
-  if (bytes.length < 1 || bytes.length > capacidade-3) {
-    throw Error("Codigo QR fora da capacidade local.");
-  }
-  const bits = [];
-  const addBits = (valor,qtd) => {
-    for (let i=qtd-1; i>=0; i--) bits.push((valor>>>i)&1);
-  };
-  addBits(4,4);
-  addBits(bytes.length,16);
-  for (const b of bytes) addBits(b,8);
-  for (let i=0; i<4 && bits.length<capacidade*8; i++) bits.push(0);
-  while (bits.length%8) bits.push(0);
-  const dados=[];
-  for (let i=0; i<bits.length; i+=8) {
-    let v=0; for(let j=0; j<8; j++) v=(v<<1)|bits[i+j];
-    dados.push(v);
-  }
-  for (let i=0; dados.length<capacidade;i++) dados.push(i%2 ? 0x11 : 0xec);
-  const multiplicar = (a,b) => {
-    let produto=0;
-    for(let i=7;i>=0;i--) {
-      produto=(produto<<1)^((produto>>>7)*0x11d);
-      produto^=(((b>>>i)&1)*a);
-    }
-    return produto;
-  };
-  let gerador=[1];
-  let raiz=1;
-  for(let i=0;i<18;i++) {
-    const novo=Array(gerador.length+1).fill(0);
-    gerador.forEach((v,j)=>{novo[j]^=v;novo[j+1]^=multiplicar(v,raiz)});
-    gerador=novo;
-    raiz=multiplicar(raiz,2);
-  }
-  const blocos=[];
-  let inicio=0;
-  for(const [total,dadosPorBloco] of blocosInfo) {
-    const dadosBloco=dados.slice(inicio,inicio+dadosPorBloco);
-    inicio+=dadosPorBloco;
-    const resto=Array(18).fill(0);
-    for(const b of dadosBloco) {
-      const fator=b^resto[0];
-      resto.shift();resto.push(0);
-      for(let i=0;i<18;i++) resto[i]^=multiplicar(gerador[i+1],fator);
-    }
-    blocos.push({dados:dadosBloco,ecc:resto});
-  }
-  const saida=[];
-  for (let i=0;i<69;i++) for (const b of blocos) {
-    if(i<b.dados.length) saida.push(b.dados[i]);
-  }
-  for (let i=0;i<18;i++) for (const b of blocos) saida.push(b.ecc[i]);
-  const tam=57;
-  const mod=Array.from({length:tam},()=>Array(tam).fill(false));
-  const fixo=Array.from({length:tam},()=>Array(tam).fill(false));
-  function atribuir(x,y,escuro) {
-    if(x>=0&&x<tam&&y>=0&&y<tam) {mod[y][x]=!!escuro;fixo[y][x]=true;}
-  }
-  // Padrões fixos do QR: localizacao, alinhamento, timing, versao e formato.
-  for(let i=0;i<tam;i++) {
-    atribuir(6,i,i%2===0);
-    atribuir(i,6,i%2===0);
-  }
-  for (const [cx,cy] of [[3,3],[tam-4,3],[3,tam-4]]) {
-    for(let dy=-4;dy<=4;dy++) for(let dx=-4;dx<=4;dx++) {
-      const d=Math.max(Math.abs(dx),Math.abs(dy));
-      atribuir(cx+dx,cy+dy,d!==2&&d!==4);
-    }
-  }
-  const alinhamentos=[6,28,50];
-  for(const x of alinhamentos) for(const y of alinhamentos) {
-    if((x===6&&y===6)||(x===6&&y===50)||(x===50&&y===6)) continue;
-    for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++) {
-      atribuir(x+dx,y+dy,Math.max(Math.abs(dx),Math.abs(dy))!==1);
-    }
-  }
-  function versao() {
-    let rem=10;
-    for(let i=0;i<12;i++) rem=(rem<<1)^((rem>>>11)*0x1f25);
-    const v=(10<<12)|rem;
-    for(let i=0;i<18;i++) {
-      const b=((v>>>i)&1)!==0;
-      const a=tam-11+i%3;
-      const c=Math.floor(i/3);
-      atribuir(a,c,b);
-      atribuir(c,a,b);
-    }
-  }
-  versao();
-  function formato(mask) {
-    // EC-L corresponde ao identificador de formato '01'.
-    const data=(1<<3)|mask;
-    let rem=data;
-    for(let i=0;i<10;i++) rem=(rem<<1)^((rem>>>9)*0x537);
-    const v=((data<<10)|rem)^0x5412;
-    const bit=i=>((v>>>i)&1)!==0;
-    for(let i=0;i<=5;i++) atribuir(8,i,bit(i));
-    atribuir(8,7,bit(6));atribuir(8,8,bit(7));atribuir(7,8,bit(8));
-    for(let i=9;i<15;i++) atribuir(14-i,8,bit(i));
-    for(let i=0;i<8;i++) atribuir(tam-1-i,8,bit(i));
-    for(let i=8;i<15;i++) atribuir(8,tam-15+i,bit(i));
-    atribuir(8,tam-8,true);
-  }
-  formato(0);
-  let indice=0;
-  const totalBits=saida.length*8;
-  for(let x=tam-1;x>=1;x-=2) {
-    if(x===6) x=5;
-    for(let vert=0;vert<tam;vert++) {
-      const y=((x+1)&2)===0 ? tam-1-vert : vert;
-      for(let col=0;col<2;col++) {
-        const cx=x-col;
-        if(fixo[y][cx]) continue;
-        let bit=false;
-        if(indice<totalBits) bit=((saida[indice>>>3]>>>(7-(indice&7)))&1)!==0;
-        indice++;
-        if((cx+y)%2===0) bit=!bit; // Mascara 0.
-        mod[y][cx]=bit;
-      }
-    }
-  }
-  return mod;
-}
-function QC_desenharQR275(elemento, texto) {
-  const matriz=QC_matrizQR275(texto);
-  const tamanho=matriz.length;
-  const svgNS="http://www.w3.org/2000/svg";
-  const svg=document.createElementNS(svgNS,"svg");
-  svg.setAttribute("viewBox",`0 0 ${tamanho+8} ${tamanho+8}`);
-  svg.setAttribute("width","252");
-  svg.setAttribute("height","252");
-  svg.setAttribute("role","img");
-  svg.setAttribute("aria-label","QR Code de transferencia QuintosCoin");
-  const fundo=document.createElementNS(svgNS,"rect");
-  fundo.setAttribute("width",String(tamanho+8));
-  fundo.setAttribute("height",String(tamanho+8));
-  fundo.setAttribute("fill","white");
-  svg.appendChild(fundo);
-  let path="";
-  for(let y=0;y<tamanho;y++) for(let x=0;x<tamanho;x++) {
-    if(matriz[y][x]) path+=`M${x+4},${y+4}h1v1h-1z`;
-  }
-  const pontos=document.createElementNS(svgNS,"path");
-  pontos.setAttribute("d",path);
-  pontos.setAttribute("fill","black");
-  svg.appendChild(pontos);
-  elemento.replaceChildren(svg);
-}
-
-
-// PASSO 340 — Pix ESTÁTICO (BR Code/EMV) para solicitação de Qc$.
-// NÃO consulta o banco, NÃO confirma pagamento e NÃO autoriza emissão.
-// A chave Pix é pública; não há segredo bancário no aplicativo.
-const QC_PIX340 = Object.freeze({
-  chave: "89606529000167", // CNPJ informado para a loja.
-  favorecidoCompleto: "A LOJA SIMBOLICA TIRADENTES II N 71",
-  // Campo 59 do BR Code permite no máximo 25 caracteres.
-  nomeEmv: "LOJA TIRADENTES II N 71",
-  cidadeEmv: "CAPAO DO LEAO"
-});
-function QC_tlvPix340(id, valor) {
-  const texto = String(valor);
-  if (!/^\d{2}$/.test(id) || !/^[\x20-\x7e]*$/.test(texto) ||
-      texto.length > 99) throw Error("Campo BR Code inválido.");
-  return id + String(texto.length).padStart(2,"0") + texto;
-}
-function QC_crcPix340(texto) {
-  let crc=0xFFFF;
-  for(let i=0;i<texto.length;i++) {
-    crc ^= texto.charCodeAt(i) << 8;
-    for(let b=0;b<8;b++) {
-      crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xFFFF
-        : (crc << 1) & 0xFFFF;
-    }
-  }
-  return crc.toString(16).toUpperCase().padStart(4,"0");
-}
-function QC_gerarCopiaColaPix340(qtd) {
-  if (!Number.isSafeInteger(qtd) || qtd < 1 || qtd>999999999) {
-    throw Error("Informe uma quantidade inteira positiva de Qc$.");
-  }
-  const conta = QC_tlvPix340("00","br.gov.bcb.pix")+
-    QC_tlvPix340("01",QC_PIX340.chave);
-  const codigo = QC_tlvPix340("00","01")+
-    QC_tlvPix340("01","11")+ // QR estático reutilizável, com valor por solicitação.
-    QC_tlvPix340("26",conta)+
-    QC_tlvPix340("52","0000")+
-    QC_tlvPix340("53","986")+
-    QC_tlvPix340("54",qtd.toFixed(2))+
-    QC_tlvPix340("58","BR")+
-    QC_tlvPix340("59",QC_PIX340.nomeEmv)+
-    QC_tlvPix340("60",QC_PIX340.cidadeEmv)+
-    QC_tlvPix340("62",QC_tlvPix340("05","***"))+"6304";
-  return codigo + QC_crcPix340(codigo);
-}
-function QC_montarPagamentoPix340(valor) {
-  const raiz=document.createElement("section");
-  raiz.id="qcReceberPix340";
-  raiz.style.cssText="width:100%;box-sizing:border-box;text-align:center;"+
-    "display:flex;flex-direction:column;gap:10px;align-items:center;"+
-    "border:1px solid #e6c36365;border-radius:12px;padding:12px;"+
-    "background:#ffffff08;margin:5px 0;";
-  const titulo=document.createElement("h3");
-  titulo.textContent="Pagar por Pix";
-  titulo.style.cssText="margin:3px 0;color:#e6c363;font-size:18px";
-  const quantidade=document.createElement("strong");
-  quantidade.textContent="R$ " + Number(valor).toLocaleString("pt-BR",{
-    minimumFractionDigits:2,maximumFractionDigits:2
-  });
-  quantidade.style.cssText="font-size:27px;color:#fff";
-  const favorecido=document.createElement("p");
-  favorecido.textContent=QC_PIX340.favorecidoCompleto + " · Capão do Leão";
-  favorecido.style.cssText="font-size:12px;line-height:1.4;margin:0;"+
-    "overflow-wrap:anywhere";
-  const imagem=document.createElement("div");
-  imagem.className="qc-pix-imagem340";
-  imagem.style.cssText="display:flex;justify-content:center;"+
-    "background:white;padding:9px;border-radius:9px;max-width:100%;"+
-    "box-sizing:border-box";
-  const orientacao=document.createElement("p");
-  orientacao.textContent="Escaneie com outro celular ou use Pix Copia e Cola " +
-    "no aplicativo do seu banco.";
-  orientacao.style.cssText="margin:0;font-size:13px;line-height:1.5";
-  const codigoTitulo=document.createElement("label");
-  codigoTitulo.textContent="Pix Copia e Cola";
-  codigoTitulo.style.cssText="align-self:flex-start;font-size:13px;"+
-    "font-weight:700";
-  const texto=document.createElement("textarea");
-  texto.rows=3;
-  texto.readOnly=true;
-  texto.className="qc-input-modal";
-  texto.style.cssText="width:100%;box-sizing:border-box;resize:vertical;"+
-    "font-size:12px;word-break:break-all";
-  texto.setAttribute("aria-label","Código Pix Copia e Cola");
-  const copiar=document.createElement("button");
-  copiar.type="button";
-  copiar.textContent="Copiar código Pix";
-  copiar.className="qc-btn-modal-principal";
-  copiar.style.cssText="width:100%;box-sizing:border-box;min-height:44px";
-  const resposta=document.createElement("p");
-  resposta.setAttribute("role","status");
-  resposta.style.cssText="margin:0;font-size:12px;line-height:1.4";
-  const aviso=document.createElement("p");
-  aviso.textContent="O pagamento não é confirmado automaticamente. " +
-    "Confira no aplicativo bancário o CNPJ, o beneficiário e o valor " +
-    "antes de pagar. O tesoureiro verifica o recebimento e autoriza " +
-    "a emissão dos Qc$.";
-  aviso.style.cssText="margin:0;font-size:12px;line-height:1.5;"+
-    "opacity:.9;text-align:left;border-left:3px solid #e6c363;"+
-    "padding-left:9px";
-  raiz.append(titulo,quantidade,favorecido,imagem,orientacao,
-    codigoTitulo,texto,copiar,resposta,aviso);
-  try {
-    const payload=QC_gerarCopiaColaPix340(Number(valor));
-    texto.value=payload;
-    QC_desenharQR275(imagem,payload); // Gerador local do app (QR v10-L).
-    const qr=imagem.querySelector("svg");
-    if(qr) {
-      qr.setAttribute("aria-label","QR Code Pix para R$ "+valor);
-      qr.style.maxWidth="100%";
-      qr.style.height="auto";
-      qr.style.width="276px";
-    }
-    texto.addEventListener("click",()=>texto.select());
-    copiar.addEventListener("click",async()=>{
-      try {
-        if (!navigator.clipboard?.writeText) throw Error("Sem permissão de cópia");
-        await navigator.clipboard.writeText(payload);
-        resposta.textContent="Código Pix copiado. Cole no aplicativo do banco.";
-      } catch(_) {
-        if(typeof window.QC_dialogoQuintos338==="function") {
-          await window.QC_dialogoQuintos338({
-            titulo:"Copiar Pix manualmente",
-            texto:"Copie o código abaixo e cole no aplicativo do banco.",
-            codigo:payload,confirmarTexto:"Fechar",somenteInformativo:true
-          });
-        } else {
-          texto.focus();texto.select();
-          resposta.textContent="Selecione e copie o código exibido acima.";
-        }
-      }
-    });
-  } catch(erro) {
-    // Nunca transformar um pedido já PENDENTE num falso 'pedido falhou'.
-    imagem.replaceChildren();
-    const informacao=document.createElement("p");
-    informacao.textContent="QR Code indisponível neste aparelho: " +
-      String(erro.message||erro);
-    informacao.style.cssText="color:#6d260c;background:#fff7d3;"+
-      "padding:9px;border-radius:8px";
-    imagem.appendChild(informacao);
-    texto.style.display="none";
-    copiar.style.display="none";
-    codigoTitulo.style.display="none";
-    resposta.textContent="O pedido já está registrado. Não faça outra " +
-      "solicitação para tentar novamente; consulte o tesoureiro.";
-  }
-  return raiz;
-}
-
-// PASSO 275 - UM BOTAO TRANSFERIR, COM ENVIAR E RECEBER NA MESMA JANELA.
-// Nenhum QR ou codigo secreto passa por site de QR: gerar inteiramente local.
-const qcBotaoTransferir275 = document.createElement("button");
-qcBotaoTransferir275.type = "button";
-qcBotaoTransferir275.id = "btnTransferir";
-qcBotaoTransferir275.textContent = "Transferir Qc$";
-qcBotaoTransferir275.disabled = true;
-const qcAcoes275 = document.querySelector("#telaCarteira .acoes");
-if (qcAcoes275) qcAcoes275.appendChild(qcBotaoTransferir275);
-
-const qcModalTransferir275 = document.createElement("div");
-qcModalTransferir275.id = "qcModalTransferir275";
-qcModalTransferir275.className = "qc-modal-overlay";
-qcModalTransferir275.style.display = "none";
-qcModalTransferir275.innerHTML = `
-  <div class="qc-modal-card" role="dialog" aria-modal="true"
-    aria-labelledby="qcTituloTransf275">
-    <div class="qc-modal-topo">
-      <h3 id="qcTituloTransf275">Transferir QuintosCoin</h3>
-      <button id="qcFecharTransf275" type="button" class="qc-modal-fechar"
-        aria-label="Fechar">×</button>
-    </div>
-    <div style="display:flex;gap:8px;margin:10px 0 18px">
-      <button type="button" id="qcAbaEnviar275" class="qc-btn-modal-principal"
-        style="flex:1">Enviar</button>
-      <button type="button" id="qcAbaReceber275" class="qc-btn-modal-secundario"
-        style="flex:1">Receber</button>
-    </div>
-    <div id="qcPainelEnviar275">
-      <label for="qcValorEnviar275" class="qc-label-modal">Quanto deseja transferir?</label>
-      <input id="qcValorEnviar275" class="qc-input-modal"
-        type="number" min="1" step="1" inputmode="numeric" placeholder="Exemplo: 8">
-      <button type="button" id="qcEnviar275" class="qc-btn-modal-principal"
-        style="margin:10px 0;width:100%">Continuar</button>
-      <div id="qcResultadoEnvio275" hidden style="text-align:center">
-        <p>Mostre o QR Code ao destinatário:</p>
-        <div id="qcImagemQR275" style="display:flex;justify-content:center;margin:12px 0"></div>
-        <button type="button" id="qcCopiarTransf275" class="qc-btn-modal-secundario">
-          Copiar código
-        </button>
-        <button type="button" id="qcConferirTransf275" class="qc-btn-modal-secundario"
-          style="margin-left:5px">Verificar recebimento</button>
-        <p style="font-size:12px;opacity:.8">Compartilhe somente com quem deve receber.
-          O código permite resgatar os QCs.</p>
-      </div>
-    </div>
-    <div id="qcPainelReceber275" hidden>
-      <p class="qc-modal-texto">Leia o QR Code do outro irmão ou cole o código recebido.</p>
-      <button id="qcLerQR275" type="button" class="qc-btn-modal-secundario"
-        style="margin-bottom:10px">Ler QR pela câmera</button>
-      <div id="qcVideoQR275" hidden style="margin:8px auto;text-align:center"></div>
-      <label for="qcCodigoReceber275" class="qc-label-modal">Código da transferência</label>
-      <textarea id="qcCodigoReceber275" class="qc-input-modal" rows="3"
-        style="width:100%;box-sizing:border-box;resize:vertical"
-        placeholder="Cole o código QC2|... (ou QC1 de uma operação antiga)"></textarea>
-      <button type="button" id="qcReceber275" class="qc-btn-modal-principal"
-        style="width:100%;margin-top:10px">Receber Qc$</button>
-    </div>
-    <p id="qcAvisoTransferir275" role="status" class="qc-modal-mensagem"></p>
-  </div>`;
-document.body.appendChild(qcModalTransferir275);
-// PASSO 332.4 — Ajuste exclusivo do modal Transferir em telas pequenas.
-// A rolagem fica dentro do cartão, mantendo os extremos acessíveis.
-const qcEstiloTransferencia3324 = document.createElement("style");
-qcEstiloTransferencia3324.textContent = `
-  #qcModalTransferir275 {
-    box-sizing: border-box;
-    padding: 12px;
-    padding-top: max(12px, env(safe-area-inset-top));
-    padding-bottom: max(12px, env(safe-area-inset-bottom));
-  }
-  #qcModalTransferir275 > .qc-modal-card {
-    box-sizing: border-box;
-    min-height: 0;
-    max-height: calc(100vh - 24px);
-    max-height: calc(100dvh - 24px);
-    overflow-y: auto;
-    overflow-x: hidden;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
-  }
-  #qcModalTransferir275 #qcResultadoEnvio275 {
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-  }
-  #qcModalTransferir275 #qcImagemQR275 svg {
-    max-width: 100%;
-    height: auto;
-  }
-  #qcModalTransferir275 #qcCopiarTransf275,
-  #qcModalTransferir275 #qcConferirTransf275 {
-    display: block;
-    width: 100%;
-    box-sizing: border-box;
-    min-height: 44px;
-    margin: 10px 0 0 !important;
-  }
-  #qcModalTransferir275 #qcAvisoTransferir275 {
-    overflow-wrap: anywhere;
-  }
-`;
-document.head.appendChild(qcEstiloTransferencia3324);
-
-const qcValorEnviar275 = document.getElementById("qcValorEnviar275");
-const qcValorReceber275 = document.getElementById("qcCodigoReceber275");
-const qcAvisoTransferir275 = document.getElementById("qcAvisoTransferir275");
-const qcResultadoEnvio275 = document.getElementById("qcResultadoEnvio275");
-const qcImagemQR275 = document.getElementById("qcImagemQR275");
-const qcEnviar275 = document.getElementById("qcEnviar275");
-const qcReceber275 = document.getElementById("qcReceber275");
-
-// PASSO 383 — Tela final de transferencia, tanto para quem envia quanto recebe.
-// Nenhuma movimentacao de fichas acontece aqui: apenas apresenta o resultado
-// que o servidor JA confirmou e permite voltar a carteira com o botao OK.
-const qcAbasTransferencia383 = document.getElementById("qcAbaEnviar275").parentElement;
-const qcPainelEnviar383 = document.getElementById("qcPainelEnviar275");
-const qcPainelReceber383 = document.getElementById("qcPainelReceber275");
-const qcConclusaoTransferencia383 = document.createElement("div");
-qcConclusaoTransferencia383.id = "qcConclusaoTransferencia383";
-qcConclusaoTransferencia383.setAttribute("role", "status");
-qcConclusaoTransferencia383.setAttribute("tabindex", "-1");
-qcConclusaoTransferencia383.style.cssText =
-  "display:none;flex-direction:column;align-items:center;" +
-  "justify-content:center;gap:14px;text-align:center;min-height:260px;" +
-  "padding:10px 0";
-const qcIconeConclusao383 = document.createElement("div");
-qcIconeConclusao383.textContent = "✓";
-qcIconeConclusao383.setAttribute("aria-hidden", "true");
-qcIconeConclusao383.style.cssText =
-  "width:54px;height:54px;border-radius:50%;background:#168258;" +
-  "color:#fff;font-size:32px;display:grid;place-items:center;font-weight:bold";
-const qcTituloConclusao383 = document.createElement("h3");
-qcTituloConclusao383.style.cssText = "margin:0;color:#f0cd72;font-size:22px";
-const qcValorConclusao383 = document.createElement("strong");
-qcValorConclusao383.style.cssText = "font-size:24px;color:#fff";
-const qcMensagemConclusao383 = document.createElement("p");
-qcMensagemConclusao383.style.cssText =
-  "margin:0;font-size:14px;line-height:1.5;overflow-wrap:anywhere";
-const qcOkTransferencia383 = document.createElement("button");
-qcOkTransferencia383.id = "qcOkTransferencia383";
-qcOkTransferencia383.type = "button";
-qcOkTransferencia383.className = "qc-btn-modal-principal";
-qcOkTransferencia383.textContent = "OK";
-qcOkTransferencia383.style.cssText =
-  "min-width:145px;max-width:220px;width:70%;min-height:44px;margin-top:10px";
-qcConclusaoTransferencia383.append(
-  qcIconeConclusao383,qcTituloConclusao383,qcValorConclusao383,
-  qcMensagemConclusao383,qcOkTransferencia383
-);
-qcAvisoTransferir275.insertAdjacentElement("afterend",qcConclusaoTransferencia383);
-
-function QC_limparConclusaoTransferencia383() {
-  qcConclusaoTransferencia383.style.display = "none";
-  qcAbasTransferencia383.style.display = "flex";
-  qcPainelEnviar383.style.display = "";
-  qcPainelReceber383.style.display = "";
-  qcAvisoTransferir275.style.display = "";
-}
-function QC_mostrarConclusaoTransferencia383(tipo,valor) {
-  // O status RECEBIDA/CONCLUIDA ja foi devolvido pela rotina V2.
-  // Manter a mensagem real da consulta do saldo, inclusive eventual aviso.
-  const textoConferencia = qcAvisoTransferir275.textContent;
-  const numero = Number(valor);
-  qcTituloConclusao383.textContent = tipo === "envio"
-    ? "Envio concluído!" : "Recebimento concluído!";
-  qcValorConclusao383.textContent = "Qc$ " +
-    numero.toLocaleString("pt-BR") + (tipo === "envio" ? " enviados" : " recebidos");
-  qcMensagemConclusao383.textContent = textoConferencia +
-    " Toque em OK para voltar à carteira.";
-  qcAbasTransferencia383.style.display = "none";
-  qcPainelEnviar383.style.display = "none";
-  qcPainelReceber383.style.display = "none";
-  qcAvisoTransferir275.style.display = "none";
-  qcConclusaoTransferencia383.style.display = "flex";
-  qcOkTransferencia383.focus();
-}
-
-let qcCodigoCompartilhar275 = "";
-let qcTrabalhando275 = false;
-let qcStream275 = null;
-let qcLeituraAtiva275 = false;
-
-function QC_pararCamera275() {
-  qcLeituraAtiva275 = false;
-  if (qcStream275) qcStream275.getTracks().forEach(trilha => trilha.stop());
-  qcStream275 = null;
-  const area = document.getElementById("qcVideoQR275");
-  area.replaceChildren();
-  area.hidden = true;
-}
-function QC_fecharTransferencia275() {
-  if (qcTrabalhando275) return;
-  QC_limparConclusaoTransferencia383();
-  QC_pararCamera275();
-  qcCodigoCompartilhar275 = "";
-  qcImagemQR275.replaceChildren();
-  qcModalTransferir275.style.display = "none";
-  qcBotaoTransferir275.focus();
-}
-qcOkTransferencia383.addEventListener("click", QC_fecharTransferencia275);
-function QC_mostrarAbaTransferencia275(aba) {
-  QC_pararCamera275();
-  const enviar = aba === "enviar";
-  document.getElementById("qcPainelEnviar275").hidden = !enviar;
-  document.getElementById("qcPainelReceber275").hidden = enviar;
-  document.getElementById("qcAbaEnviar275").className =
-    enviar ? "qc-btn-modal-principal" : "qc-btn-modal-secundario";
-  document.getElementById("qcAbaReceber275").className =
-    enviar ? "qc-btn-modal-secundario" : "qc-btn-modal-principal";
-  qcAvisoTransferir275.textContent = "";
-  if (!enviar && typeof window.QC_resgatePendente275 === "function" &&
-      window.QC_resgatePendente275()) {
-    qcValorReceber275.value = "";
-    qcValorReceber275.disabled = true;
-    qcReceber275.textContent = "Retomar recebimento";
-    qcAvisoTransferir275.textContent =
-      "Recebimento anterior pendente. Toque em Retomar recebimento.";
-  } else if (!enviar) {
-    qcValorReceber275.disabled = false;
-    qcReceber275.textContent = "Receber Qc$";
-  }
-}
-qcBotaoTransferir275.addEventListener("click", () => {
-  if (!sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")) return;
-  QC_limparConclusaoTransferencia383();
-  qcCodigoCompartilhar275 = "";
-  qcResultadoEnvio275.hidden = true;
-  qcImagemQR275.replaceChildren();
-  qcValorEnviar275.value = "";
-  qcValorReceber275.value = "";
-  const pendente = typeof window.QC_transferenciaPendente275 === "function" &&
-    window.QC_transferenciaPendente275();
-  qcValorEnviar275.disabled = !!pendente;
-  qcEnviar275.textContent = pendente ? "Retomar envio" : "Continuar";
-  QC_mostrarAbaTransferencia275("enviar");
-  if (pendente) qcAvisoTransferir275.textContent =
-    "Uma transferencia anterior foi preservada. Retome para exibir o QR Code.";
-  qcModalTransferir275.style.display = "flex";
-  if (!pendente) qcValorEnviar275.focus();
-});
-document.getElementById("qcFecharTransf275")
-  .addEventListener("click", QC_fecharTransferencia275);
-qcModalTransferir275.addEventListener("click", e => {
-  if (e.target === qcModalTransferir275) QC_fecharTransferencia275();
-});
-document.getElementById("qcAbaEnviar275")
-  .addEventListener("click", () => QC_mostrarAbaTransferencia275("enviar"));
-document.getElementById("qcAbaReceber275")
-  .addEventListener("click", () => QC_mostrarAbaTransferencia275("receber"));
-function QC_mostrarCodigo275(retorno) {
-  qcCodigoCompartilhar275 = String(retorno.codigoQR || "");
-  if (!/^QC[12]\|[0-9a-f-]{36}\|[0-9a-f]{64}$/i.test(qcCodigoCompartilhar275)) {
-    throw Error("Codigo de transferencia inesperado.");
-  }
-  QC_desenharQR275(qcImagemQR275, qcCodigoCompartilhar275);
-  qcResultadoEnvio275.hidden = false;
-  qcValorEnviar275.disabled = true;
-  qcEnviar275.textContent = "Retomar envio";
-  qcAvisoTransferir275.textContent =
-    "Transferencia preparada. Mostre o QR Code ou copie o codigo.";
-}
-qcEnviar275.addEventListener("click", async () => {
-  if (qcTrabalhando275) return;
-  if (typeof window.QC_transferirCriar275 !== "function") {
-    qcAvisoTransferir275.textContent = "Atualize a pagina; modulo de fichas nao carregado.";
-    return;
-  }
-  const pendente = typeof window.QC_transferenciaPendente275 === "function" &&
-    window.QC_transferenciaPendente275();
-  const valor = pendente ? 0 : Number(qcValorEnviar275.value);
-  if (!pendente && (!Number.isSafeInteger(valor) || valor < 1 || valor > 10000)) {
-    qcAvisoTransferir275.textContent = "Informe um valor inteiro de 1 a 10.000 Qc$.";
-    return;
-  }
-  qcTrabalhando275 = true;
-  qcEnviar275.disabled = true;
-  qcAvisoTransferir275.textContent = "Preparando transferencia protegida...";
-  try {
-    const retorno = await window.QC_transferirCriar275(valor);
-    if (retorno.status === "PRONTA") QC_mostrarCodigo275(retorno);
-    else if (retorno.status === "CANCELADO") qcAvisoTransferir275.textContent="Operacao cancelada.";
-    else qcAvisoTransferir275.textContent = String(retorno.status);
-  } catch (err) {
-    qcAvisoTransferir275.textContent = "⚠️ " + String(err.message || err);
-  } finally {
-    qcTrabalhando275 = false;
-    qcEnviar275.disabled = false;
-  }
-});
-qcValorEnviar275.addEventListener("keydown", e => {
-  if (e.key === "Enter") {e.preventDefault();qcEnviar275.click();}
-});
-document.getElementById("qcCopiarTransf275")
-  .addEventListener("click", async () => {
-    if (!qcCodigoCompartilhar275) return;
-    try {
-      await navigator.clipboard.writeText(qcCodigoCompartilhar275);
-      qcAvisoTransferir275.textContent="Codigo copiado. Envie somente ao destinatario.";
-    } catch(_) {
-      await QC_dialogoQuintos338({
-        titulo:"Copiar código da transferência",
-        texto:"A cópia automática não está disponível neste navegador. " +
-          "Selecione e copie o código abaixo para entregar somente ao destinatário.",
-        codigo:qcCodigoCompartilhar275,
-        confirmarTexto:"Fechar",
-        somenteInformativo:true
-      });
-    }
-  });
-// PASSO 332.8 — Atualizar saldos depois de movimentações CONFIRMADAS.
-// A função de saldo valida assinaturas e fichas gastas junto ao servidor.
-// A movimentação já concluída não é repetida se a consulta falhar.
-async function QC_atualizarSaldoTransferencia3328(confirmacao) {
-  if (typeof window.QC_atualizarSaldoReal202 !== "function" ||
-      typeof window.QC_senhaFichas291 !== "function" ||
-      !window.QC_senhaFichas291()) {
-    const texto = confirmacao +
-      " Não foi possível conferir o saldo automaticamente. " +
-      "Entre novamente na carteira para atualizar; não repita a transferência.";
-    qcAvisoTransferir275.textContent = texto;
-    const mensagem = document.getElementById("mensagem");
-    if (mensagem) mensagem.textContent = texto;
-    return;
-  }
-  qcAvisoTransferir275.textContent = confirmacao + " Conferindo o saldo...";
-  try {
-    await window.QC_atualizarSaldoReal202();
-    const texto = confirmacao + " Saldo atualizado e fichas verificadas.";
-    qcAvisoTransferir275.textContent = texto;
-    const mensagem = document.getElementById("mensagem");
-    if (mensagem) mensagem.textContent = texto;
-  } catch (erro) {
-    const texto = confirmacao +
-      " A consulta do saldo não foi concluída (" +
-      String(erro?.message || erro) +
-      "). Entre novamente na carteira para conferir. Não repita a transferência.";
-    qcAvisoTransferir275.textContent = texto;
-    const mensagem = document.getElementById("mensagem");
-    if (mensagem) mensagem.textContent = texto;
-  }
-}
-
-document.getElementById("qcConferirTransf275")
-  .addEventListener("click", async () => {
-    if (qcTrabalhando275) return;
-    qcTrabalhando275 = true;
-    qcAvisoTransferir275.textContent = "Consultando transferencia...";
-    try {
-      const r = await window.QC_transferirConsultar275();
-      if (r.status === "CONCLUIDA") {
-        qcResultadoEnvio275.hidden = true;
-        qcCodigoCompartilhar275 = "";
-        qcImagemQR275.replaceChildren();
-        qcValorEnviar275.disabled = false;
-        qcEnviar275.textContent = "Continuar";
-        await QC_atualizarSaldoTransferencia3328(
-          "✅ " + r.valorEnviado +
-          " Qc$ recebidos pelo destinatário. Nova transferência liberada."
-        );
-        QC_mostrarConclusaoTransferencia383("envio",r.valorEnviado);
-      } else {
-        qcAvisoTransferir275.textContent =
-          "Aguardando recebimento pelo destinatario (" + r.status + ").";
-      }
-    } catch(err) {
-      qcAvisoTransferir275.textContent="⚠️ " + String(err.message||err);
-    } finally {qcTrabalhando275=false;}
-  });
-qcReceber275.addEventListener("click", async () => {
-  if (qcTrabalhando275) return;
-  if (typeof window.QC_transferirResgatar275 !== "function") {
-    qcAvisoTransferir275.textContent = "Atualize a pagina; modulo de fichas nao carregado.";
-    return;
-  }
-  QC_pararCamera275();
-  qcTrabalhando275=true;
-  qcReceber275.disabled=true;
-  qcAvisoTransferir275.textContent = "Conferindo transferencia e preparando as fichas...";
-  try {
-    const retorno = await window.QC_transferirResgatar275(qcValorReceber275.value);
-    if (retorno.status === "RECEBIDA") {
-      qcValorReceber275.value="";
-      qcValorReceber275.disabled=false;
-      qcReceber275.textContent="Receber Qc$";
-      await QC_atualizarSaldoTransferencia3328(
-        "✅ Recebidos " + retorno.valorRecebido + " Qc$."
+      throw new Error(
+        "Vínculo de emissão sem registro correspondente."
       );
-      QC_mostrarConclusaoTransferencia383("recebimento",retorno.valorRecebido);
-    } else if (retorno.status === "CANCELADO") {
-      qcAvisoTransferir275.textContent = "Recebimento cancelado.";
+
+    }
+
+    // Conferir as cotas antes de gravar.
+    const cotasAnteriores = cot.dados.slice(1).filter(
+      linha =>
+        String(linha[cot.col("IdEmissao")]).trim()
+          === idEmissao ||
+        plano.cotas.some(p =>
+          String(linha[cot.col("IdCota")]).trim()
+            === idEmissao + "-" + p.denominacao
+        )
+    );
+
+    const encontrados = new Set();
+
+    for (const r of cotasAnteriores) {
+
+      const idCota = String(
+        r[cot.col("IdCota")]
+      ).trim();
+
+      const p = plano.cotas.find(x =>
+        idCota === idEmissao + "-" + x.denominacao
+      );
+
+      if (
+        !p ||
+        encontrados.has(idCota) ||
+        String(r[cot.col("IdEmissao")]).trim()
+          !== idEmissao ||
+        Number(r[cot.col("Denominacao")])
+          !== p.denominacao ||
+        String(r[cot.col("IdChave")]).trim()
+          !== p.idChave ||
+        Number(r[cot.col("QuantidadePermitida")])
+          !== p.quantidadePermitida ||
+        Number(r[cot.col("QuantidadeAssinada")])
+          !== 0 ||
+        String(r[cot.col("Status")]).trim()
+          !== "PLANEJADA"
+      ) {
+        throw new Error(
+          "Cota existente inconsistente ou já utilizada."
+        );
+      }
+
+      encontrados.add(idCota);
+    }
+
+    // Gravar a emissão apenas se ainda não existir.
+    if (!anteriores.length) {
+
+      em.aba.appendRow([
+        idEmissao,
+        id,
+        valor,
+        plano.quantidadeFichas,
+        "AGUARDANDO_ASSINATURA",
+        new Date(),
+        ""
+      ]);
+
+    }
+
+    // Gravar somente as cotas faltantes.
+    for (const p of plano.cotas) {
+
+      const idCota =
+        idEmissao + "-" + p.denominacao;
+
+      if (!encontrados.has(idCota)) {
+
+        cot.aba.appendRow([
+          idCota,
+          idEmissao,
+          p.denominacao,
+          p.idChave,
+          p.quantidadePermitida,
+          0,
+          "PLANEJADA"
+        ]);
+
+      }
+    }
+
+    SpreadsheetApp.flush();
+
+    // Vincular à autorização por último.
+    if (!vinculo) {
+
+      const linhaAut = aut.dados.findIndex(
+        (r, i) =>
+          i > 0 &&
+          String(r[aut.col("IdAutorizacao")]).trim()
+            === id
+      ) + 1;
+
+      aut.aba.getRange(
+        linhaAut,
+        aut.col("IdEmissao") + 1
+      ).setValue(idEmissao);
+
+      SpreadsheetApp.flush();
+    }
+
+    return {
+      status: "AGUARDANDO_ASSINATURA",
+      versaoFicha: "V2",
+      idEmissao: idEmissao,
+      valor: valor,
+      quantidadeFichas: plano.quantidadeFichas,
+      cotas: plano.cotas.map(p => ({
+        denominacao: p.denominacao,
+        quantidade: p.quantidadePermitida,
+        idChave: p.idChave
+      })),
+      fichasEmitidas: 0,
+      assinaturaPermitida: false
+    };
+
+  } finally {
+
+    lock.releaseLock();
+
+  }
+
+}
+
+
+function QC_verificarConexaoWorker186() {
+
+  const token = PropertiesService
+    .getScriptProperties()
+    .getProperty("QC_WORKER_TOKEN");
+
+  if (!/^[0-9a-f]{64}$/.test(token || "")) {
+    throw new Error("Segredo do Worker não configurado.");
+  }
+
+  const url =
+    "https://quintoscoin-assinador-teste.lojatiradentesii71.workers.dev/interno/estado";
+
+  const resposta = UrlFetchApp.fetch(url, {
+    method: "post",
+    headers: {
+      Authorization: "Bearer " + token
+    },
+    muteHttpExceptions: true
+  });
+
+  if (resposta.getResponseCode() !== 200) {
+    throw new Error(
+      "Comunicação recusada. HTTP " +
+      resposta.getResponseCode()
+    );
+  }
+
+  const dados = JSON.parse(
+    resposta.getContentText()
+  );
+
+  if (
+    dados.sistema !== "QuintosCoin" ||
+    dados.status !== "AUTENTICADO_SEM_ASSINATURA" ||
+    dados.chavePrivadaInstalada !== false ||
+    dados.assinaturaPermitida !== false
+  ) {
+    throw new Error("Resposta inesperada do Worker.");
+  }
+
+  Logger.log("APPS SCRIPT AUTENTICADO: OK");
+  Logger.log("CLOUDFLARE WORKER: CONECTADO");
+  Logger.log("CHAVE PRIVADA REAL: NÃO INSTALADA");
+  Logger.log("ASSINATURAS: BLOQUEADAS");
+  Logger.log("COMUNICAÇÃO PROTEGIDA: OK");
+
+}
+
+
+function QC_conferirChaveWorker188() {
+
+  const token = PropertiesService
+    .getScriptProperties()
+    .getProperty("QC_WORKER_TOKEN");
+
+  if (!/^[0-9a-f]{64}$/.test(token || "")) {
+    throw new Error("Token do Worker inválido.");
+  }
+
+  const url =
+    "https://quintoscoin-assinador-teste.lojatiradentesii71.workers.dev/interno/chave";
+
+  const resposta = UrlFetchApp.fetch(url, {
+    method: "post",
+    headers: {
+      Authorization: "Bearer " + token
+    },
+    muteHttpExceptions: true
+  });
+
+  
+  if (resposta.getResponseCode() !== 200) {
+
+    Logger.log(
+      "DIAGNOSTICO WORKER: " +
+      resposta.getContentText()
+    );
+
+    throw new Error(
+      "Worker não disponibilizou a chave. HTTP " +
+      resposta.getResponseCode()
+    );
+
+  }
+
+
+  const remoto = JSON.parse(
+    resposta.getContentText()
+  );
+
+  if (
+    remoto.status !== "CHAVE_CARREGADA" ||
+    remoto.idChave !== "QC-10-V1" ||
+    remoto.assinaturaPermitida !== false
+  ) {
+    throw new Error("Resposta inesperada do Worker.");
+  }
+
+  const aba = SpreadsheetApp
+    .getActiveSpreadsheet()
+    .getSheetByName("QC_ChavesAssinatura");
+
+  if (!aba) {
+    throw new Error("Aba de chaves não encontrada.");
+  }
+
+  const dados = aba.getDataRange().getDisplayValues();
+  const cab = dados[0].map(v => String(v).trim());
+  const col = nome => cab.indexOf(nome);
+
+  const campos = [
+    "IdChave", "Denominacao", "Versao",
+    "Status", "ModuloPublico", "ExpoentePublico"
+  ];
+
+  if (campos.some(nome => col(nome) === -1)) {
+    throw new Error("Colunas de chave incompletas.");
+  }
+
+  const linhas = dados.slice(1).filter(r =>
+    String(r[col("IdChave")]).trim() === "QC-10-V1"
+  );
+
+  if (linhas.length !== 1) {
+    throw new Error("Chave pública ausente ou duplicada.");
+  }
+
+  const chave = linhas[0];
+
+  if (
+    Number(chave[col("Denominacao")]) !== 10 ||
+    Number(chave[col("Versao")]) !== 1 ||
+    String(chave[col("Status")]).trim()
+      !== "AGUARDANDO_CHAVE"
+  ) {
+    throw new Error("Cadastro da chave inconsistente.");
+  }
+
+  const moduloLocal = String(
+    chave[col("ModuloPublico")]
+  ).trim().toLowerCase();
+
+  const moduloRemoto = String(
+    remoto.moduloPublico || ""
+  ).trim().toLowerCase();
+
+  const expoenteLocal = String(
+    chave[col("ExpoentePublico")]
+  ).trim().toLowerCase().replace(/^0+/, "");
+
+  const expoenteRemoto = String(
+    remoto.expoentePublico || ""
+  ).trim().toLowerCase().replace(/^0+/, "");
+
+  if (
+    moduloLocal !== moduloRemoto ||
+    expoenteLocal !== expoenteRemoto ||
+    moduloLocal.length !== 1024 ||
+    expoenteLocal !== "10001"
+  ) {
+    throw new Error(
+      "A chave privada instalada não corresponde à pública."
+    );
+  }
+
+  Logger.log("CHAVE PRIVADA NA CLOUDFLARE: CARREGADA");
+  Logger.log("CHAVE PÚBLICA NA PLANILHA: CONFERE");
+  Logger.log("RSA 4096 BITS: OK");
+  Logger.log("QC-10-V1: CORRESPONDÊNCIA CONFIRMADA");
+  Logger.log("ASSINATURAS: BLOQUEADAS");
+}
+
+
+function QC_assinarFichaCarteira190(
+  tokenSessao, idEmissao, idOperacao, blocoHex, denominacao
+) {
+  const emissaoId = String(idEmissao || "").trim();
+  const operacaoId = String(idOperacao || "").trim();
+  const bloco = String(blocoHex || "").trim().toLowerCase();
+  const valorFicha = Number(denominacao);
+  if (![1, 2, 5, 10, 50].includes(valorFicha)) {
+    throw new Error("Denominacao V2 nao permitida.");
+  }
+  // PASSO 363: nenhum pedido de assinatura V1 pode entrar pela rota atual.
+  const idChave = "QC-" + valorFicha + "-V2";
+  const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+
+  if (
+    !uuid.test(operacaoId) ||
+    !/^QC-EM-[0-9a-f-]{36}$/i.test(emissaoId) ||
+    !/^[0-9a-f]{1024}$/.test(bloco)
+  ) {
+    throw new Error("Identificadores ou bloco cego inválidos.");
+  }
+
+  QC_exigirPrimeiraEmissaoV2375(emissaoId);
+  const props = PropertiesService.getScriptProperties();
+
+  // PASSO 298 - Aceitar emissões devidamente autorizadas pelo tesoureiro.
+  // Mantém o bloqueio geral QC_EMISSAO_REAL_ATIVA e todas as validações abaixo.
+
+  // PASSO 363: triplo bloqueio independentemente da requisicao recebida.
+  // Worker do passo 357 TAMBEM continua bloqueando assinatura em codigo.
+  if (props.getProperty('QC_V2_MODO') !== 'TESTE' ||
+      props.getProperty('QC_V2_TESTES_LIBERADOS') !== 'SIM' ||
+      props.getProperty("QC_EMISSAO_REAL_ATIVA") !== "SIM" ||
+      props.getProperty("QC_V2_RECEBIMENTO_ATIVO") !== "SIM" ||
+      props.getProperty("QC_V1_FINANCEIRO_ENCERRADO") !== "SIM") {
+    return { status: "ASSINATURA_BLOQUEADA", assinaturaPermitida: false };
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const sessao = QC_validarTokenSessaoTeste(tokenSessao);
+
+    if (sessao.status !== "OK") {
+      throw new Error("Sessão expirada.");
+    }
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    function ler(nome, nomes) {
+      const aba = ss.getSheetByName(nome);
+      if (!aba) throw new Error("Aba ausente: " + nome);
+
+      const linhas = aba.getDataRange().getValues();
+      const cab = linhas[0].map(v => String(v).trim());
+      const col = n => cab.indexOf(n);
+
+      if (nomes.some(n => col(n) < 0)) {
+        throw new Error("Colunas inválidas: " + nome);
+      }
+
+      return { aba, linhas, col };
+    }
+
+    const car = ler("QC_Carteiras", [
+      "IdCarteira", "IdCadastro", "Status",
+      "Ambiente", "AlgoritmoSenha"
+    ]);
+
+    const aut = ler("QC_Autorizacoes", [
+      "IdAutorizacao", "IdCadastro", "Status",
+      "IdEmissao", "AutorizadaPor", "DataAutorizacao"
+    ]);
+
+    const emi = ler("QC_Emissoes", [
+      "IdEmissao", "IdAutorizacao",
+      "Status", "DataConclusao"
+    ]);
+
+    const cot = ler("QC_CotasEmissao", [
+      "IdCota", "IdEmissao", "Denominacao", "IdChave",
+      "QuantidadePermitida", "QuantidadeAssinada", "Status"
+    ]);
+
+    const ops = ler("QC_OperacoesAssinatura", [
+      "IdOperacao", "IdEmissao", "IdCota",
+      "HashBlocoCego", "Status", "AssinaturaCegaHex",
+      "DataReserva", "DataAssinatura"
+    ]);
+
+    function somenteUma(tab, pred, mensagem) {
+      const encontradas = tab.linhas
+        .map((r, i) => ({ r, linha: i + 1 }))
+        .filter((v, i) => i > 0 && pred(v.r));
+
+      if (encontradas.length !== 1) {
+        throw new Error(mensagem);
+      }
+
+      return encontradas[0];
+    }
+
+    // Identificar o proprietário da sessão.
+    const dono = somenteUma(car, r =>
+      String(r[car.col("IdCarteira")]).trim() ===
+        sessao.idCarteira &&
+      String(r[car.col("Status")]).trim() === "ATIVA" &&
+      String(r[car.col("Ambiente")]).trim() === "PRODUCAO" &&
+      String(r[car.col("AlgoritmoSenha")]).trim() ===
+        "PBKDF2_V2",
+      "Carteira não autorizada."
+    );
+
+    // Localizar a emissão e sua autorização.
+    const emissao = somenteUma(emi, r =>
+      String(r[emi.col("IdEmissao")]).trim() === emissaoId,
+      "Emissão inexistente ou duplicada."
+    );
+
+    const autId = String(
+      emissao.r[emi.col("IdAutorizacao")]
+    ).trim();
+
+    if (emissaoId !== "QC-EM-" + autId) {
+      throw new Error("Vínculo da emissão inválido.");
+    }
+
+    const autorizacao = somenteUma(aut, r =>
+      String(r[aut.col("IdAutorizacao")]).trim() === autId,
+      "Autorização ausente ou duplicada."
+    );
+
+    if (
+      String(autorizacao.r[aut.col("IdCadastro")]).trim() !==
+        String(dono.r[car.col("IdCadastro")]).trim() ||
+      String(autorizacao.r[aut.col("Status")]).trim() !==
+        "AUTORIZADA" ||
+      String(autorizacao.r[aut.col("IdEmissao")]).trim() !==
+        emissaoId ||
+      !autorizacao.r[aut.col("AutorizadaPor")] ||
+      !autorizacao.r[aut.col("DataAutorizacao")]
+    ) {
+      throw new Error(
+        "Autorização não pertence à carteira ou não foi aprovada."
+      );
+    }
+
+    // Selecionar somente a cota da denominação autorizada.
+    // QC_localizarCota220 valida o vínculo e a chave pública.
+    const informacoesCota = QC_localizarCota220(
+      emissaoId, valorFicha
+    );
+
+    const idCota = informacoesCota.idCota;
+
+    const cota = somenteUma(cot, r =>
+      String(r[cot.col("IdCota")]).trim() === idCota &&
+      String(r[cot.col("IdEmissao")]).trim() === emissaoId,
+      "Cota de " + valorFicha + " QC ausente ou duplicada."
+    );
+
+    if (
+      Number(cota.r[cot.col("Denominacao")]) !== valorFicha ||
+      String(cota.r[cot.col("IdChave")]).trim() !== idChave ||
+      informacoesCota.idChave !== idChave ||
+      informacoesCota.statusChave !== "ATIVA"
+    ) {
+      throw new Error("Chave ou cota incorreta ou não ativada.");
+    }
+
+    const nHex = informacoesCota.moduloHex;
+    const eHex = informacoesCota.expoenteHex;
+
+    if (
+      !QC_validarBlocoCego178(
+        bloco, nHex, eHex
+      ).formatoValido
+    ) {
+      throw new Error("Bloco RSA inválido.");
+    }
+
+    const hash = QC_calcularHash(bloco);
+    const todos = ops.linhas.slice(1);
+
+    // Impedir que um mesmo IdOperacao seja reutilizado
+    // com outro bloco ou outra cota.
+    const anteriores = todos
+      .map((r, i) => ({ r, linha: i + 2 }))
+      .filter(o =>
+        String(o.r[ops.col("IdOperacao")]).trim() ===
+          operacaoId
+      );
+
+    if (anteriores.length > 1) {
+      throw new Error("Operação duplicada.");
+    }
+
+    if (todos.some(r =>
+      String(r[ops.col("HashBlocoCego")]).trim() === hash &&
+      String(r[ops.col("IdOperacao")]).trim() !== operacaoId
+    )) {
+      throw new Error("Bloco cego já reservado.");
+    }
+
+    let linhaOp;
+
+    if (anteriores.length) {
+      const atual = anteriores[0];
+
+      if (
+        String(atual.r[ops.col("IdEmissao")]).trim() !== emissaoId ||
+        String(atual.r[ops.col("IdCota")]).trim() !== idCota ||
+        String(atual.r[ops.col("HashBlocoCego")]).trim() !== hash
+      ) {
+        throw new Error("Repetição com dados diferentes.");
+      }
+
+      const st = String(
+        atual.r[ops.col("Status")]
+      ).trim();
+
+      // Operação concluída: devolver a mesma assinatura.
+      if (st === "CONCLUIDA") {
+        return {
+          status: "ASSINADO",
+          idOperacao: operacaoId,
+          idChave: idChave,
+          assinaturaCegaHex: String(
+            atual.r[ops.col("AssinaturaCegaHex")]
+          ).trim()
+        };
+      }
+
+      if (st !== "RESERVADA") {
+        throw new Error("Estado inesperado da operação.");
+      }
+
+      linhaOp = atual.linha;
+
     } else {
-      qcAvisoTransferir275.textContent = retorno.status;
-    }
-  } catch(err) {
-    qcAvisoTransferir275.textContent = "⚠️ " + String(err.message||err);
-  } finally {qcTrabalhando275=false;qcReceber275.disabled=false;}
-});
-qcValorReceber275.addEventListener("paste", () => {
-  qcAvisoTransferir275.textContent = "";
-});
-document.getElementById("qcLerQR275").addEventListener("click", async () => {
-  if (qcLeituraAtiva275 || qcTrabalhando275) return;
-  if (typeof BarcodeDetector !== "function" || !navigator.mediaDevices?.getUserMedia) {
-    qcAvisoTransferir275.textContent =
-      "Seu navegador nao oferece leitura direta. Copie e cole o codigo no campo.";
-    return;
-  }
-  let detector;
-  try {detector=new BarcodeDetector({formats:["qr_code"]});}
-  catch(_) {qcAvisoTransferir275.textContent="Use copiar/colar neste navegador.";return;}
-  const area=document.getElementById("qcVideoQR275");
-  const video=document.createElement("video");
-  video.autoplay=true;video.muted=true;video.playsInline=true;
-  video.style.cssText="width:100%;max-height:270px;border-radius:10px";
-  try {
-    const stream=await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:{ideal:"environment"}},audio:false
-    });
-    qcStream275=stream;
-    video.srcObject=stream;
-    area.replaceChildren(video);
-    area.hidden=false;
-    await video.play();
-    qcLeituraAtiva275=true;
-    qcAvisoTransferir275.textContent="Aponte a camera para o QR Code.";
-    const capturar=async () => {
-      if (!qcLeituraAtiva275) return;
-      try {
-        const codigos=await detector.detect(video);
-        if (codigos.length) {
-          const valor=String(codigos[0].rawValue||"");
-          if (/^QC[12]\|[0-9a-f-]{36}\|[0-9a-f]{64}$/i.test(valor)) {
-            qcValorReceber275.value=valor;
-            QC_pararCamera275();
-            qcAvisoTransferir275.textContent="Codigo lido. Toque em Receber QC.";
-            return;
-          }
-        }
-      } catch(_) { /* Camera ainda nao pronta; proxima leitura. */ }
-      if (qcLeituraAtiva275) setTimeout(capturar,350);
-    };
-    capturar();
-  } catch(err) {
-    QC_pararCamera275();
-    qcAvisoTransferir275.textContent = "Nao foi possivel abrir a camera: " +
-      String(err.message||err) + ". Use copiar/colar.";
-  }
-});
-
-QC_atualizarTela();
-
-const QC_ID_LOCAL = "QC_ID_CARTEIRA";
-
-// PASSO 291 — Identificação da carteira e nome, SEM tocar nas fichas.
-function QC_atualizarBoasVindas291() {
-  const alvo = document.getElementById("qcBoasVindas");
-  if (!alvo) return;
-  const id = localStorage.getItem(QC_ID_LOCAL);
-  const nome = id ? String(localStorage.getItem("QC_NOME_CARTEIRA_"+id)||"").trim() : "";
-  // PASSO 375: destaque somente no nome; usar DOM seguro, sem innerHTML.
-  if (!nome) {
-    alvo.textContent = "Bem-vindo! Digite sua senha para entrar na carteira.";
-    return;
-  }
-  const destaque = document.createElement("strong");
-  destaque.className = "qc-nome-irmao375";
-  destaque.textContent = nome;
-  alvo.replaceChildren(
-    document.createTextNode("Bem-vindo, Ir.'. "),
-    destaque,
-    document.createTextNode(". Digite sua senha para entrar.")
-  );
-}
-
-async function QC_localizarConta291(dados) {
-  const resposta = await fetch(QC_URL_191, {
-    method:"POST", redirect:"follow",
-    headers:{"Content-Type":"text/plain;charset=utf-8"},
-    body:JSON.stringify(Object.assign({acao:"qc_localizar_carteira"},dados))
-  });
-  if (!resposta.ok) throw Error("Falha na consulta da carteira (HTTP "+resposta.status+").");
-  const r = await resposta.json();
-  if (!r || r.status !== "OK" || !r.idCarteira) {
-    throw Error(r?.mensagem || "Carteira ativa não localizada para esse irmão.");
-  }
-  return {idCarteira:String(r.idCarteira).trim(),
-    nome:String(r.nome || r.nomeIrmao || r.Nome || "").trim()};
-}
-
-async function QC_carregarNome291() {
-  const id = localStorage.getItem(QC_ID_LOCAL);
-  if (!id) return;
-  QC_atualizarBoasVindas291();
-  if (localStorage.getItem("QC_NOME_CARTEIRA_"+id)) return;
-  try {
-    const conta = await QC_localizarConta291({idCarteira:id});
-    if (conta.idCarteira !== id || !conta.nome ||
-        localStorage.getItem(QC_ID_LOCAL) !== id) return;
-    localStorage.setItem("QC_NOME_CARTEIRA_"+id,conta.nome);
-    QC_atualizarBoasVindas291();
-  } catch (_) {
-    // Sem conectar, permitir login sem nome inventado.
-  }
-}
-
-// PASSO 374: Um aparelho vinculado nao oferece troca de carteira.
-// A vinculacao de uma carteira existente so aparece no primeiro acesso local.
-function QC_modoVinculo374(ativar) {
-  const painel = document.getElementById('qcVincularExistente374');
-  const form = document.getElementById('formAtivacao');
-  if (!painel || !form) return;
-  painel.style.display = ativar ? 'block' : 'none';
-  const ids = ['qcIdCadastro','qcNovaSenha','qcConfirmarSenha',
-               'btnAtivarCarteira'];
-  for (const nome of ids) {
-    const campo = document.getElementById(nome);
-    if (campo) campo.style.display = ativar ? 'none' : '';
-  }
-  const titulo = form.querySelector('h3');
-  if (titulo) titulo.textContent = ativar ? 'Carteira existente' : 'Primeiro acesso';
-  const descricao = form.querySelector('h3 + p');
-  if (descricao) descricao.style.display = ativar ? 'none' : '';
-  const vinculo = document.getElementById('linkJaTenhoCarteira');
-  if (vinculo) vinculo.parentElement.style.display = ativar ? 'none' : '';
-}
-
-document.getElementById('qcBtnVoltarAtivacao374').addEventListener('click', () => {
-  QC_modoVinculo374(false);
-  document.getElementById('qcAvisoVinculo374').textContent = '';
-});
-document.getElementById('qcBtnVincular374').addEventListener('click', async function() {
-  // Nao substituir uma carteira ja identificada neste dispositivo.
-  if (localStorage.getItem(QC_ID_LOCAL)) {
-    QC_mostrarLogin();
-    return;
-  }
-  const campo = document.getElementById('qcIdCadastroVinculo374');
-  const mensagem = document.getElementById('qcAvisoVinculo374');
-  const idCadastro = String(campo.value || '').trim();
-  if (!idCadastro) { mensagem.textContent='Informe seu IdCadastro.';return; }
-  this.disabled = true;
-  mensagem.textContent = 'Localizando sua carteira...';
-  try {
-    const conta = await QC_localizarConta291({idCadastro});
-    if (localStorage.getItem(QC_ID_LOCAL))
-      throw Error('Ja existe uma carteira vinculada neste dispositivo.');
-    localStorage.setItem(QC_ID_LOCAL,conta.idCarteira);
-    if (conta.nome) localStorage.setItem('QC_NOME_CARTEIRA_'+conta.idCarteira,conta.nome);
-    campo.value='';
-    QC_mostrarLogin();
-    QC_mostrarMensagemAcesso('Carteira localizada. Entre com sua senha pessoal.','sucesso');
-  } catch (erro) {
-    mensagem.textContent = '⚠️ ' + String(erro.message || erro);
-  } finally { this.disabled=false; }
-});
-
-function QC_mostrarAtivacao() {
-  if (localStorage.getItem(QC_ID_LOCAL)) { QC_mostrarLogin(); return; }
-  QC_modoVinculo374(false);
-  document.getElementById("formAtivacao")
-    .style.display = "block";
-
-  document.getElementById("formLogin")
-    .style.display = "none";
-}
-
-function QC_mostrarLogin() {
-  if (!localStorage.getItem(QC_ID_LOCAL)) { QC_mostrarAtivacao(); return; }
-  const painelSenha = document.getElementById('qcPainelTrocaSenha');
-  const linkSenha = document.getElementById('btnAbrirTrocaSenha');
-  if (painelSenha) painelSenha.style.display='none';
-  if (linkSenha) linkSenha.style.display='';
-  QC_atualizarBoasVindas291();
-  QC_carregarNome291();
-
-  document.getElementById("formAtivacao")
-    .style.display = "none";
-
-  document.getElementById("formLogin")
-    .style.display = "block";
-}
-
-document.getElementById("linkJaTenhoCarteira")
-  .addEventListener("click", function(evento) {
-    evento.preventDefault();
-    QC_modoVinculo374(true);
-    document.getElementById('qcIdCadastroVinculo374').focus();
-  });
-
-function QC_mostrarMensagemAcesso(texto, tipo) {
-
-  const mensagem = document.getElementById(
-    "qcMensagemAcesso"
-  );
-
-  mensagem.className = "";
-  void mensagem.offsetWidth; // Reinicia a animação
-
-  mensagem.textContent =
-    (tipo === "erro" ? "⚠️ " : "✅ ") + texto;
-
-  mensagem.className = tipo;
-
-  mensagem.scrollIntoView({
-    behavior: "smooth",
-    block: "nearest"
-  });
-}
-
-let QC_ativacaoPendente = null;
-let QC_recuperacaoPendente = null;
-
-document.getElementById("btnAtivarCarteira")
-  .addEventListener("click", function(evento) {
-
-    evento.preventDefault();
-
-    const campoId = document.getElementById("qcIdCadastro");
-    const campoSenha = document.getElementById("qcNovaSenha");
-    const campoConfirmar = document.getElementById("qcConfirmarSenha");
-
-    const id = campoId.value.trim();
-    const senha = campoSenha.value;
-    const confirmar = campoConfirmar.value;
-
-    [campoId, campoSenha, campoConfirmar].forEach(
-      campo => campo.classList.remove("campo-erro")
-    );
-
-    if (!id) {
-      campoId.classList.add("campo-erro");
-      QC_mostrarMensagemAcesso(
-        "Informe seu IdCadastro.",
-        "erro"
-      );
-      return;
-    }
-
-    if (senha.length < 6) {
-      campoSenha.classList.add("campo-erro");
-      QC_mostrarMensagemAcesso(
-        "A senha deve ter pelo menos 6 caracteres.",
-        "erro"
-      );
-      return;
-    }
-
-    if (senha !== confirmar) {
-      campoConfirmar.classList.add("campo-erro");
-      QC_mostrarMensagemAcesso(
-        "As senhas não conferem.",
-        "erro"
-      );
-      return;
-    }
-
-    // Gerar código seguro de recuperação
-    const bytes = new Uint8Array(16);
-    window.crypto.getRandomValues(bytes);
-
-    const codigo = Array.from(bytes)
-      .map(b => b.toString(16).padStart(2, "0"))
-      .join("")
-      .toUpperCase()
-      .match(/.{1,8}/g)
-      .join("-");
-
-    // Dados temporários, mantidos apenas em memória
-    QC_ativacaoPendente = {
-      idCadastro: id,
-      senha: senha,
-      codigoRecuperacao: codigo
-    };
-
-    // Exibir código ANTES de registrar a carteira
-    QC_exibirCodigoRecuperacao(codigo);
-
-  });
-
-
-
-async function QC_enviarAtivacaoV2(dados) {
-
-  const URL_APPS_SCRIPT =
-    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-
-  // Validar os dados recebidos do formulário.
-  if (
-    typeof dados.senha !== "string" ||
-    dados.senha.length < 6
-  ) {
-    throw new Error(
-      "A senha deve ter pelo menos 6 caracteres."
-    );
-  }
-
-  // Criar um salt exclusivo para a nova carteira.
-  const saltHex = QC_gerarSaltSenhaV2();
-
-  // Calcular PBKDF2 no próprio Android.
-  const derivadoHex = await QC_derivarSenhaV2(
-    dados.senha,
-    saltHex
-  );
-
-  // Enviar a credencial derivada, não a senha original.
-  const resposta = await fetch(URL_APPS_SCRIPT, {
-    method: "POST",
-    redirect: "follow",
-    headers: {
-      "Content-Type": "text/plain;charset=utf-8"
-    },
-    body: JSON.stringify({
-      acao: "qc_ativar",
-      idCadastro: dados.idCadastro,
-      derivadoHex: derivadoHex,
-      saltHex: saltHex,
-      codigoRecuperacao: dados.codigoRecuperacao
-    })
-  });
-
-  if (!resposta.ok) {
-    throw new Error(
-      "Erro de comunicação: " + resposta.status
-    );
-  }
-
-  const resultado = await resposta.json();
-
-  if (
-    resultado.status !== "OK" ||
-    !resultado.idCarteira
-  ) {
-    throw new Error(
-      resultado.mensagem ||
-      "Não foi possível ativar a carteira."
-    );
-  }
-
-  return resultado;
-}
-
-
-
-
-const QC_CHAVE_SESSAO = "QC_TOKEN_SESSAO_TESTE";
-
-// PASSOS 303/304 — sessao temporaria restauravel, sem salvar senha legivel.
-// Os dados cifrados permanecem nesta aba (sessionStorage). A chave AES
-// nao exportavel fica no IndexedDB do navegador. A restauracao EXIGE o
-// token ainda valido no Apps Script. Use apenas em dispositivos pessoais.
-const QC_AUTO303 = (() => {
-  "use strict";
-  const NOME = "QC_ACESSO_TEMPORARIO_303";
-  const BASE = "QC_CHAVES_TEMPORARIAS_303";
-  const LOJA = "chaves";
-  const INATIVIDADE = 2 * 60 * 60 * 1000; // PASSO 344: 2 horas sem atividade
-  const MAXIMO = 2 * 60 * 60 * 1000; // PASSO 344: 2 horas absolutas (servidor alinhado)
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-  let ultimoToque = 0;
-
-  function abrirBD() {
-    return new Promise((resolve, reject) => {
-      if (!window.indexedDB || !window.crypto?.subtle) {
-        reject(Error("Armazenamento seguro indisponivel."));
-        return;
-      }
-      const req = indexedDB.open(BASE, 1);
-      req.onupgradeneeded = () => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains(LOJA)) db.createObjectStore(LOJA);
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error || Error("Falha no IndexedDB."));
-      req.onblocked = () => reject(Error("IndexedDB bloqueado."));
-    });
-  }
-  async function banco(acao, chave, valor) {
-    const db = await abrirBD();
-    return new Promise((resolve, reject) => {
-      let resultado;
-      let transacao;
-      try {
-        transacao = db.transaction(LOJA, acao === "ler" ? "readonly" : "readwrite");
-        const loja = transacao.objectStore(LOJA);
-        const req = acao === "salvar" ? loja.put(valor, chave)
-          : acao === "excluir" ? loja.delete(chave) : loja.get(chave);
-        req.onsuccess = () => { resultado = req.result; };
-        transacao.oncomplete = () => { db.close(); resolve(resultado); };
-        transacao.onerror = () => { db.close(); reject(transacao.error || Error("Falha ao acessar a chave.")); };
-        transacao.onabort = () => { db.close(); reject(transacao.error || Error("Operacao de chave cancelada.")); };
-      } catch (e) { db.close(); reject(e); }
-    });
-  }
-  const codificar = bytes => btoa(Array.from(bytes, b => String.fromCharCode(b)).join(""));
-  const decodificar = texto => Uint8Array.from(atob(texto), c => c.charCodeAt(0));
-  function ler() {
-    try { return JSON.parse(sessionStorage.getItem(NOME) || "null"); }
-    catch (_) { return null; }
-  }
-  function limpar() {
-    const antigo = ler();
-    sessionStorage.removeItem(NOME);
-    if (antigo?.chaveId) banco("excluir", antigo.chaveId).catch(() => {});
-  }
-  function expirou(dados) {
-    const agora = Date.now();
-    return !dados || dados.versao !== 1 ||
-      !Number.isFinite(dados.ultimoUso) || !Number.isFinite(dados.limite) ||
-      dados.ultimoUso > agora + 60_000 ||
-      agora - dados.ultimoUso > INATIVIDADE || agora > dados.limite;
-  }
-  async function salvar(senha) {
-    limpar();
-    const id = localStorage.getItem("QC_ID_CARTEIRA");
-    const token = sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
-    if (!id || !token || typeof senha !== "string" || !senha) return false;
-    let chaveId = null;
-    try {
-      chaveId = crypto.randomUUID();
-      const chave = await crypto.subtle.generateKey(
-        {name:"AES-GCM", length:256}, false, ["encrypt", "decrypt"]);
-      await banco("salvar", chaveId, chave);
-      const iv = crypto.getRandomValues(new Uint8Array(12));
-      const limite = Date.now() + MAXIMO;
-      const contexto = encoder.encode(id + "|" + token + "|" + limite);
-      const cifrado = await crypto.subtle.encrypt(
-        {name:"AES-GCM", iv, additionalData:contexto}, chave, encoder.encode(senha));
-      if (id !== localStorage.getItem("QC_ID_CARTEIRA") ||
-          token !== sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")) {
-        await banco("excluir", chaveId);
-        return false;
-      }
-      sessionStorage.setItem(NOME, JSON.stringify({
-        versao:1, id, chaveId, iv:codificar(iv), dados:codificar(new Uint8Array(cifrado)),
-        limite, ultimoUso:Date.now()
-      }));
-      return true;
-    } catch (_) {
-      sessionStorage.removeItem(NOME);
-      if (chaveId) banco("excluir", chaveId).catch(() => {});
-      return false; // Uma falha no cache NUNCA bloqueia o login.
-    }
-  }
-  async function recuperar() {
-    const dados = ler();
-    if (!dados) return null;
-    const id = localStorage.getItem("QC_ID_CARTEIRA");
-    const token = sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
-    if (!id || !token || id !== dados.id || expirou(dados)) {
-      limpar();
-      return null;
-    }
-    try {
-      const chave = await banco("ler", dados.chaveId);
-      if (!chave) { limpar(); return null; }
-      const contexto = encoder.encode(id + "|" + token + "|" + dados.limite);
-      const claro = await crypto.subtle.decrypt(
-        {name:"AES-GCM", iv:decodificar(dados.iv), additionalData:contexto},
-        chave, decodificar(dados.dados));
-      if (id !== localStorage.getItem("QC_ID_CARTEIRA") ||
-          token !== sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")) return null;
-      return decoder.decode(claro);
-    } catch (_) { limpar(); return null; }
-  }
-  function atividade() {
-    const agora = Date.now();
-    if (agora - ultimoToque < 10_000) return;
-    ultimoToque = agora;
-    const dados = ler();
-    if (!dados || expirou(dados)) return;
-    if (dados.id !== localStorage.getItem("QC_ID_CARTEIRA") ||
-      !sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")) return;
-    dados.ultimoUso = agora;
-    sessionStorage.setItem(NOME, JSON.stringify(dados));
-  }
-  document.addEventListener("pointerdown", atividade, {passive:true});
-  document.addEventListener("keydown", atividade);
-  return {salvar, recuperar, limpar, atividade};
-})();
-
-
-
-async function QC_validarSessaoServidor(tokenSessao) {
-
-  const URL_APPS_SCRIPT =
-    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-
-  const resposta = await fetch(URL_APPS_SCRIPT, {
-    method: "POST",
-    redirect: "follow",
-    headers: {
-      "Content-Type": "text/plain;charset=utf-8"
-    },
-    body: JSON.stringify({
-      acao: "qc_validar_sessao_teste",
-      tokenSessao: tokenSessao
-    })
-  });
-
-  if (!resposta.ok) {
-    throw new Error(
-      "Erro de comunicação HTTP: " + resposta.status
-    );
-  }
-
-  return await resposta.json();
-}
-
-
-
-
-document.getElementById("btnEntrarCarteira")
-  .addEventListener("click", async function(evento) {
-
-    evento.preventDefault();
-
-    const campoSenha = document.getElementById(
-      "qcSenhaLogin"
-    );
-
-    const botao = document.getElementById(
-      "btnEntrarCarteira"
-    );
-
-    const idCarteira = localStorage.getItem(
-      QC_ID_LOCAL
-    );
-
-    const senha = campoSenha.value;
-
-    if (!idCarteira) {
-      QC_mostrarMensagemAcesso(
-        "Carteira não identificada neste dispositivo.",
-        "erro"
-      );
-      return;
-    }
-
-    if (!senha) {
-      QC_mostrarMensagemAcesso(
-        "Informe sua senha.",
-        "erro"
-      );
-      campoSenha.focus();
-      return;
-    }
-
-    botao.disabled = true;
-    botao.textContent = "Verificando senha...";
-
-    try {
-
-      const resultado = await QC_enviarLoginAutomatico(
-        idCarteira,
-        senha
-      );
-
-     
-if (resultado.status === "OK") {
-
-  if (!resultado.tokenSessao) {
-    throw new Error(
-      "O servidor não retornou o token da sessão."
-    );
-  }
-
-  // Verificar o token no Apps Script
-  const verificacao = await QC_validarSessaoServidor(
-    resultado.tokenSessao
-  );
-
-  if (
-    verificacao.status !== "OK" ||
-    verificacao.idCarteira !== idCarteira
-  ) {
-    throw new Error(
-      verificacao.mensagem ||
-      "Não foi possível validar a sessão."
-    );
-  }
-
-  // Guardar o token temporário
-  sessionStorage.setItem(
-    QC_CHAVE_SESSAO,
-    resultado.tokenSessao
-  );
-
-  // Limpar a tela de senha, mas preservar a credencial apenas nesta
-  // chamada, para iniciar as fichas na memoria durante a sessao.
-  campoSenha.value = "";
-
-  QC_exibirTelaCarteira();
-  // PASSO 304: guardar a sessao logo apos o login validado pelo servidor.
-  // No 303 isto ocorria depois da consulta do saldo: qualquer falha na
-  // consulta impedia o cache, embora a carteira tivesse entrado.
-  // Confirmar a capacidade de salvar E restaurar antes de depender do cache.
-  let acessoTemporarioOK = false;
-  try {
-    if (await QC_AUTO303.salvar(senha)) {
-      acessoTemporarioOK = (await QC_AUTO303.recuperar()) === senha;
-    }
-  } catch (_) {
-    acessoTemporarioOK = false;
-  }
-  if (!acessoTemporarioOK) QC_AUTO303.limpar();
-
-  try {
-    if (typeof window.QC_aposLogin291 !== "function") {
-      throw Error("Modulo do saldo nao carregado.");
-    }
-    await window.QC_aposLogin291(senha);
-  } catch (erroFichas) {
-    const msg=document.getElementById("mensagem");
-    if(msg) msg.textContent="⚠️ Fichas protegidas: "+
-      (erroFichas.message||erroFichas)+". Nenhuma ficha foi apagada.";
-  }
-  if (!acessoTemporarioOK) {
-    const msg = document.getElementById("mensagem");
-    if (msg) msg.textContent +=
-      (msg.textContent ? " " : "") +
-      "⚠️ O navegador nao conseguiu proteger a sessao temporaria. " +
-      "A carteira pedira a senha ao atualizar. Verifique se o armazenamento " +
-      "do site esta permitido no navegador.";
-  }
-
-  // Manter operações financeiras desabilitadas
-  document.getElementById("btnReceber").disabled = false;
-  document.getElementById("btnDoar").disabled = false;
-  document.getElementById("btnTransferir").disabled = false;
-  if (window.QC_habilitarResgate278) window.QC_habilitarResgate278();
-
-  const avisoLogin=document.getElementById("mensagem");
-  if(avisoLogin && !avisoLogin.textContent.startsWith("⚠️")) avisoLogin.textContent="";
-
-} else {
-
-
-        QC_mostrarMensagemAcesso(
-          resultado.mensagem ||
-          "Não foi possível realizar o login.",
-          "erro"
-        );
-
+      if (
+        String(emissao.r[emi.col("Status")]).trim() !==
+          "AGUARDANDO_ASSINATURA" ||
+        String(cota.r[cot.col("Status")]).trim() !== "PLANEJADA"
+      ) {
+        throw new Error("Emissão ou cota indisponível.");
       }
 
-    } catch (erro) {
-
-      QC_mostrarMensagemAcesso(
-        "Falha na comunicação: " + erro.message,
-        "erro"
+      const destaCota = todos.filter(r =>
+        String(r[ops.col("IdCota")]).trim() === idCota
       );
 
-    } finally {
+      if (destaCota.some(r =>
+        !["RESERVADA", "CONCLUIDA"].includes(
+          String(r[ops.col("Status")]).trim()
+        )
+      )) {
+        throw new Error("Operações inconsistentes.");
+      }
 
-      botao.disabled = false;
-      botao.textContent = "Entrar";
+      const permitido = Number(
+        cota.r[cot.col("QuantidadePermitida")]
+      );
 
+      const assinadas = Number(
+        cota.r[cot.col("QuantidadeAssinada")]
+      );
+
+      const concluidas = destaCota.filter(r =>
+        String(r[ops.col("Status")]).trim() === "CONCLUIDA"
+      ).length;
+
+      if (
+        !Number.isSafeInteger(permitido) ||
+        permitido <= 0 ||
+        !Number.isSafeInteger(assinadas) ||
+        assinadas > concluidas ||
+        destaCota.length >= permitido
+      ) {
+        throw new Error("Cota esgotada ou contadores inconsistentes.");
+      }
+
+      // Corrigir contador atrasado após interrupção.
+      if (assinadas < concluidas) {
+        cot.aba.getRange(
+          cota.linha,
+          cot.col("QuantidadeAssinada") + 1
+        ).setValue(concluidas);
+        SpreadsheetApp.flush();
+      }
+
+      // Reservar ANTES de chamar o Worker.
+      ops.aba.appendRow([
+        operacaoId,
+        emissaoId,
+        idCota,
+        hash,
+        "RESERVADA",
+        "",
+        new Date(),
+        ""
+      ]);
+
+      SpreadsheetApp.flush();
+      linhaOp = ops.aba.getLastRow();
     }
 
-  });
+    // Autenticação servidor a servidor.
+    const tokenWorker = props.getProperty("QC_WORKER_TOKEN");
 
+    if (!/^[0-9a-f]{64}$/.test(tokenWorker || "")) {
+      throw new Error("Worker não configurado.");
+    }
 
-if (localStorage.getItem(QC_ID_LOCAL)) {
-  QC_mostrarLogin();
-} else {
-  QC_mostrarAtivacao();
-}
-
-function QC_exibirTelaAcesso() {
-  qcSequenciaIndicadorReceber300++;
-  QC_mostrarIndicadorReceber300(0);
-  if(window.QC_limparIndicadorResgate386)window.QC_limparIndicadorResgate386();
-
-  document.getElementById("telaAcesso")
-    .style.display = "block";
-
-  document.getElementById("telaCarteira")
-    .style.display = "none";
-  const resgate278 = document.getElementById("btnResgatar");
-  if (resgate278) resgate278.disabled = true;
-
-    const areaTesoureiro = document.getElementById(
-    "qcAreaTesoureiro"
-  );
-
-  if (areaTesoureiro) {
-    areaTesoureiro.style.display = "none";
-    const detalhes = document.getElementById("qcDetalhesTesoureiro294");
-    if (detalhes) detalhes.open = false;
-  }
-}
-
-function QC_exibirTelaCarteira() {
-
-  document.getElementById("telaAcesso")
-    .style.display = "none";
-
-  document.getElementById("telaCarteira")
-    .style.display = "block";
-
-    QC_atualizarTela();
-  // Sinalizar valores autorizados assim que entrar na carteira.
-  QC_atualizarIndicadorReceber300();
-  if(window.QC_atualizarIndicadorResgate386)
-    void window.QC_atualizarIndicadorResgate386();
-
-  // Consultar se esta carteira pertence ao tesoureiro.
-  QC_atualizarAreaTesoureiro();
-}
-
-
-// Por segurança, sempre iniciar na tela de acesso.
-// A carteira só será exibida após autenticação.
-QC_exibirTelaAcesso();
-
-
-async function QC_testarConexaoServidor() {
-
-  const URL_APPS_SCRIPT =
-    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-
-  try {
-
-    const resposta = await fetch(
-      URL_APPS_SCRIPT + "?acao=qc_teste",
+    const resp = UrlFetchApp.fetch(
+      "https://quintoscoin-assinador-teste.lojatiradentesii71.workers.dev/interno/assinar",
       {
-        method: "GET",
-        redirect: "follow"
+        method: "post",
+        contentType: "application/json",
+        headers: {
+          Authorization: "Bearer " + tokenWorker
+        },
+        payload: JSON.stringify({
+          idOperacao: operacaoId,
+          idEmissao: emissaoId,
+          idCota: idCota,
+          idChave: idChave,
+          blocoHex: bloco
+        }),
+        muteHttpExceptions: true
       }
     );
 
-    if (!resposta.ok) {
+    if (resp.getResponseCode() !== 200) {
       throw new Error(
-        "Erro HTTP: " + resposta.status
+        "Assinatura indisponível. HTTP " +
+        resp.getResponseCode()
       );
     }
 
-    const dados = await resposta.json();
+    const dados = JSON.parse(resp.getContentText());
+
+    const assinatura = String(
+      dados.assinaturaCegaHex || ""
+    ).toLowerCase();
 
     if (
-      dados.sistema !== "QuintosCoin" ||
-      dados.status !== "OK"
+      dados.status !== "ASSINADO" ||
+      dados.idOperacao !== operacaoId ||
+      dados.idEmissao !== emissaoId ||
+      dados.idCota !== idCota ||
+      dados.idChave !== idChave ||
+      !/^[0-9a-f]{1024}$/.test(assinatura)
     ) {
-      throw new Error(
-        dados.mensagem || "Resposta inesperada do servidor."
-      );
+      throw new Error("Resposta de assinatura inesperada.");
     }
 
-    return {
-      status: "OK",
-      mensagem: dados.mensagem
-    };
+    // Conferir a operação RSA antes de gravar:
+    // assinatura^expoente mod modulo = bloco cego.
+    const n = BigInt("0x" + nHex);
+    let expoente = BigInt("0x" + eHex);
+    let base = BigInt("0x" + assinatura) % n;
+    let resultado = BigInt(1);
 
-  } catch (erro) {
+    while (expoente > BigInt(0)) {
+      if (expoente % BigInt(2) === BigInt(1)) {
+        resultado = (resultado * base) % n;
+      }
 
-    console.error(
-      "Erro de comunicação QuintosCoin:",
-      erro
-    );
-
-    return {
-      status: "ERRO",
-      mensagem: erro.message || "Erro desconhecido."
-    };
-
-  }
-}
-
-async function QC_testarConexaoPost() {
-
-  const URL_APPS_SCRIPT =
-    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-
-  try {
-
-    const resposta = await fetch(URL_APPS_SCRIPT, {
-      method: "POST",
-      redirect: "follow",
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8"
-      },
-      body: JSON.stringify({
-        acao: "qc_teste_post"
-      })
-    });
-
-    if (!resposta.ok) {
-      throw new Error("HTTP " + resposta.status);
+      base = (base * base) % n;
+      expoente = expoente / BigInt(2);
     }
 
-    const dados = await resposta.json();
+    if (resultado !== BigInt("0x" + bloco)) {
+      throw new Error("Assinatura RSA não confere.");
+    }
+
+    // Registrar a assinatura e concluir a operação.
+    ops.aba.getRange(
+      linhaOp,
+      ops.col("AssinaturaCegaHex") + 1
+    ).setValue(assinatura);
+
+    ops.aba.getRange(
+      linhaOp,
+      ops.col("DataAssinatura") + 1
+    ).setValue(new Date());
+
+    ops.aba.getRange(
+      linhaOp,
+      ops.col("Status") + 1
+    ).setValue("CONCLUIDA");
+
+    SpreadsheetApp.flush();
+
+    const concluidasAntes = todos.filter(r =>
+      String(r[ops.col("IdCota")]).trim() === idCota &&
+      String(r[ops.col("Status")]).trim() === "CONCLUIDA"
+    ).length;
+
+    const novas = concluidasAntes + 1;
+
+    cot.aba.getRange(
+      cota.linha,
+      cot.col("QuantidadeAssinada") + 1
+    ).setValue(novas);
 
     if (
-      dados.sistema !== "QuintosCoin" ||
-      dados.status !== "OK"
+      novas === Number(
+        cota.r[cot.col("QuantidadePermitida")]
+      )
     ) {
-      throw new Error(
-        dados.mensagem || "Resposta inesperada do servidor."
+      cot.aba.getRange(
+        cota.linha,
+        cot.col("Status") + 1
+      ).setValue("CONCLUIDA");
+
+      // Encerrar emissão quando todas as cotas concluírem.
+      const outrasCotas = cot.linhas.slice(1).filter(r =>
+        String(r[cot.col("IdEmissao")]).trim() === emissaoId &&
+        String(r[cot.col("IdCota")]).trim() !== idCota
       );
+
+      if (outrasCotas.every(r =>
+        String(r[cot.col("Status")]).trim() === "CONCLUIDA"
+      )) {
+        emi.aba.getRange(
+          emissao.linha,
+          emi.col("DataConclusao") + 1
+        ).setValue(new Date());
+
+        emi.aba.getRange(
+          emissao.linha,
+          emi.col("Status") + 1
+        ).setValue("CONCLUIDA");
+      }
     }
+
+    SpreadsheetApp.flush();
 
     return {
-      status: "OK",
-      mensagem: dados.mensagem
+      status: "ASSINADO",
+      idOperacao: operacaoId,
+      idChave: idChave,
+      assinaturaCegaHex: assinatura
     };
 
-  } catch (erro) {
-
-    console.error("Erro POST QuintosCoin:", erro);
-
-    return {
-      status: "ERRO",
-      mensagem: erro.message || "Erro desconhecido."
-    };
-  }
-}
-
-
-function QC_exibirCodigoRecuperacao(codigo) {
-
-  document.getElementById("telaAcesso")
-    .style.display = "none";
-
-  document.getElementById("telaCarteira")
-    .style.display = "none";
-
-  document.getElementById("telaRecuperacao")
-    .style.display = "block";
-
-  document.getElementById("qcCodigoRecuperacao")
-    .textContent = codigo;
-
-  document.getElementById("qcMensagemCopia")
-    .textContent = "";
-
-  document.getElementById("qcConfirmouCodigo")
-    .checked = false;
-
-  document.getElementById("qcBtnContinuar")
-    .disabled = true;
-}
-
-
-document.getElementById("qcBtnCopiar")
-  .addEventListener("click", async function() {
-
-    const codigo = document.getElementById(
-      "qcCodigoRecuperacao"
-    ).textContent;
-
-    const mensagem = document.getElementById(
-      "qcMensagemCopia"
-    );
-
-    try {
-
-      await navigator.clipboard.writeText(codigo);
-
-      mensagem.textContent =
-        "✅ Código copiado! Guarde-o em local seguro.";
-
-    } catch (erro) {
-
-      mensagem.textContent =
-        "Não foi possível copiar automaticamente. Selecione o código e copie manualmente.";
-
-    }
-
-  });
-
-
-document.getElementById("qcConfirmouCodigo")
-  .addEventListener("change", function() {
-
-    document.getElementById("qcBtnContinuar")
-      .disabled = !this.checked;
-
-  });
-
-
-
-
-document.getElementById("qcBtnContinuar")
-  .addEventListener("click", async function() {
-
-    const botao = document.getElementById(
-      "qcBtnContinuar"
-    );
-
-    const mensagem = document.getElementById(
-      "qcMensagemCopia"
-    );
-
-    const confirmou = document.getElementById(
-      "qcConfirmouCodigo"
-    ).checked;
-
-    if (!confirmou) {
-      return;
-    }
-
-    botao.disabled = true;
-
-    // =========================================
-    // RECUPERAÇÃO DE SENHA
-    // =========================================
-
-    if (QC_recuperacaoPendente) {
-
-      mensagem.textContent =
-        "Redefinindo senha de teste...";
-
-      try {
-
-        await QC_enviarRecuperacaoAutomatico(
-          QC_recuperacaoPendente
-        );
-
-        // Apagar o token local, caso exista.
-        QC_AUTO303.limpar();
-        sessionStorage.removeItem(
-          QC_CHAVE_SESSAO
-        );
-
-        // Limpar dados temporários.
-        QC_recuperacaoPendente = null;
-
-        document.getElementById(
-          "qcCodigoRecuperar"
-        ).value = "";
-
-        document.getElementById(
-          "qcSenhaRecuperar"
-        ).value = "";
-
-        document.getElementById(
-          "qcConfirmarSenhaRecuperar"
-        ).value = "";
-
-        // Fechar as telas de recuperação.
-        document.getElementById(
-          "telaRecuperacao"
-        ).style.display = "none";
-
-        document.getElementById(
-          "formRecuperarSenha"
-        ).style.display = "none";
-
-        // Retornar ao login.
-        QC_exibirTelaAcesso();
-        QC_mostrarLogin();
-
-        document.getElementById(
-          "qcSenhaLogin"
-        ).value = "";
-
-        QC_mostrarMensagemAcesso(
-          "Senha redefinida com sucesso! " +
-          "Entre utilizando sua nova senha.",
-          "sucesso"
-        );
-
-      } catch (erro) {
-
-        mensagem.style.color = "#ffcc80";
-
-        mensagem.textContent =
-          "⚠️ Não foi possível confirmar a redefinição: " +
-          erro.message +
-          ". Guarde o novo código apresentado.";
-
-      } finally {
-
-        botao.disabled = false;
-
-      }
-
-      return;
-    }
-
-    // =========================================
-    // PRIMEIRA ATIVAÇÃO
-    // =========================================
-
-    if (!QC_ativacaoPendente) {
-      botao.disabled = false;
-      return;
-    }
-
-    mensagem.textContent =
-      "Registrando sua carteira QuintosCoin...";
-
-    try {
-
-      const resultado = await QC_enviarAtivacaoV2(
-        QC_ativacaoPendente
-      );
-
-      localStorage.setItem(
-        QC_ID_LOCAL,
-        resultado.idCarteira
-      );
-
-      QC_ativacaoPendente = null;
-
-      document.getElementById(
-        "qcNovaSenha"
-      ).value = "";
-
-      document.getElementById(
-        "qcConfirmarSenha"
-      ).value = "";
-
-      document.getElementById(
-        "qcSenhaLogin"
-      ).value = "";
-
-      document.getElementById(
-        "telaRecuperacao"
-      ).style.display = "none";
-
-      QC_exibirTelaAcesso();
-      QC_mostrarLogin();
-
-      QC_mostrarMensagemAcesso(
-        "Carteira QuintosCoin ativada com sucesso! " +
-        "Agora você poderá utilizar a tela de login.",
-        "sucesso"
-      );
-
-    } catch (erro) {
-
-      mensagem.style.color = "#ffcc80";
-
-      mensagem.textContent =
-        "⚠️ Não foi possível confirmar a ativação: " +
-        erro.message +
-        ". Guarde o código apresentado.";
-
-    } finally {
-
-      botao.disabled = false;
-
-    }
-
-  });
-
-
-// QUINTOSCOIN - ENCERRAR SESSÃO
-
-async function QC_enviarLogoutTeste(tokenSessao) {
-
-  const URL_APPS_SCRIPT =
-    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-
-  const resposta = await fetch(URL_APPS_SCRIPT, {
-    method: "POST",
-    redirect: "follow",
-    headers: {
-      "Content-Type": "text/plain;charset=utf-8"
-    },
-    body: JSON.stringify({
-      acao: "qc_logout_teste",
-      tokenSessao: tokenSessao
-    })
-  });
-
-  if (!resposta.ok) {
-    throw new Error("Erro HTTP: " + resposta.status);
-  }
-
-  return await resposta.json();
-}
-
-
-document.getElementById("btnSairCarteira")
-  .addEventListener("click", async function() {
-
-    const botao = document.getElementById(
-      "btnSairCarteira"
-    );
-
-    const token = sessionStorage.getItem(
-      QC_CHAVE_SESSAO
-    );
-
-    botao.disabled = true;
-    botao.textContent = "Encerrando sessão...";
-
-    try {
-
-      if (token) {
-
-        const resultado = await QC_enviarLogoutTeste(
-          token
-        );
-
-        if (
-          resultado.status !== "OK" &&
-          resultado.status !== "SESSAO_INVALIDA"
-        ) {
-          throw new Error(
-            resultado.mensagem ||
-            "Não foi possível encerrar a sessão."
-          );
-        }
-      }
-
-      // Remover somente o token de sessão.
-      QC_AUTO303.limpar();
-      sessionStorage.removeItem(QC_CHAVE_SESSAO);
-      if (window.QC_limparSenhaSessao291) window.QC_limparSenhaSessao291();
-
-      // Ocultar a carteira e mostrar o login.
-      QC_exibirTelaAcesso();
-      QC_mostrarLogin();
-
-      document.getElementById(
-        "qcSenhaLogin"
-      ).value = "";
-
-      QC_mostrarMensagemAcesso(
-        "Sessão encerrada! Digite sua senha para entrar novamente.",
-        "sucesso"
-      );
-
-    } catch (erro) {
-
-      // Em caso de falha, não afirmar que o servidor
-      // encerrou a sessão. Permitir nova tentativa.
-      document.getElementById("mensagem").textContent =
-        "⚠️ Não foi possível confirmar o encerramento: " +
-        erro.message +
-        ". Tente novamente.";
-
-    } finally {
-
-      botao.disabled = false;
-      botao.textContent = "🚪 Sair da carteira";
-
-    }
-
-  });
-
-
-/* QUINTOSCOIN - RESTAURAR SESSÃO AO ABRIR */
-
-async function QC_restaurarSessaoTeste() {
-  const token = sessionStorage.getItem(QC_CHAVE_SESSAO);
-  const id = localStorage.getItem(QC_ID_LOCAL);
-  const recuperacao = new URLSearchParams(location.search).has("testeRecuperacao");
-  try {
-    if (!token || !id || recuperacao) {
-      QC_exibirTelaAcesso();
-      if (id) { QC_mostrarLogin(); QC_carregarNome291(); }
-      else QC_mostrarAtivacao();
-      return;
-    }
-    // Nunca reabrir a carteira somente pela existencia do token local.
-    const senha = await QC_AUTO303.recuperar();
-    if (!senha) throw Error("Acesso temporario encerrado.");
-    const validacao = await QC_validarSessaoServidor(token);
-    if (validacao.status !== "OK" || String(validacao.idCarteira) !== id) {
-      throw Error("Sessao nao validada pelo servidor.");
-    }
-    if (sessionStorage.getItem(QC_CHAVE_SESSAO) !== token ||
-      localStorage.getItem(QC_ID_LOCAL) !== id) return;
-    if (typeof window.QC_aposLogin291 !== "function") {
-      throw Error("Modulo das fichas indisponivel.");
-    }
-    // Somente mostrar o saldo como verificado APOS conferir as fichas gastas.
-    await window.QC_aposLogin291(senha);
-    if (sessionStorage.getItem(QC_CHAVE_SESSAO) !== token ||
-      localStorage.getItem(QC_ID_LOCAL) !== id) return;
-    QC_exibirTelaCarteira();
-    for (const nome of ["btnReceber", "btnDoar", "btnTransferir"]) {
-      const botao = document.getElementById(nome);
-      if (botao) botao.disabled = false;
-    }
-    if (window.QC_habilitarResgate278) window.QC_habilitarResgate278();
-    QC_AUTO303.atividade();
-    const msg = document.getElementById("mensagem");
-    if (msg && !msg.textContent.startsWith("⚠️")) msg.textContent = "";
-  } catch (erro) {
-    // Nao toca em saldos/fichas/backups; apenas solicita novo login.
-    QC_AUTO303.limpar();
-    if (sessionStorage.getItem(QC_CHAVE_SESSAO) === token) {
-      sessionStorage.removeItem(QC_CHAVE_SESSAO);
-    }
-    if (window.QC_limparSenhaSessao291) window.QC_limparSenhaSessao291();
-    QC_exibirTelaAcesso();
-    QC_mostrarLogin();
-    QC_carregarNome291();
-    // PASSO 304: informar a causa sem revelar senha, token ou ID.
-    const codigo = /sessao nao validada/i.test(String(erro.message || ""))
-      ? "VALIDACAO_SERVIDOR"
-      : /modulo das fichas/i.test(String(erro.message || ""))
-      ? "MODULO_FICHAS"
-      : /acesso temporario encerrado/i.test(String(erro.message || ""))
-      ? "CACHE_INDISPONIVEL"
-      : "CONFERENCIA_FICHAS";
-    QC_mostrarMensagemAcesso(
-      "Nao foi possivel restaurar o acesso automaticamente (" + codigo + "). " +
-      "Entre com sua senha. As fichas nao foram alteradas.", "erro");
   } finally {
-    document.documentElement.classList.remove("qc-restaurando");
+    lock.releaseLock();
   }
 }
 
-// Aguardar todos os modulos do navegador, inclusive qc-saldo.js.
-document.addEventListener("DOMContentLoaded", QC_restaurarSessaoTeste, {once:true});
 
+function QC_listarSolicitacoesCarteira191(tokenSessao) {
 
-// QUINTOSCOIN - INTERFACE DE ALTERAÇÃO DE SENHA
+  const sessao = QC_validarTokenSessaoTeste(tokenSessao);
 
-function QC_limparFormularioTrocaSenha() {
+  if (!sessao || sessao.status !== "OK") {
+    return { status: "SESSAO_INVALIDA", solicitacoes: [] };
+  }
 
-  document.getElementById("qcSenhaAtual").value = "";
-  document.getElementById("qcSenhaNova").value = "";
-  document.getElementById("qcSenhaNovaConfirmar").value = "";
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const car = ss.getSheetByName("QC_Carteiras");
+  const aut = ss.getSheetByName("QC_Autorizacoes");
 
-  const mensagem = document.getElementById(
-    "qcMensagemTrocaSenha"
+  if (!car || !aut) {
+    throw new Error("Tabelas da carteira não encontradas.");
+  }
+
+  const dCar = car.getDataRange().getValues();
+  const dAut = aut.getDataRange().getValues();
+
+  const hCar = dCar[0].map(v => String(v).trim());
+  const hAut = dAut[0].map(v => String(v).trim());
+
+  const c = nome => hCar.indexOf(nome);
+  const a = nome => hAut.indexOf(nome);
+
+  if (
+    ["IdCarteira", "IdCadastro", "Status",
+     "Ambiente", "AlgoritmoSenha"].some(n => c(n) < 0) ||
+    ["IdAutorizacao", "IdCadastro", "Valor",
+     "Status", "IdEmissao"].some(n => a(n) < 0)
+  ) {
+    throw new Error("Cabeçalhos das tabelas inconsistentes.");
+  }
+
+  const donas = dCar.slice(1).filter(r =>
+    String(r[c("IdCarteira")]).trim() === sessao.idCarteira &&
+    String(r[c("Status")]).trim().toUpperCase() === "ATIVA" &&
+    String(r[c("Ambiente")]).trim().toUpperCase() === "PRODUCAO" &&
+    String(r[c("AlgoritmoSenha")]).trim().toUpperCase() ===
+      "PBKDF2_V2"
   );
 
-  mensagem.textContent = "";
-  mensagem.className = "";
-}
-
-
-function QC_mostrarMensagemTrocaSenha(texto, tipo) {
-
-  const mensagem = document.getElementById(
-    "qcMensagemTrocaSenha"
-  );
-
-  mensagem.textContent =
-    (tipo === "erro" ? "⚠️ " : "✅ ") + texto;
-
-  mensagem.className = tipo;
-}
-
-
-document.getElementById("btnAbrirTrocaSenha")
-  .addEventListener("click", function(evento) {
-    evento.preventDefault();
-
-    QC_limparFormularioTrocaSenha();
-
-    document.getElementById("qcPainelTrocaSenha")
-      .style.display = "block";
-
-    document.getElementById("btnAbrirTrocaSenha")
-      .style.display = "none";
-
-  });
-
-
-document.getElementById("btnCancelarTrocaSenha")
-  .addEventListener("click", function() {
-
-    QC_limparFormularioTrocaSenha();
-
-    document.getElementById("qcPainelTrocaSenha")
-      .style.display = "none";
-
-    document.getElementById("btnAbrirTrocaSenha")
-      .style.display = "block";
-
-  });
-
-
-
-document.getElementById("btnConfirmarTrocaSenha")
-  .addEventListener("click", async function() {
-
-    const atual = document.getElementById(
-      "qcSenhaAtual"
-    ).value;
-
-    const nova = document.getElementById(
-      "qcSenhaNova"
-    ).value;
-
-    const confirmar = document.getElementById(
-      "qcSenhaNovaConfirmar"
-    ).value;
-
-    let token = sessionStorage.getItem(
-      QC_CHAVE_SESSAO
-    );
-    let tokenTemporario374 = false;
-
-    const botao = document.getElementById(
-      "btnConfirmarTrocaSenha"
-    );
-
-    // Validar formulário
-
-    if (!atual) {
-      QC_mostrarMensagemTrocaSenha(
-        "Informe sua senha atual.",
-        "erro"
-      );
-      return;
-    }
-
-    if (nova.length < 6 || nova.length > 8) {
-      QC_mostrarMensagemTrocaSenha(
-        "A senha deve ter de 6 a 8 caracteres.",
-        "erro"
-      );
-      return;
-    }
-
-    if (nova === atual) {
-      QC_mostrarMensagemTrocaSenha(
-        "A nova senha deve ser diferente da atual.",
-        "erro"
-      );
-      return;
-    }
-
-    if (nova !== confirmar) {
-      QC_mostrarMensagemTrocaSenha(
-        "As senhas não conferem.",
-        "erro"
-      );
-      return;
-    }
-
-    if (!localStorage.getItem(QC_ID_LOCAL)) {
-      QC_mostrarMensagemTrocaSenha('Carteira nao vinculada neste aparelho.','erro');
-      return;
-    }
-
-    // Enviar alteracao ao servidor. Na tela de login, a senha atual
-    // e validada antes de obter uma sessao apenas para esta operacao.
-
-    botao.disabled = true;
-    botao.textContent = "Alterando senha...";
-
-    try {
-      if (document.getElementById('telaCarteira').style.display === 'none') {
-        const id = localStorage.getItem(QC_ID_LOCAL);
-        const autenticacao = await QC_enviarLoginAutomatico(id,atual);
-        if (autenticacao.status !== 'OK' || !autenticacao.tokenSessao)
-          throw Error(autenticacao.mensagem || 'Senha atual nao reconhecida.');
-        const validacao = await QC_validarSessaoServidor(autenticacao.tokenSessao);
-        if (validacao.status !== 'OK' || validacao.idCarteira !== id)
-          throw Error('Nao foi possivel autenticar a troca de senha.');
-        token = autenticacao.tokenSessao;
-        sessionStorage.setItem(QC_CHAVE_SESSAO, token);
-        tokenTemporario374 = true;
-      }
-      if (!token) throw Error('Sessao nao encontrada. Entre novamente.');
-      const resultado = await QC_enviarAlteracaoSenhaAutomatico(
-        token,atual,nova
-      );
-
-      if (resultado.status === "OK") {
-        // Senha alterada no servidor. Ajustar tambem a criptografia local.
-        let migracaoPendente374 = false;
-        try {
-          if(window.QC_migrarSenhaLogin291)
-            await window.QC_migrarSenhaLogin291(atual, nova);
-        } catch(migracaoErro) {
-          // Nao apagar dados: ainda podem estar protegidos pela senha anterior.
-          migracaoPendente374 = true;
-          console.warn('Migracao local pendente:', migracaoErro.message);
-        }
-
-        // Remover token da sessão anterior e acesso automatico.
-        QC_AUTO303.limpar();
-        sessionStorage.removeItem(QC_CHAVE_SESSAO);
-
-        // Limpar dados do formulário
-        QC_limparFormularioTrocaSenha();
-
-        document.getElementById("qcPainelTrocaSenha")
-          .style.display = "none";
-
-        document.getElementById("btnAbrirTrocaSenha")
-          .style.display = "block";
-
-        // Voltar ao login
-        QC_exibirTelaAcesso();
-        QC_mostrarLogin();
-
-        document.getElementById("qcSenhaLogin")
-          .value = "";
-
-        QC_mostrarMensagemAcesso(
-          migracaoPendente374
-            ? 'Senha da conta alterada. Entre com a nova senha. Preserve a senha anterior: ela podera ser necessaria para recuperar as fichas locais.'
-            : 'Senha alterada com sucesso! Entre com a nova senha.',
-          migracaoPendente374 ? 'erro' : 'sucesso'
-        );
-
-      } else {
-
-        if (resultado.status === "SESSAO_INVALIDA") {
-          QC_AUTO303.limpar();
-          sessionStorage.removeItem(QC_CHAVE_SESSAO);
-
-          QC_exibirTelaAcesso();
-          QC_mostrarLogin();
-
-          QC_mostrarMensagemAcesso(
-            "Sessão expirada. Faça login novamente.",
-            "erro"
-          );
-
-        } else {
-
-          QC_mostrarMensagemTrocaSenha(
-            resultado.mensagem ||
-            "Não foi possível alterar a senha.",
-            "erro"
-          );
-
-        }
-      }
-
-    } catch (erro) {
-
-      QC_mostrarMensagemTrocaSenha(
-        "Falha na comunicação: " + erro.message +
-        ". Verifique se a senha foi alterada antes de tentar novamente.",
-        "erro"
-      );
-
-    } finally {
-      if (tokenTemporario374) {
-        QC_AUTO303.limpar();
-        if (sessionStorage.getItem(QC_CHAVE_SESSAO) === token)
-          sessionStorage.removeItem(QC_CHAVE_SESSAO);
-        if (window.QC_limparSenhaSessao291) window.QC_limparSenhaSessao291();
-      }
-      botao.disabled = false;
-      botao.textContent = "Salvar nova senha";
-    }
-  });
-
-
-/* QUINTOSCOIN - MOSTRAR / OCULTAR SENHAS */
-
-function QC_adicionarOlhinhosSenhas() {
-
-  const campos = document.querySelectorAll(
-    'input[type="password"]'
-  );
-
-  campos.forEach(function(campo) {
-
-    // Evitar adicionar dois botões ao mesmo campo
-    if (campo.closest(".qc-campo-com-olho")) {
-      return;
-    }
-
-    // Criar estrutura que envolve o campo
-    const container = document.createElement("div");
-    container.className = "qc-campo-com-olho";
-
-    campo.parentNode.insertBefore(container, campo);
-    container.appendChild(campo);
-
-    // Criar botão do olhinho
-    const botao = document.createElement("button");
-
-    botao.type = "button";
-    botao.className = "qc-botao-olho";
-    botao.textContent = "👁️";
-    botao.setAttribute("aria-label", "Mostrar senha");
-    botao.setAttribute("aria-pressed", "false");
-
-    container.appendChild(botao);
-
-    // Alternar entre senha oculta e visível
-    botao.addEventListener("click", function() {
-
-      const mostrar = campo.type === "password";
-
-      campo.type = mostrar ? "text" : "password";
-
-      botao.textContent = mostrar ? "🙈" : "👁️";
-
-      botao.setAttribute(
-        "aria-label",
-        mostrar ? "Ocultar senha" : "Mostrar senha"
-      );
-
-      botao.setAttribute(
-        "aria-pressed",
-        String(mostrar)
-      );
-
-      botao.classList.toggle("visivel", mostrar);
-
-    });
-
-  });
-}
-
-
-// Adicionar os olhinhos aos campos existentes
-QC_adicionarOlhinhosSenhas();
-
-
-/* QUINTOSCOIN - FORMULÁRIO ESQUECI MINHA SENHA */
-
-function QC_abrirRecuperacaoSenha() {
-
-  document.getElementById("formAtivacao")
-    .style.display = "none";
-
-  document.getElementById("formLogin")
-    .style.display = "none";
-
-  document.getElementById("formRecuperarSenha")
-    .style.display = "block";
-
-  document.getElementById("qcCodigoRecuperar").value = "";
-  document.getElementById("qcSenhaRecuperar").value = "";
-  document.getElementById("qcConfirmarSenhaRecuperar").value = "";
-
-  document.getElementById("qcMensagemRecuperacao")
-    .textContent = "";
-
-  document.getElementById("qcMensagemRecuperacao")
-    .className = "";
-}
-
-
-function QC_mensagemRecuperacao(texto, tipo) {
-
-  const mensagem = document.getElementById(
-    "qcMensagemRecuperacao"
-  );
-
-  mensagem.textContent =
-    (tipo === "erro" ? "⚠️ " : "✅ ") + texto;
-
-  mensagem.className = tipo;
-}
-
-
-document.getElementById("linkEsqueciSenha")
-  .addEventListener("click", function(evento) {
-
-    evento.preventDefault();
-
-    QC_abrirRecuperacaoSenha();
-
-  });
-
-
-document.getElementById("linkVoltarLogin")
-  .addEventListener("click", function(evento) {
-
-    evento.preventDefault();
-
-    document.getElementById("formRecuperarSenha")
-      .style.display = "none";
-
-    QC_mostrarLogin();
-
-  });
-
-
-
-document.getElementById("btnRedefinirSenha")
-  .addEventListener("click", function(evento) {
-
-    evento.preventDefault();
-
-    const idCarteira = localStorage.getItem(
-      QC_ID_LOCAL
-    );
-
-    const codigoAtual = document.getElementById(
-      "qcCodigoRecuperar"
-    ).value.trim().toUpperCase();
-
-    const novaSenha = document.getElementById(
-      "qcSenhaRecuperar"
-    ).value;
-
-    const confirmar = document.getElementById(
-      "qcConfirmarSenhaRecuperar"
-    ).value;
-
-    const formatoCodigo =
-      /^[0-9A-F]{8}(?:-[0-9A-F]{8}){3}$/;
-
-    if (!idCarteira) {
-
-      QC_mensagemRecuperacao(
-        "Carteira não identificada neste celular.",
-        "erro"
-      );
-
-      return;
-    }
-
-    if (!formatoCodigo.test(codigoAtual)) {
-
-      QC_mensagemRecuperacao(
-        "Informe um código de recuperação válido.",
-        "erro"
-      );
-
-      return;
-    }
-
-    if (novaSenha.length < 6) {
-
-      QC_mensagemRecuperacao(
-        "A senha deve ter pelo menos 6 caracteres.",
-        "erro"
-      );
-
-      return;
-    }
-
-    if (novaSenha !== confirmar) {
-
-      QC_mensagemRecuperacao(
-        "As senhas não conferem.",
-        "erro"
-      );
-
-      return;
-    }
-
-    // Gerar novo código criptograficamente aleatório
-    const bytes = new Uint8Array(16);
-
-    window.crypto.getRandomValues(bytes);
-
-    const novoCodigo = Array.from(bytes)
-      .map(byte => byte.toString(16).padStart(2, "0"))
-      .join("")
-      .toUpperCase()
-      .match(/.{1,8}/g)
-      .join("-");
-
-    // Manter dados somente em memória
-    QC_recuperacaoPendente = {
-      idCarteira: idCarteira,
-      codigoAtual: codigoAtual,
-      novaSenha: novaSenha,
-      novoCodigo: novoCodigo
+  if (donas.length !== 1) {
+    return {
+      status: "CARTEIRA_NAO_AUTORIZADA",
+      solicitacoes: []
     };
-
-    // Mostrar novo código antes de enviar
-    QC_exibirCodigoRecuperacao(novoCodigo);
-
-  });
-
-
-
-
-async function QC_consultarParametrosLoginTeste(idCarteira) {
-
-  const URL_APPS_SCRIPT =
-    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-
-  const resposta = await fetch(URL_APPS_SCRIPT, {
-    method: "POST",
-    redirect: "follow",
-    headers: {
-      "Content-Type": "text/plain;charset=utf-8"
-    },
-    body: JSON.stringify({
-      acao: "qc_parametros_login_teste",
-      idCarteira: idCarteira
-    })
-  });
-
-  if (!resposta.ok) {
-    throw new Error(
-      "Erro de comunicação: " + resposta.status
-    );
   }
 
-  return await resposta.json();
+  const idCadastro = String(
+    donas[0][c("IdCadastro")]
+  ).trim();
+
+  const solicitacoes = dAut.slice(1)
+    .filter(r =>
+      String(r[a("IdCadastro")]).trim() === idCadastro
+    )
+    .reverse()
+    .map(r => ({
+      idAutorizacao: String(
+        r[a("IdAutorizacao")] || ""
+      ).trim(),
+      valor: Number(r[a("Valor")]),
+      status: String(
+        r[a("Status")] || ""
+      ).trim().toUpperCase(),
+      idEmissao: String(
+        r[a("IdEmissao")] || ""
+      ).trim()
+    }));
+
+  return {
+    status: "OK",
+    solicitacoes: solicitacoes
+  };
+
 }
 
 
-async function QC_enviarLoginAutomatico(idCarteira, senha) {
+function QC_localizarCarteira192(consulta) {
 
-  // Identificar o algoritmo da carteira.
-  const parametros =
-    await QC_consultarParametrosLoginTeste(idCarteira);
+  const idCadastro = String(consulta?.idCadastro || "").trim();
+  const idCarteira = String(consulta?.idCarteira || "").trim();
 
-  if (parametros.status !== "OK") {
-    return parametros;
+  if (
+    (!idCadastro && !idCarteira) ||
+    (idCadastro && idCarteira) ||
+    idCadastro.length > 100 ||
+    idCarteira.length > 100
+  ) {
+    return {
+      status: "ERRO",
+      mensagem: "Informe somente um identificador."
+    };
   }
 
-    // LOGIN NOVO: PBKDF2_V2.
-  if (parametros.algoritmo === "PBKDF2_V2") {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const abaCarteiras = ss.getSheetByName("QC_Carteiras");
+  const abaCadastro = ss.getSheetByName("Cadastro");
 
-    if (
-      !/^[0-9a-f]{32}$/i.test(parametros.salt) ||
-      parametros.iteracoes !== 600000
-    ) {
-      return {
-        status: "ERRO",
-        mensagem: "Parâmetros da senha V2 inválidos."
-      };
-    }
+  if (!abaCarteiras || !abaCadastro) {
+    throw new Error("Abas QC_Carteiras ou Cadastro ausentes.");
+  }
 
-    // Calcular a credencial no Android.
-    const derivadoHex = await QC_derivarSenhaV2(
-      senha,
-      parametros.salt
-    );
+  const linhas = abaCarteiras.getDataRange().getDisplayValues();
+  const cab = linhas[0].map(v => String(v).trim());
+  const col = nome => cab.indexOf(nome);
 
-    const URL_SCRIPT =
-      "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
+  const campos = [
+    "IdCarteira", "IdCadastro", "Status",
+    "Ambiente", "AlgoritmoSenha"
+  ];
 
-    const resposta = await fetch(URL_SCRIPT, {
-      method: "POST",
-      redirect: "follow",
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8"
-      },
-      body: JSON.stringify({
-        acao: "qc_login_v2_teste",
-        idCarteira: idCarteira,
-        derivadoHex: derivadoHex
-      })
-    });
+  if (campos.some(campo => col(campo) < 0)) {
+    throw new Error("Colunas de QC_Carteiras incompletas.");
+  }
 
-    if (!resposta.ok) {
-      throw new Error(
-        "Erro de comunicação: " + resposta.status
-      );
-    }
+  const encontradas = linhas.slice(1).filter(r =>
+    (idCadastro
+      ? String(r[col("IdCadastro")]).trim() === idCadastro
+      : String(r[col("IdCarteira")]).trim() === idCarteira) &&
+    String(r[col("Status")]).trim().toUpperCase() === "ATIVA" &&
+    String(r[col("Ambiente")]).trim().toUpperCase() === "PRODUCAO" &&
+    String(r[col("AlgoritmoSenha")]).trim().toUpperCase() === "PBKDF2_V2"
+  );
 
-    return await resposta.json();
+  if (encontradas.length !== 1) {
+    return {
+      status: "NAO_ENCONTRADA",
+      mensagem: "Não existe uma carteira ativa para esse cadastro."
+    };
+  }
+
+  const carteira = encontradas[0];
+  const cadastroReal = String(
+    carteira[col("IdCadastro")]
+  ).trim();
+
+  const dadosCadastro = abaCadastro.getDataRange().getDisplayValues();
+  const cabCadastro = dadosCadastro[0].map(v => String(v).trim());
+
+  const colId = cabCadastro.indexOf("IdCadastro");
+
+  const colNome = [
+    "Nome", "NomeCompleto", "Irmao", "IRMAO"
+  ]
+    .map(nome => cabCadastro.indexOf(nome))
+    .find(indice => indice >= 0);
+
+  if (colId < 0 || colNome === undefined) {
+    throw new Error("Colunas de identificação do Cadastro incompletas.");
+  }
+
+  const membros = dadosCadastro.slice(1).filter(r =>
+    String(r[colId]).trim() === cadastroReal
+  );
+
+  if (membros.length !== 1) {
+    return {
+      status: "NAO_ENCONTRADA",
+      mensagem: "Cadastro não localizado."
+    };
   }
 
   return {
-    status: "ERRO",
-    mensagem: "Algoritmo de senha desconhecido."
+    status: "OK",
+    idCarteira: String(carteira[col("IdCarteira")]).trim(),
+    nome: String(membros[0][colNome] || "").trim()
   };
 }
 
 
-async function QC_enviarAlteracaoSenhaAutomatico(
-  tokenSessao,
-  senhaAtual,
-  novaSenha
+
+function QC_obterChavePublicaCarteira194(
+  tokenSessao, denominacao = 10
 ) {
+  const valor = Number(denominacao);
 
-  const idCarteira = localStorage.getItem(
-    QC_ID_LOCAL
+  if (![2, 5, 10].includes(valor)) {
+    throw new Error("Denominação não permitida.");
+  }
+
+  const sessao = QC_validarTokenSessaoTeste(tokenSessao);
+
+  if (sessao.status !== "OK") {
+    return { status: "SESSAO_INVALIDA" };
+  }
+
+  const idChave = "QC-" + valor + "-V1";
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const aba = ss.getSheetByName("QC_ChavesAssinatura");
+
+  if (!aba) {
+    throw new Error("QC_ChavesAssinatura não encontrada.");
+  }
+
+  const dados = aba.getDataRange().getDisplayValues();
+  const cab = dados[0].map(v => String(v).trim());
+  const col = nome => cab.indexOf(nome);
+
+  const obrigatorias = [
+    "IdChave",
+    "Denominacao",
+    "Versao",
+    "Status",
+    "ModuloPublico",
+    "ExpoentePublico"
+  ];
+
+  if (obrigatorias.some(nome => col(nome) < 0)) {
+    throw new Error("Colunas de chaves inválidas.");
+  }
+
+  const chaves = dados.slice(1).filter(linha =>
+    String(linha[col("IdChave")]).trim() === idChave
   );
 
-  if (!idCarteira) {
-    throw new Error("Carteira não identificada.");
-  }
-
-  const parametros =
-    await QC_consultarParametrosLoginTeste(idCarteira);
-
-  if (parametros.status !== "OK") {
-    throw new Error(
-      parametros.mensagem ||
-      "Não foi possível consultar a carteira."
-    );
-  }
-
-  
-    // CARTEIRAS COM PBKDF2
-  if (parametros.algoritmo === "PBKDF2_V2") {
-
-    if (
-      !/^[0-9a-f]{32}$/i.test(parametros.salt) ||
-      parametros.iteracoes !== 600000
-    ) {
-      throw new Error("Parâmetros PBKDF2 inválidos.");
-    }
-
-    // Confirmar senha atual.
-    const derivadoAtual = await QC_derivarSenhaV2(
-      senhaAtual,
-      parametros.salt
-    );
-
-    // Nova senha com salt exclusivo.
-    const saltNovo = QC_gerarSaltSenhaV2();
-
-    const derivadoNovo = await QC_derivarSenhaV2(
-      novaSenha,
-      saltNovo
-    );
-
-    const URL_SCRIPT =
-      "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-
-    const resposta = await fetch(URL_SCRIPT, {
-      method: "POST",
-      redirect: "follow",
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8"
-      },
-      body: JSON.stringify({
-        acao: "qc_alterar_senha_v2_teste",
-        tokenSessao: tokenSessao,
-        derivadoAtual: derivadoAtual,
-        derivadoNovo: derivadoNovo,
-        saltNovo: saltNovo
-      })
-    });
-
-    if (!resposta.ok) {
-      throw new Error(
-        "Erro de comunicação: " + resposta.status
-      );
-    }
-
-    return await resposta.json();
-  }
-
-  throw new Error(
-    "Algoritmo de senha não reconhecido."
-  );
-}
-
-
-async function QC_enviarRecuperacaoAutomatico(dados) {
-
-  const parametros =
-    await QC_consultarParametrosLoginTeste(
-      dados.idCarteira
-    );
-
-  if (parametros.status !== "OK") {
-    throw new Error(
-      parametros.mensagem ||
-      "Não foi possível consultar a carteira."
-    );
-  }
-
-   // RECUPERAÇÃO PELO NOVO ALGORITMO
-  if (parametros.algoritmo === "PBKDF2_V2") {
-
-    if (
-      !/^[0-9a-f]{32}$/i.test(parametros.salt) ||
-      parametros.iteracoes !== 600000
-    ) {
-      throw new Error(
-        "Parâmetros PBKDF2 inválidos."
-      );
-    }
-
-    // Criar um salt novo para a nova senha.
-    const saltNovo = QC_gerarSaltSenhaV2();
-
-    // Calcular a nova credencial no Android.
-    const derivadoNovo = await QC_derivarSenhaV2(
-      dados.novaSenha,
-      saltNovo
-    );
-
-    const URL_SCRIPT =
-      "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-
-    const resposta = await fetch(URL_SCRIPT, {
-      method: "POST",
-      redirect: "follow",
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8"
-      },
-      body: JSON.stringify({
-        acao: "qc_redefinir_senha_v2_teste",
-        idCarteira: dados.idCarteira,
-        codigoAtual: dados.codigoAtual,
-        derivadoNovo: derivadoNovo,
-        saltNovo: saltNovo,
-        novoCodigo: dados.novoCodigo
-      })
-    });
-
-    if (!resposta.ok) {
-      throw new Error(
-        "Erro de comunicação: " + resposta.status
-      );
-    }
-
-    const resultado = await resposta.json();
-
-    if (resultado.status !== "OK") {
-      throw new Error(
-        resultado.mensagem ||
-        "Não foi possível recuperar a senha."
-      );
-    }
-
-    return resultado;
-  }
-
-  throw new Error(
-    "Algoritmo de senha não reconhecido."
-  );
-}
-
-
-async function QC_enviarSolicitacaoCreditos(
-  tokenSessao,
-  valor
-) {
-
-  const URL_APPS_SCRIPT =
-    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-
-  const resposta = await fetch(URL_APPS_SCRIPT, {
-    method: "POST",
-    redirect: "follow",
-    headers: {
-      "Content-Type": "text/plain;charset=utf-8"
-    },
-    body: JSON.stringify({
-      acao: "qc_solicitar_creditos",
-      tokenSessao: tokenSessao,
-      valor: valor
-    })
-  });
-
-  if (!resposta.ok) {
-    throw new Error(
-      "Erro de comunicação: " + resposta.status
-    );
-  }
-
-  return await resposta.json();
-}
-
-
-/* QUINTOSCOIN - ÁREA DO TESOUREIRO */
-
-const qcAreaTesoureiro = document.createElement("section");
-
-qcAreaTesoureiro.id = "qcAreaTesoureiro";
-qcAreaTesoureiro.className = "qc-area-tesoureiro";
-qcAreaTesoureiro.style.display = "none";
-
-qcAreaTesoureiro.innerHTML = `
-  <details id="qcDetalhesTesoureiro294" style="margin:0">
-    <summary style="cursor:pointer;font-weight:700;color:#e5bf62;list-style-position:inside;padding:4px 2px">
-      ÁREA DO TESOUREIRO
-    </summary>
-    <div id="qcConteudoTesoureiro294" style="margin-top:12px">
-
-  <section id="qcPainelCirculacao276" style="margin:14px 0 18px;padding:14px;border:1px solid #ffffff29;border-radius:12px">
-    <h4 style="margin:0 0 12px">📊 Circulação e lastro</h4>
-    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
-      <div style="padding:10px;border-radius:10px;background:#ffffff10">
-        <small style="display:block;opacity:.8">Qc$ em circulação</small>
-        <strong id="qcCirculacao276" style="font-size:22px;font-weight:800;color:#e5bf62">—</strong>
-      </div>
-      <div style="padding:10px;border-radius:10px;background:#ffffff10">
-        <small style="display:block;opacity:.8">Lastro bancário indisponível</small>
-        <strong id="qcLastro276" style="font-size:22px;font-weight:800;color:#e5bf62">—</strong>
-      </div>
-    </div>
-    <p id="qcResumoLastro276" style="font-size:13px;opacity:.85;margin:10px 0 0">Consultando registros...</p>
-    <p id="qcAvisoLastro276" role="status" style="font-size:13px;margin:6px 0 0"></p>
-  </section>
-
-  <button
-    type="button"
-    id="qcBtnPedidosTesoureiro"
-    class="qc-botao-pedidos"
-  >
-    <span>📋 Pedidos pendentes</span>
-
-    <span class="qc-indicador-pedidos">
-      <span
-        id="qcEsferaPedidos"
-        class="qc-esfera-pedidos"
-      ></span>
-
-      <span id="qcQuantidadePedidos">
-        Consultando...
-      </span>
-    </span>
-  </button>
-
-  <p id="qcMensagemTesoureiro"></p>
-
-  <div
-    id="qcListaPedidosTesoureiro"
-    class="qc-lista-pedidos"
-    hidden
-  ></div>
-    </div>
-  </details>
-`;
-
-document.getElementById("telaCarteira")
-  .appendChild(qcAreaTesoureiro);
-
-
-// PASSO 331 - Diagnostico seguro da circulacao e do lastro.
-// Os numeros somente aparecem como confirmados se a auditoria do servidor
-// retornar CONFERIDO. Erros e registros de testes nao viram "saldo zero".
-let qcConsultaPainel331 = 0;
-async function QC_carregarPainelTesoureiro276(tokenSessao) {
-  const painel = document.getElementById("qcPainelCirculacao276");
-  if (!painel) return;
-  const circulacao = document.getElementById("qcCirculacao276");
-  const lastro = document.getElementById("qcLastro276");
-  const resumo = document.getElementById("qcResumoLastro276");
-  const aviso = document.getElementById("qcAvisoLastro276");
-  const consultaAtual = ++qcConsultaPainel331;
-  const sessaoAtual = () =>
-    sessionStorage.getItem(QC_CHAVE_SESSAO) === tokenSessao &&
-    consultaAtual === qcConsultaPainel331;
-  const formato = n => Number(n).toLocaleString("pt-BR");
-  const formatoQC2 = n => Number(n).toLocaleString("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
-  const inteiro = n => typeof n === "number" &&
-    Number.isSafeInteger(n) && n >= 0;
-  const valorQC = n => inteiro(n) ? "Qc$ " + formato(n) : "a conferir";
-
-  circulacao.textContent = "—";
-  lastro.textContent = "—";
-  resumo.textContent = "Consultando o livro de emissões, doações e resgates...";
-  aviso.textContent = "";
-  if (!tokenSessao) {
-    resumo.textContent = "Entre na carteira para consultar.";
-    return;
-  }
-
-  try {
-    const resposta = await fetch(QC_URL_191, {
-      method: "POST",
-      redirect: "follow",
-      headers: {"Content-Type":"text/plain;charset=utf-8"},
-      body: JSON.stringify({
-        acao: "qc_painel_tesoureiro",
-        tokenSessao: tokenSessao
-      })
-    });
-    if (!resposta.ok) throw new Error("Falha na comunicação (HTTP " + resposta.status + ").");
-    const dados = await resposta.json();
-    if (!sessaoAtual()) return;
-    if (!dados || dados.status !== "OK" || dados.tesoureiro !== true) {
-      throw new Error(dados?.mensagem || (
-        dados?.status === "NAO_AUTORIZADO"
-          ? "Acesso restrito ao tesoureiro autenticado."
-          : "A rota qc_painel_tesoureiro não retornou os dados esperados. " +
-            "Verifique o encaminhamento da rota no doPost do Apps Script."
-      ));
-    }
-
-    const linhas = [
-      "Emitidos: " + valorQC(dados.emitidos),
-      "Doações extintas: " + valorQC(dados.doacoesExtintas),
-      "Resgates confirmados: " + valorQC(dados.resgatesEmDinheiro),
-      "Atualizado: " + (dados.atualizadoEm || "a conferir")
-    ];
-    resumo.replaceChildren(...linhas.map(texto => {
-      const linha = document.createElement("span");
-      linha.textContent = texto;
-      linha.style.cssText = "display:block;line-height:1.5;margin:2px 0";
-      return linha;
-    }));
-
-    if (dados.conferencia === "CONFERIDO" &&
-        inteiro(dados.circulacao) &&
-        inteiro(dados.lastroReservadoBRL) &&
-        (dados.lastroReservadoBRL === dados.circulacao ||
-          (dados.ambiente==='TESTE' && dados.lastroReservadoBRL===0))) {
-      circulacao.textContent = "Qc$ " + formatoQC2(dados.circulacao);
-      lastro.textContent = Number(dados.lastroReservadoBRL)
-        .toLocaleString("pt-BR", {style:"currency",currency:"BRL"});
-      if(dados.ambiente==='TESTE') {
-        circulacao.textContent = "Qc$ " + formatoQC2(dados.circulacao);
-        lastro.textContent = "R$ 0,00";
-        aviso.textContent = "TESTE SEM DEPOSITO BANCARIO. Valores apenas simulados; " +
-          "nao correspondem ao lastro real.";
-      } else {
-        aviso.textContent = "Valores calculados a partir dos registros. " +
-          "Confira separadamente o saldo bancário.";
-      }
-    } else {
-      // Nunca apresenta um lastro hipotético como confirmado.
-      circulacao.textContent = "A conferir";
-      lastro.textContent = "A conferir";
-      const motivos = Array.isArray(dados.avisos)
-        ? dados.avisos.filter(x => typeof x === "string" && x.trim()).slice(0,8)
-        : [];
-      aviso.textContent = "⚠️ Conferência financeira pendente. " +
-        (motivos.length ? motivos.join(" | ") :
-          "O servidor não confirmou a consistência dos totais.");
-    }
-  } catch (erro) {
-    if (!sessaoAtual()) return;
-    circulacao.textContent = "Indisponível";
-    lastro.textContent = "Indisponível";
-    resumo.textContent = "A consulta financeira não foi concluída.";
-    aviso.textContent = "⚠️ " + (erro?.message || String(erro));
-    console.error("QuintosCoin — painel financeiro 331:", erro);
-  }
-}
-
-// Ao expandir a Area do Tesoureiro, reconsulta automaticamente os totais.
-// Apenas altera a consulta, nao cria movimentacao nem escreve em planilhas.
-document.getElementById("qcDetalhesTesoureiro294")
-  .addEventListener("toggle", function() {
-    if (!this.open || qcAreaTesoureiro.style.display !== "block") return;
-    const token = sessionStorage.getItem(QC_CHAVE_SESSAO);
-    if (token) QC_carregarPainelTesoureiro276(token);
-  });
-
-// Consultar autorização e pedidos no Apps Script.
-async function QC_atualizarAreaTesoureiro(abrirLista = false) {
-
-  const token = sessionStorage.getItem(
-    QC_CHAVE_SESSAO
-  );
-
-  const area = document.getElementById(
-    "qcAreaTesoureiro"
-  );
-
-  const lista = document.getElementById(
-    "qcListaPedidosTesoureiro"
-  );
-
-  const mensagem = document.getElementById(
-    "qcMensagemTesoureiro"
-  );
-
-  if (!token) {
-    area.style.display = "none";
-    return;
-  }
-
-  try {
-
-    const URL_SCRIPT =
-      "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-
-    const resposta = await fetch(URL_SCRIPT, {
-      method: "POST",
-      redirect: "follow",
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8"
-      },
-      body: JSON.stringify({
-        acao: "qc_pedidos_tesoureiro",
-        tokenSessao: token
-      })
-    });
-
-    if (!resposta.ok) {
-      throw new Error("Falha na consulta.");
-    }
-
-    const resultado = await resposta.json();
-
-    // Ignorar resposta de uma sessão já encerrada.
-    if (
-      sessionStorage.getItem(QC_CHAVE_SESSAO) !== token
-    ) {
-      return;
-    }
-
-    // Somente o tesoureiro poderá visualizar.
-    if (
-      resultado.status === "NAO_AUTORIZADO" ||
-      resultado.tesoureiro === false
-    ) {
-      area.style.display = "none";
-      return;
-    }
-
-    if (
-      resultado.status !== "OK" ||
-      resultado.tesoureiro !== true
-    ) {
-      throw new Error(
-        resultado.mensagem ||
-        "Não foi possível consultar os pedidos."
-      );
-    }
-
-    const pedidos = Array.isArray(resultado.pedidos)
-      ? resultado.pedidos
-      : [];
-
-    const quantidade = pedidos.length;
-
-    // Mostrar area administrativa somente apos a autorizacao.
-    area.style.display = "block";
-    mensagem.textContent = "";
-    QC_carregarPainelTesoureiro276(token);
-    if (window.QC_atualizarResgatesTesoureiro278)
-      window.QC_atualizarResgatesTesoureiro278();
-
-
-    const esfera = document.getElementById(
-      "qcEsferaPedidos"
-    );
-
-    const contador = document.getElementById(
-      "qcQuantidadePedidos"
-    );
-
-    if (quantidade > 0) {
-
-      esfera.className =
-        "qc-esfera-pedidos qc-esfera-laranja";
-
-      contador.textContent =
-        quantidade +
-        (quantidade === 1
-          ? " pendente"
-          : " pendentes");
-
-    } else {
-
-      esfera.className =
-        "qc-esfera-pedidos qc-esfera-verde";
-
-      contador.textContent = "Nenhum pedido";
-
-    }
-
-    // Preencher lista ao abrir ou atualizar.
-    if (abrirLista || !lista.hidden) {
-
-      lista.replaceChildren();
-
-      if (quantidade === 0) {
-
-        const vazio = document.createElement("p");
-        vazio.textContent =
-          "✅ Não existem solicitações pendentes.";
-
-        lista.appendChild(vazio);
-
-      } else {
-
-        pedidos.forEach(pedido => {
-
-          const item = document.createElement("div");
-          item.className = "qc-item-pedido";
-
-          const titulo = document.createElement("strong");
-          titulo.textContent =
-            pedido.valor + " QC solicitados";
-
-          const membro = document.createElement("p");
-membro.textContent =
-  "Solicitante: " + pedido.nome;
-
-membro.style.fontWeight = "600";
-membro.style.fontSize = "15px";
-membro.style.color = "#ffffff";
-
-          const data = document.createElement("p");
-          data.textContent =
-            "Data: " + pedido.dataSolicitacao;
-
-          
-const situacao = document.createElement("p");
-situacao.textContent =
-  "⏳ Aguardando confirmação de pagamento";
-
-// Botão de autorização.
-const botaoAprovar = document.createElement("button");
-
-botaoAprovar.type = "button";
-botaoAprovar.className = "qc-btn-aprovar-pedido";
-botaoAprovar.textContent =
-  "Confirmar pagamento e autorizar";
-
-botaoAprovar.addEventListener("click", async function() {
-
-  const nome = pedido.nome || "Solicitante";
-
- const confirmado = await QC_confirmarPagamentoPedido(
-  nome,
-  pedido.valor
-);
-
-if (!confirmado) {
-  return;
-}
-
-  const token = sessionStorage.getItem(
-    QC_CHAVE_SESSAO
-  );
-
-  if (!token) {
-    mensagem.textContent =
-      "⚠️ Sessão expirada. Entre novamente.";
-    return;
-  }
-
-  botaoAprovar.disabled = true;
-  botaoAprovar.textContent = "Autorizando...";
-  mensagem.textContent = "";
-
-  try {
-
-    const resultado = await QC_enviarAutorizacaoPedido(
-      token,
-      pedido.idAutorizacao
-    );
-
-    if (resultado.status !== "AUTORIZADA") {
-      throw new Error(
-        resultado.mensagem ||
-        "Não foi possível autorizar o pedido."
-      );
-    }
-
-    // Atualizar a lista e o indicador.
-    await QC_atualizarAreaTesoureiro(true);
-
-    mensagem.textContent =
-      "✅ Solicitação de " + nome +
-      " autorizada com sucesso! " +
-      "A emissão dos QCs ainda está pendente.";
-
-  } catch (erro) {
-
-    mensagem.textContent =
-      "⚠️ " + erro.message +
-      " Confira a situação do pedido antes " +
-      "de tentar novamente.";
-
-  } finally {
-
-    botaoAprovar.disabled = false;
-    botaoAprovar.textContent =
-      "Confirmar pagamento e autorizar";
-
-  }
-
-});
-
-item.append(
-  titulo,
-  membro,
-  data,
-  situacao,
-  botaoAprovar
-);
-
-lista.appendChild(item);
-
-
-        });
-
-      }
-
-      lista.hidden = false;
-    }
-
-  } catch (erro) {
-
-    if (area.style.display === "block") {
-      mensagem.textContent =
-        "⚠️ Não foi possível atualizar os pedidos.";
-    }
-
-    console.error(
-      "Erro na Área do Tesoureiro:",
-      erro
-    );
-  }
-}
-
-
-// Botão para abrir ou fechar os pedidos.
-document.getElementById("qcBtnPedidosTesoureiro")
-  .addEventListener("click", async function() {
-
-    const lista = document.getElementById(
-      "qcListaPedidosTesoureiro"
-    );
-
-    if (!lista.hidden) {
-      lista.hidden = true;
-      return;
-    }
-
-    await QC_atualizarAreaTesoureiro(true);
-
-  });
-
-
-async function QC_enviarAutorizacaoPedido(
-  tokenSessao,
-  idAutorizacao
-) {
-
-  const URL_APPS_SCRIPT =
-    "https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-
-  const resposta = await fetch(URL_APPS_SCRIPT, {
-    method: "POST",
-    redirect: "follow",
-    headers: {
-      "Content-Type": "text/plain;charset=utf-8"
-    },
-    body: JSON.stringify({
-      acao: "qc_autorizar_pedido",
-      tokenSessao: tokenSessao,
-      idAutorizacao: idAutorizacao
-    })
-  });
-
-  if (!resposta.ok) {
-    throw new Error(
-      "Falha na comunicação: HTTP " + resposta.status
-    );
-  }
-
-  return await resposta.json();
-}
-
-
-function QC_confirmarPagamentoPedido(nome, valor) {
-
-  return new Promise(function(resolve) {
-
-    // Evitar duas janelas abertas ao mesmo tempo.
-    if (document.getElementById("qcModalAutorizarPedido")) {
-      resolve(false);
-      return;
-    }
-
-    const overlay = document.createElement("div");
-
-    overlay.id = "qcModalAutorizarPedido";
-    overlay.className = "qc-modal-autorizacao";
-
-    overlay.setAttribute("role", "dialog");
-    overlay.setAttribute("aria-modal", "true");
-    overlay.setAttribute(
-      "aria-labelledby",
-      "qcTituloAutorizar"
-    );
-
-    overlay.innerHTML = `
-      <div class="qc-card-autorizacao">
-
-        <h3 id="qcTituloAutorizar">
-          🛡️ Confirmar pagamento
-        </h3>
-
-        <p class="qc-texto-autorizacao">
-          Confira os dados da solicitação
-          antes de autorizar.
-        </p>
-
-        <div class="qc-dados-autorizacao">
-
-          <span class="qc-rotulo-autorizacao">
-            SOLICITANTE
-          </span>
-
-          <strong id="qcNomeAutorizar"></strong>
-
-          <div class="qc-linha-autorizacao"></div>
-
-          <span class="qc-rotulo-autorizacao">
-            QUANTIDADE SOLICITADA
-          </span>
-
-          <strong
-            id="qcValorAutorizar"
-            class="qc-valor-autorizacao"
-          ></strong>
-
-        </div>
-
-        <p class="qc-alerta-autorizacao">
-          ⚠️ Confirme somente se o pagamento
-          Pix já foi recebido e conferido.
-        </p>
-
-        <button
-          type="button"
-          id="qcConfirmarAutorizacao"
-          class="qc-confirmar-autorizacao"
-        >
-          ✅ Confirmar e autorizar
-        </button>
-
-        <button
-          type="button"
-          id="qcCancelarAutorizacao"
-          class="qc-cancelar-autorizacao"
-        >
-          Cancelar
-        </button>
-
-      </div>
-    `;
-
-    document.body.appendChild(overlay);
-
-    // Preencher os dados sem inserir texto do usuário
-    // diretamente no HTML.
-    document.getElementById("qcNomeAutorizar")
-      .textContent = nome;
-
-    document.getElementById("qcValorAutorizar")
-      .textContent = valor + " QC";
-
-    const confirmar = document.getElementById(
-      "qcConfirmarAutorizacao"
-    );
-
-    const cancelar = document.getElementById(
-      "qcCancelarAutorizacao"
-    );
-
-    const focoAnterior = document.activeElement;
-    const overflowAnterior = document.body.style.overflow;
-
-    document.body.style.overflow = "hidden";
-
-    let encerrado = false;
-
-    function encerrar(resultado) {
-
-      if (encerrado) {
-        return;
-      }
-
-      encerrado = true;
-
-      document.removeEventListener(
-        "keydown",
-        aoPressionarTecla
-      );
-
-      document.body.style.overflow = overflowAnterior;
-      overlay.remove();
-
-      if (
-        focoAnterior &&
-        focoAnterior.isConnected &&
-        typeof focoAnterior.focus === "function"
-      ) {
-        focoAnterior.focus();
-      }
-
-      resolve(resultado);
-    }
-
-    function aoPressionarTecla(evento) {
-
-      if (evento.key === "Escape") {
-        evento.preventDefault();
-        encerrar(false);
-      }
-
-      // Manter o foco dentro da janela.
-      if (evento.key === "Tab") {
-
-        const primeiro = confirmar;
-        const ultimo = cancelar;
-
-        if (evento.shiftKey &&
-            document.activeElement === primeiro) {
-          evento.preventDefault();
-          ultimo.focus();
-
-        } else if (
-          !evento.shiftKey &&
-          document.activeElement === ultimo
-        ) {
-          evento.preventDefault();
-          primeiro.focus();
-        }
-      }
-    }
-
-    confirmar.addEventListener("click", function() {
-      encerrar(true);
-    });
-
-    cancelar.addEventListener("click", function() {
-      encerrar(false);
-    });
-
-    overlay.addEventListener("click", function(evento) {
-      if (evento.target === overlay) {
-        encerrar(false);
-      }
-    });
-
-    document.addEventListener(
-      "keydown",
-      aoPressionarTecla
-    );
-
-    // Foco inicial no botão Cancelar, por segurança.
-    cancelar.focus();
-
-  });
-
-}
-
-
-// PASSO 278 - Interface de resgates definitivos.
-// Receber, Doar, Transferir e Resgatar: um botao por operacao.
-(function QC_montarResgates278() {
-  const acoes=document.querySelector("#telaCarteira .acoes");
-  const doar=document.getElementById("btnDoar");
-  const receber=document.getElementById("btnReceber");
-  const transferir=document.getElementById("btnTransferir");
-  if (!acoes||!doar||!receber||!transferir) return;
-  const resgatar=document.createElement("button");
-  resgatar.type="button";
-  resgatar.id="btnResgatar";
-  resgatar.textContent="Resgatar Qc$";
-  resgatar.disabled=true;
-  acoes.appendChild(resgatar);
-
-  // PASSO 386 — Bolinha amarela de resgates: pedidos em aberto no servidor
-  // ou operações locais protegidas ainda aguardando recuperação.
-  // Não movimenta fichas e não confirma pagamentos.
-  const indicadorResgate386=document.createElement("span");
-  indicadorResgate386.id="qcIndicadorResgate386";
-  indicadorResgate386.className="qc-indicador-resgate386";
-  indicadorResgate386.setAttribute("aria-hidden","true");
-  indicadorResgate386.hidden=true;
-  resgatar.appendChild(indicadorResgate386);
-  let sequenciaIndicadorResgate386=0;
-  function mostrarIndicadorResgate386(n){
-    const quantidade=Math.max(0,Number(n)||0);
-    indicadorResgate386.hidden=quantidade<1;
-    // PASSO 387: desenhar o alerta diretamente no botão, por ::after.
-    // A classe permanece mesmo quando o conteúdo interno é recriado
-    // pela rotina que acrescenta ícones nos botões da carteira.
-    resgatar.classList.toggle("qc-resgate-pendente387",quantidade>0);
-    indicadorResgate386.classList.toggle("qc-com-numero386",quantidade>1);
-    indicadorResgate386.textContent=quantidade>1 ? String(Math.min(99,quantidade))+(quantidade>99?"+":"") : "";
-    const descricao=quantidade>0
-      ? "Resgatar Qc$ — "+quantidade+" pendência(s) para acompanhar"
-      : "Resgatar Qc$";
-    resgatar.setAttribute("aria-label",descricao);
-    indicadorResgate386.title=quantidade>0 ? "Resgates a acompanhar: "+quantidade : "";
-  }
-  async function atualizarIndicadorResgate386(pedidosInformados){
-    const atual=++sequenciaIndicadorResgate386;
-    const token=sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
-    const id=localStorage.getItem("QC_ID_CARTEIRA");
-    if(!token||!id){mostrarIndicadorResgate386(0);return;}
-    // Preservar o aviso de uma solicitação guardada no aparelho, mesmo
-    // se a conexão estiver fora do ar. A listagem inclui pedidos locais
-    // que ainda não foram gravados no servidor (Passo 385).
-    let locais=0;
-    try {locais=typeof window.QC_resgatesSemConfirmacaoLocal278==="function"
-      ? window.QC_resgatesSemConfirmacaoLocal278():0;} catch(_) {}
-    mostrarIndicadorResgate386(locais);
-    try {
-      const pedidos=Array.isArray(pedidosInformados) ? pedidosInformados :
-        await window.QC_meusResgates278();
-      if(atual!==sequenciaIndicadorResgate386||
-         token!==sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")||
-         id!==localStorage.getItem("QC_ID_CARTEIRA"))return;
-      if(!Array.isArray(pedidos))return;
-      const ids=new Set();
-      for(const p of pedidos){
-        const estado=String(p?.status||"").trim().toUpperCase();
-        if(!estado || (estado==="CONFIRMADO"||estado==="CANCELADO") &&
-           !p?.possuiRecuperacaoLocal)continue;
-        ids.add(String(p.idResgate||""));
-      }
-      mostrarIndicadorResgate386(Math.max(locais,ids.size));
-    }catch(_){
-      // Uma falha de consulta não transforma um pedido local em inexistente.
-    }
-  }
-  window.QC_atualizarIndicadorResgate386=atualizarIndicadorResgate386;
-  // PASSO 387: ao voltar para a aba, conciliar o estado com o servidor.
-  // Apenas leitura; nenhum resgate, pagamento ou movimento de fichas.
-  document.addEventListener("visibilitychange",()=>{
-    if(!document.hidden && sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") &&
-       document.getElementById("telaCarteira")?.style.display!=="none") {
-      void atualizarIndicadorResgate386();
-    }
-  });
-  window.QC_limparIndicadorResgate386=function(){
-    sequenciaIndicadorResgate386++;
-    mostrarIndicadorResgate386(0);
-  };
-
-  // Layout simplificado: Doar tem prioridade visual.
-  const estilo=document.createElement("style");
-  estilo.textContent=`
-    #telaCarteira .acoes {display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:16px 0}
-    #telaCarteira .acoes button {min-width:0;white-space:normal;padding:13px 5px;border-radius:11px;font-size:clamp(11px,2.8vw,14px);line-height:1.25}
-    #telaCarteira #btnDoar {grid-column:1/-1;grid-row:1;background:#168055!important;color:white!important;border:1px solid #2c9b71!important;font-size:20px!important;font-weight:750;padding:20px 12px;box-shadow:0 7px 18px #0002}
-    #telaCarteira #btnReceber {grid-column:1;grid-row:2}
-    #telaCarteira #btnTransferir {grid-column:2;grid-row:2}
-    #telaCarteira #btnResgatar {grid-column:3;grid-row:2;position:relative}
-    #telaCarteira #btnResgatar .qc-indicador-resgate386 {
-      position:absolute;top:5px;right:5px;min-width:10px;height:10px;
-      box-sizing:border-box;border-radius:20px;background:#ffd04f;
-      border:1px solid #15243b;box-shadow:0 0 0 1px #ffd04f66;
-      color:#18243a;font-size:10px;font-weight:800;line-height:16px;
-      text-align:center;padding:0;pointer-events:none
-    }
-    #telaCarteira #btnResgatar .qc-indicador-resgate386.qc-com-numero386 {
-      min-width:19px;height:19px;top:3px;right:3px;line-height:17px;padding:0 3px
-    }
-    #telaCarteira #btnResgatar .qc-indicador-resgate386[hidden] {display:none!important}
-    /* PASSO 387: bolinha associada ao proprio botao.
-       Nao depende de span, icone, texto ou ordem de insercao dos filhos. */
-    #telaCarteira #btnResgatar .qc-indicador-resgate386 {display:none!important}
-    #telaCarteira #btnResgatar.qc-resgate-pendente387::after {
-      content:""!important;
-      position:absolute!important;
-      display:block!important;
-      box-sizing:border-box!important;
-      width:12px!important;height:12px!important;
-      min-width:12px!important;min-height:12px!important;
-      top:4px!important;right:4px!important;left:auto!important;bottom:auto!important;
-      border-radius:50%!important;
-      background:#ffd04f!important;
-      border:1px solid #15243b!important;
-      box-shadow:0 0 0 1px #ffd04f88!important;
-      z-index:5!important;
-      pointer-events:none!important;
-      opacity:1!important;
-      visibility:visible!important;
-      transform:none!important;
-    }
-    /* PASSO 386 — A janela inteira cabe na área visível no Android.
-       A barra superior/inferior do navegador e o teclado mudam a altura dinâmica. */
-    #qcModalResgate278 {
-      box-sizing:border-box;padding:12px;
-      padding-top:max(12px,env(safe-area-inset-top));
-      padding-bottom:max(12px,env(safe-area-inset-bottom));
-      align-items:center;justify-content:center;
-    }
-    #qcModalResgate278 > .qc-modal-card {
-      box-sizing:border-box;min-height:0;flex:0 1 auto;
-      width:100%;max-width:440px;
-      max-height:calc(100vh - 24px);
-      max-height:calc(100dvh - 24px);
-      overflow-y:auto;overflow-x:hidden;
-      overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
-      touch-action:pan-y;
-    }
-    #qcModalResgate278 #qcListaMeusResgates278 {overflow-wrap:anywhere}
-    #qcModalResgate278 [hidden], #qcAreaResgatesTesoureiro278 [hidden] {display:none!important}
-    .qc-resgate-linha278 {border:1px solid #ffffff28;border-radius:10px;margin:10px 0;padding:11px}
-    .qc-resgate-linha278 p {margin:5px 0;font-size:13px;overflow-wrap:anywhere}
-    .qc-resgate-linha278 button {margin:5px 5px 0 0;padding:9px 12px;border-radius:8px}
-    .qc-resgate-status278 {opacity:.85;font-size:12px}
-    #qcChavePixResgate334 {width:100%;box-sizing:border-box;margin-top:6px}
-    #qcAjudaPix334 {font-size:12px;line-height:1.4;opacity:.8;margin:5px 0 12px}
-    .qc-campo-pix334 {margin:0 0 10px;display:block}
-    #qcLimiteResgate333 {background:#ffffff0c;border:1px solid #e8c66b65;
-      border-radius:11px;padding:13px 14px;margin:10px 0 14px;
-      display:flex;flex-direction:column;gap:6px}
-    #qcLimiteResgate333 .qc-resgate-rotulo333 {font-size:13px;opacity:.9}
-    #qcMaximoResgate333 {font-size:24px;line-height:1.3;color:#e8c66b;font-weight:750}
-    #qcLimiteResgate333 .qc-resgate-nota333 {font-size:12px;opacity:.78;line-height:1.45}
-  `;
-  document.head.appendChild(estilo);
-  const modal=document.createElement("div");
-  modal.id="qcModalResgate278";
-  modal.className="qc-modal-overlay";
-  modal.style.display="none";
-  modal.innerHTML=`
-    <div class="qc-modal-card" role="dialog" aria-modal="true" aria-labelledby="qcTituloResgate278">
-      <div class="qc-modal-topo"><h3 id="qcTituloResgate278">Resgatar QuintosCoin</h3>
-        <button type="button" id="qcFecharResgate278" class="qc-modal-fechar" aria-label="Fechar">×</button></div>
-      <p class="qc-modal-texto">Informe quanto deseja resgatar. O pagamento sera combinado com o tesoureiro.</p>
-      <div id="qcLimiteResgate333" role="status" aria-live="polite">
-        <span class="qc-resgate-rotulo333">Saldo máximo disponível para resgate</span>
-        <strong id="qcMaximoResgate333">Conferindo saldo...</strong>
-        <small class="qc-resgate-nota333" id="qcNotaResgate333">Calculado pelas fichas disponíveis e verificadas desta carteira.</small>
-      </div>
-      <label for="qcValorResgate278" class="qc-label-modal">Valor em QC</label>
-      <input id="qcValorResgate278" class="qc-input-modal" type="number" min="1" step="1"
-        inputmode="numeric" placeholder="Exemplo: 20">
-      <label for="qcChavePixResgate334" class="qc-label-modal qc-campo-pix334">Sua chave Pix para receber o pagamento (opcional)
-        <input id="qcChavePixResgate334" class="qc-input-modal" type="text" inputmode="email"
-          autocomplete="off" autocapitalize="off" spellcheck="false"
-          maxlength="90" placeholder="Opcional: CPF, e-mail, celular ou chave aleatória">
-      </label>
-      <p id="qcAjudaPix334">A chave Pix é opcional. Se informada, será enviada somente ao tesoureiro. O pagamento, por Pix ou outro meio, será combinado fora do aplicativo.</p>
-      <div class="qc-modal-botoes">
-        <button id="qcSolicitarResgate278" type="button" class="qc-btn-modal-principal">Solicitar resgate</button>
-        <button id="qcCancelarTelaResgate278" type="button" class="qc-btn-modal-secundario">Voltar</button>
-      </div>
-      <p id="qcMensagemResgate278" class="qc-modal-mensagem" role="status"></p>
-      <details id="qcMeusResgates278" style="margin-top:14px">
-        <summary style="cursor:pointer">Acompanhar meus resgates</summary>
-        <div id="qcListaMeusResgates278" style="margin-top:10px"></div>
-      </details>
-    </div>`;
-  document.body.appendChild(modal);
-  const status=document.getElementById("qcMensagemResgate278");
-  const campo=document.getElementById("qcValorResgate278");
-  const campoPix=document.getElementById("qcChavePixResgate334");
-  const enviar=document.getElementById("qcSolicitarResgate278");
-  const lista=document.getElementById("qcListaMeusResgates278");
-  const maximoVisivel333=document.getElementById("qcMaximoResgate333");
-  const notaMaximo333=document.getElementById("qcNotaResgate333");
-  let ocupado=false;
-  let maximoResgate333=null;
-  let observarSaldo333=null;
-  // PASSO 335 — Resgates reservam fichas no servidor. Ao voltar à carteira,
-  // conferir automaticamente as fichas, sem repetir a solicitação.
-  let saldoARever335=false;
-  let saldoConferindo335=false;
-
-  async function conferirSaldoAoVoltar335() {
-    if(saldoConferindo335)return;
-    const token=sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
-    const idCarteira=localStorage.getItem("QC_ID_CARTEIRA");
-    if(!token||!idCarteira)return;
-    const mensagem=document.getElementById("mensagem");
-    const saldo=document.getElementById("saldo");
-    // Nunca pedir outra senha ou presumir saldo verificado.
-    if(typeof window.QC_atualizarSaldoReal202!=="function" ||
-       typeof window.QC_senhaFichas291!=="function" ||
-       !window.QC_senhaFichas291()) {
-      if(mensagem) mensagem.textContent=
-        "⚠️ Entre novamente na carteira para conferir o saldo. Não repita um resgate pendente.";
-      return;
-    }
-    saldoConferindo335=true;
-    if(saldo)saldo.textContent="Conferindo saldo...";
-    if(mensagem)mensagem.textContent="Conferindo saldo e fichas disponíveis...";
-    try {
-      await window.QC_atualizarSaldoReal202();
-      // A consulta existente valida as assinaturas e os gastos no servidor.
-      // Não mostrar o resultado de outra carteira caso o login mude.
-      if(token===sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") &&
-         idCarteira===localStorage.getItem("QC_ID_CARTEIRA") && mensagem) {
-        mensagem.textContent="✅ Saldo atualizado. Os Qc$ reservados em resgates não estão disponíveis.";
-      }
-    } catch(erro) {
-      if(token===sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") &&
-         idCarteira===localStorage.getItem("QC_ID_CARTEIRA") && mensagem) {
-        mensagem.textContent="⚠️ Não foi possível conferir o saldo ("+
-          String(erro?.message||erro)+
-          "). Use a conferência da carteira; não repita o resgate pendente.";
-      }
-    } finally {
-      saldoConferindo335=false;
-    }
-  }
-
-  function atualizarMaximoResgate333() {
-    maximoResgate333=null;
-    campo.removeAttribute("max");
-    let plano;
-    try {
-      // Mostrar somente o saldo efetivamente conferido da operacao atual.
-      const saldo=typeof window.QC_saldoDisponivelV2370==='function'
-        ? window.QC_saldoDisponivelV2370():null;
-      if(!Number.isSafeInteger(saldo)||saldo<0)
-        throw Error('Saldo ainda nao conferido nesta sessao.');
-      if(saldo>0){
-        const total=window.QC_planejarMovimentoV2366(saldo);
-        if(!total||total.status!=='OK')
-          throw Error('Nao foi possivel conferir o limite para resgate.');
-      }
-      maximoResgate333=saldo;
-      maximoVisivel333.textContent="Qc$ "+saldo.toLocaleString("pt-BR",{
-        minimumFractionDigits:2,maximumFractionDigits:2});
-      notaMaximo333.textContent=saldo===0
-        ? "Nenhuma ficha disponível para resgate."
-        : "Limite baseado nas fichas verificadas. O servidor confirma a disponibilidade ao solicitar.";
-      if(saldo>0) campo.max=String(saldo);
-    } catch(_) {
-      maximoVisivel333.textContent="Saldo não conferido";
-      notaMaximo333.textContent=
-        "Entre na carteira e aguarde a verificação do saldo antes de solicitar.";
-    }
-    if(!ocupado) enviar.disabled=maximoResgate333===0;
-  }
-
-  function pararObservacaoSaldo333() {
-    if(observarSaldo333) observarSaldo333.disconnect();
-    observarSaldo333=null;
-  }
-  function fechar() {
-    if(ocupado)return;
-    void atualizarIndicadorResgate386();
-    pararObservacaoSaldo333();
-    modal.style.display="none";
-    // O mesmo caminho é usado por Voltar, X e toque fora da janela.
-    // Se o pedido foi enviado, atualizar a carteira; caso a memória
-    // já esteja inválida, verificar também um pedido de antes do patch.
-    let memoriaNaoVerificada=false;
-    try {
-      memoriaNaoVerificada=typeof window.QC_saldoDisponivelV2370!=="function" ||
-        !Number.isSafeInteger(window.QC_saldoDisponivelV2370());
-    } catch(_) {memoriaNaoVerificada=true;}
-    const precisa=saldoARever335||memoriaNaoVerificada;
-    saldoARever335=false;
-    if(precisa)void conferirSaldoAoVoltar335();
-  }
-  function rotuloEstado(st) {
-    return ({PENDENTE:"Aguardando tesoureiro",
-      PREPARADO_LOCAL:"Protegido no aparelho; ainda nao confirmado no servidor",
-      CRIANDO:"Preparando",
-      CANCELAMENTO_SOLICITADO:"Cancelamento solicitado",
-      CANCELAMENTO_APROVADO:"Aguardando devolucao",
-      CONFIRMADO:"Pago e encerrado",CANCELADO:"Cancelado"})[st]||st;
-  }
-  function acaoLinha(texto, handler) {
-    const b=document.createElement("button");b.type="button";
-    b.textContent=texto;
-    b.className="qc-btn-modal-secundario";
-    b.addEventListener("click",async()=>{
-      if(ocupado) return;
-      ocupado=true;b.disabled=true;status.textContent="Consultando a solicitacao...";
-      try {await handler();await atualizarMeus();}
-      catch(e){status.textContent="⚠️ "+String(e.message||e);}
-      finally {ocupado=false;b.disabled=false;}
-    });
-    return b;
-  }
-  async function atualizarMeus() {
-    lista.textContent="Consultando...";
-    if(typeof window.QC_meusResgates278!=="function") {
-      lista.textContent="Atualize a pagina para carregar os resgates.";return;
-    }
-    const pedidos=await window.QC_meusResgates278();
-    void atualizarIndicadorResgate386(pedidos);
-    lista.replaceChildren();
-    if(!pedidos.length){lista.textContent="Nenhum resgate solicitado.";return;}
-    pedidos.forEach(p=>{
-      const item=document.createElement("div");item.className="qc-resgate-linha278";
-      const nome=document.createElement("strong");
-      nome.textContent=(typeof p.valor==="number" && Number.isSafeInteger(p.valor) && p.valor>=1)
-        ? p.valor+" QC" : "Resgate preparado no aparelho";
-      const situacao=document.createElement("p");situacao.className="qc-resgate-status278";
-      situacao.textContent=rotuloEstado(p.status)+" · "+p.solicitadoEm;
-      item.append(nome,situacao);
-      if(p.possuiRecuperacaoLocal){
-        item.append(acaoLinha("Atualizar / recuperar fichas",async()=>{
-          const r=await window.QC_retomarResgate278(p.idResgate);
-          status.textContent=r.status==="CANCELADO" ?
-            "✅ Resgate cancelado; fichas devolvidas com seguranca." :
-            r.status==="CONFIRMADO" ? "✅ Pagamento confirmado." :
-            "Solicitacao atualizada. Aguardando tesoureiro.";
-        }));
-      }
-      if(!p.possuiRecuperacaoLocal && ["CANCELADO","CRIANDO","CANCELAMENTO_APROVADO"].includes(p.status)){
-        const atencao=document.createElement("p");
-        atencao.textContent="Para recuperar fichas, use o aparelho que fez a solicitacao.";
-        item.append(atencao);
-      }
-      if(p.status==="PENDENTE"){
-        item.append(acaoLinha("Pedir cancelamento",async()=>{
-          const aceito=await QC_dialogoQuintos338({
-            titulo:"Solicitar cancelamento de resgate",
-            texto:"Deseja pedir o cancelamento deste resgate?",
-            detalhes:[{rotulo:"VALOR RESERVADO",
-              valor:"Qc$ "+Number(p.valor).toLocaleString("pt-BR")}],
-            aviso:"As fichas continuarão reservadas até a autorização " +
-              "do tesoureiro. Não faça outra solicitação para substituir este pedido.",
-            confirmarTexto:"Solicitar cancelamento",
-            cancelarTexto:"Manter meu resgate"
-          });
-          if(!aceito)return;
-          await window.QC_pedirCancelamentoResgate278(p.idResgate);
-          status.textContent="Cancelamento solicitado. Aguarde autorizacao do tesoureiro.";
-        }));
-      }
-      lista.appendChild(item);
-    });
-  }
-  // PASSO 336 — Antes de criar outro resgate, consultar os pedidos da
-  // propria carteira no servidor. CONFIRMADO/CANCELADO sao finais;
-  // demais estados permanecem em andamento, inclusive cancelamentos.
-  function QC_pedidosEmAberto336(pedidos) {
-    if(!Array.isArray(pedidos)) throw Error("Lista de resgates inválida.");
-    const encerrados=new Set(["CONFIRMADO","CANCELADO"]);
-    return pedidos.filter(p=>p&&typeof p==="object" &&
-      !encerrados.has(String(p.status||"").trim().toUpperCase()));
-  }
-
-  // Aviso com o mesmo estilo dos modais do aplicativo, sem janelas nativas.
-  // Nenhum pedido, reserva ou pagamento e feito por esta janela.
-  function QC_avisoPendenciasResgate336(pedidos) {
-    return new Promise(resolver=>{
-      if(document.getElementById("qcAvisoPendenciasResgate336")) {
-        resolver(false);
-        return;
-      }
-      const overlay=document.createElement("div");
-      overlay.id="qcAvisoPendenciasResgate336";
-      overlay.className="qc-modal-overlay";
-      overlay.style.cssText="display:flex;z-index:10005;padding:12px;box-sizing:border-box";
-      const cartao=document.createElement("div");
-      cartao.className="qc-modal-card";
-      cartao.setAttribute("role","alertdialog");
-      cartao.setAttribute("aria-modal","true");
-      cartao.setAttribute("aria-labelledby","qcTituloPendenciasResgate336");
-      cartao.style.cssText="box-sizing:border-box;max-height:calc(100vh - 24px);"+
-        "max-height:calc(100dvh - 24px);overflow-y:auto;overflow-x:hidden;"+
-        "-webkit-overflow-scrolling:touch";
-      const titulo=document.createElement("h3");
-      titulo.id="qcTituloPendenciasResgate336";
-      titulo.textContent="⚠️ Você já tem resgate pendente";
-      cartao.appendChild(titulo);
-      const aviso=document.createElement("p");
-      aviso.className="qc-modal-texto";
-      aviso.textContent=pedidos.length===1 ?
-        "Encontramos 1 pedido de resgate ainda não encerrado nesta carteira." :
-        "Encontramos "+pedidos.length+" pedidos de resgate ainda não encerrados nesta carteira.";
-      cartao.appendChild(aviso);
-      const itens=document.createElement("div");
-      itens.style.cssText="margin:12px 0;max-height:170px;overflow-y:auto";
-      pedidos.slice(0,5).forEach(p=>{
-        const linha=document.createElement("p");
-        linha.className="qc-resgate-linha278";
-        linha.style.cssText="font-size:13px;line-height:1.45;margin:7px 0;"+
-          "overflow-wrap:anywhere";
-        const valor=p.valor===null?NaN:Number(p.valor);
-        const valorTexto=Number.isSafeInteger(valor)&&valor>=1 ?
-          "Qc$ "+valor.toLocaleString("pt-BR") : "Valor não informado";
-        const estado=rotuloEstado(String(p.status||""));
-        const data=String(p.solicitadoEm||"");
-        linha.textContent=valorTexto+" · "+estado+(data ? " · "+data : "");
-        itens.appendChild(linha);
-      });
-      if(pedidos.length>5){
-        const mais=document.createElement("p");
-        mais.className="qc-modal-texto";
-        mais.textContent="E mais "+(pedidos.length-5)+" pedido(s) em aberto.";
-        itens.appendChild(mais);
-      }
-      cartao.appendChild(itens);
-      const explicacao=document.createElement("p");
-      explicacao.className="qc-modal-texto";
-      explicacao.textContent="As fichas desses pedidos podem estar reservadas. " +
-        "Se você quer apenas aguardar o pagamento do tesoureiro, " +
-        "não solicite novamente. Só continue se realmente deseja outro resgate.";
-      cartao.appendChild(explicacao);
-      const acoes=document.createElement("div");
-      acoes.className="qc-modal-botoes";
-      acoes.style.marginTop="15px";
-      const voltar=document.createElement("button");
-      voltar.type="button";
-      voltar.className="qc-btn-modal-secundario";
-      voltar.textContent="Não solicitar outro";
-      const continuar=document.createElement("button");
-      continuar.type="button";
-      continuar.className="qc-btn-modal-principal";
-      continuar.textContent="Solicitar outro mesmo assim";
-      acoes.append(voltar,continuar);
-      cartao.appendChild(acoes);
-      overlay.appendChild(cartao);
-      document.body.appendChild(overlay);
-      const focoAnterior=document.activeElement;
-      let terminou=false;
-      function fechar336(permitir){
-        if(terminou) return;
-        terminou=true;
-        document.removeEventListener("keydown",teclado336,true);
-        overlay.remove();
-        if(focoAnterior&&focoAnterior.isConnected&&
-           typeof focoAnterior.focus==="function") focoAnterior.focus();
-        resolver(permitir);
-      }
-      function teclado336(evento){
-        if(evento.key==="Escape") {
-          evento.preventDefault();
-          fechar336(false);
-        } else if(evento.key==="Tab") {
-          if(evento.shiftKey&&document.activeElement===voltar){
-            evento.preventDefault();continuar.focus();
-          } else if(!evento.shiftKey&&document.activeElement===continuar){
-            evento.preventDefault();voltar.focus();
-          }
-        }
-      }
-      voltar.addEventListener("click",()=>fechar336(false));
-      continuar.addEventListener("click",()=>fechar336(true));
-      overlay.addEventListener("click",e=>{
-        if(e.target===overlay) fechar336(false);
-      });
-      document.addEventListener("keydown",teclado336,true);
-      voltar.focus();
-    });
-  }
-
-  resgatar.addEventListener("click",()=>{
-    if(!sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE")) return;
-    status.textContent="";campo.value="";campoPix.value="";modal.style.display="flex";
-    saldoARever335=false;
-    const cartaoResgate386=modal.querySelector(".qc-modal-card");
-    if(cartaoResgate386)cartaoResgate386.scrollTop=0;
-    void atualizarIndicadorResgate386();
-    atualizarMaximoResgate333();
-    // Se o saldo terminar de carregar enquanto a janela está aberta,
-    // atualizamos o valor exibido, sem recarregar o navegador.
-    pararObservacaoSaldo333();
-    const elSaldo=document.getElementById("saldo");
-    if(elSaldo && typeof MutationObserver==="function") {
-      observarSaldo333=new MutationObserver(()=>{
-        if(modal.style.display==="flex" && !ocupado) atualizarMaximoResgate333();
-      });
-      observarSaldo333.observe(elSaldo,{subtree:true,childList:true,characterData:true});
-    }
-  });
-  document.getElementById("qcFecharResgate278").addEventListener("click",fechar);
-  document.getElementById("qcCancelarTelaResgate278").addEventListener("click",fechar);
-  modal.addEventListener("click",e=>{if(e.target===modal)fechar();});
-  enviar.addEventListener("click",async()=>{
-    if(ocupado)return;
-    const valor=Number(campo.value);
-    if(!campo.value.trim()||!Number.isSafeInteger(valor)||valor<1){
-      status.textContent="Informe um valor inteiro de pelo menos 1 Qc$.";return;
-    }
-    const chavePix=campoPix.value.trim();
-    atualizarMaximoResgate333();
-    if(maximoResgate333!==null && valor>maximoResgate333) {
-      status.textContent="O valor informado supera o saldo disponível para resgate.";return;
-    }
-    ocupado=true;enviar.disabled=true;
-    status.textContent="Conferindo se já existem resgates pendentes...";
-    // A consulta é autenticada e feita antes de qualquer nova reserva.
-    // Se falhar, NÃO solicitar outro resgate às cegas.
-    const sessao336={
-      token:sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE"),
-      id:localStorage.getItem("QC_ID_CARTEIRA")
+  if (chaves.length !== 1) {
+    return {
+      status: "CHAVE_INDISPONIVEL",
+      denominacao: valor,
+      idChave
     };
-    let iniciouSolicitacao336=false;
-    try{
-      if(typeof window.QC_meusResgates278!=="function") {
-        throw Error("Consulta dos meus resgates indisponível. Atualize o aplicativo.");
-      }
-      const meus=await window.QC_meusResgates278();
-      if(sessao336.token!==sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") ||
-         sessao336.id!==localStorage.getItem("QC_ID_CARTEIRA")) {
-        throw Error("Carteira alterada durante a consulta. Nenhuma solicitação iniciada.");
-      }
-      const abertos=QC_pedidosEmAberto336(meus);
-      if(abertos.length){
-        status.textContent="Há "+abertos.length+" pedido(s) em aberto. Confira antes de continuar.";
-        const permitir=await QC_avisoPendenciasResgate336(abertos);
-        if(!permitir){
-          status.textContent="Nenhum novo resgate solicitado. " +
-            "Consulte o pedido existente em 'Acompanhar meus resgates'.";
-          const acompanhar=document.getElementById("qcMeusResgates278");
-          if(acompanhar) acompanhar.open=true;
-          return;
-        }
-      }
-      if(sessao336.token!==sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") ||
-         sessao336.id!==localStorage.getItem("QC_ID_CARTEIRA")) {
-        throw Error("Carteira alterada. Nenhuma solicitação iniciada.");
-      }
-      if(typeof window.QC_solicitarResgate278!=="function"){
-        throw Error("Módulo de resgate não carregado.");
-      }
-      status.textContent="Preparando resgate seguro...";
-      // A partir daqui o servidor pode reservar fichas. Em falhas
-      // posteriores, preservar e retomar o MESMO pedido no aparelho.
-      iniciouSolicitacao336=true;
-      saldoARever335=true;
-      const r=await window.QC_solicitarResgate278(valor,chavePix);
-      if(r.status==="CANCELADO_PELO_USUARIO") status.textContent="Operacao cancelada.";
-      else if(r.status==="PENDENTE" && r.situacao){
-        status.textContent="✅ Resgate registrado. Aguarde o tesoureiro. " +
-          (chavePix ? "A chave Pix foi informada. " : "Pagamento combinado fora do aplicativo. ")+
-          "Os Qc$ permanecem reservados.";
-        campo.value="";campoPix.value="";
-        maximoResgate333=null;
-        maximoVisivel333.textContent="Conferindo saldo...";
-        notaMaximo333.textContent=
-          "Conferindo no servidor as fichas restantes, sem repetir o resgate.";
-        campo.removeAttribute("max");
-        // A reserva foi confirmada: recalcular somente a partir das fichas
-        // verificadas no servidor (nunca simplesmente subtrair o pedido).
-        try {
-          if(typeof window.QC_atualizarSaldoReal202!=="function")
-            throw Error("Conferência de saldo indisponível.");
-          await window.QC_atualizarSaldoReal202();
-          if(sessao336.token!==sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE") ||
-             sessao336.id!==localStorage.getItem("QC_ID_CARTEIRA"))
-            throw Error("A carteira mudou durante a conferência.");
-          atualizarMaximoResgate333();
-          saldoARever335=false;
-        } catch(erroSaldo) {
-          maximoVisivel333.textContent="Saldo não conferido";
-          notaMaximo333.textContent="O resgate já está registrado. " +
-            "Não solicite outro até conferir o saldo na carteira.";
-        }
-        await atualizarMeus();
-      } else {
-        status.textContent=r.mensagem||"Operação ainda em andamento; não solicite outro resgate. Retome o mesmo pedido.";
-        await atualizarMeus();
-      }
-    }catch(e){
-      status.textContent=iniciouSolicitacao336 ?
-        "⚠️ "+String(e.message||e)+
-          " Se a conexão caiu, preserve o pedido neste aparelho e retome-o; não crie outro resgate." :
-        "⚠️ Não foi possível confirmar os pedidos existentes: "+
-          String(e.message||e)+
-          ". Nenhum novo resgate foi iniciado. Tente consultar novamente.";
-    }
-    finally{ocupado=false;enviar.disabled=maximoResgate333===0;}
+  }
+
+  const chave = chaves[0];
+
+  const statusChave = String(
+    chave[col("Status")]
+  ).trim();
+
+  if (
+    Number(chave[col("Denominacao")]) !== valor ||
+    Number(chave[col("Versao")]) !== 1 ||
+    !["AGUARDANDO_CHAVE", "ATIVA"].includes(statusChave)
+  ) {
+    return {
+      status: "CHAVE_INDISPONIVEL",
+      denominacao: valor,
+      idChave
+    };
+  }
+
+  const moduloHex = String(
+    chave[col("ModuloPublico")]
+  ).trim().toLowerCase();
+
+  const expoenteHex = String(
+    chave[col("ExpoentePublico")]
+  ).trim().toLowerCase();
+
+  // Validar os parâmetros RSA antes de fornecê-los.
+  const validacao = QC_validarParametrosRSA170(
+    moduloHex, expoenteHex
+  );
+
+  if (
+    validacao.status !== "FORMATO_VALIDO" ||
+    !/^[89a-f][0-9a-f]{1023}$/.test(moduloHex) ||
+    !/^0*10001$/.test(expoenteHex)
+  ) {
+    return {
+      status: "CHAVE_INDISPONIVEL",
+      denominacao: valor,
+      idChave
+    };
+  }
+
+  return {
+    status: "OK",
+    idChave,
+    denominacao: valor,
+    moduloHex,
+    expoenteHex,
+    assinaturaPermitida: false
+  };
+}
+
+
+
+function QC_conferirAssinador196() {
+
+  const token = PropertiesService
+    .getScriptProperties()
+    .getProperty("QC_WORKER_TOKEN");
+
+  if (!/^[0-9a-f]{64}$/.test(token || "")) {
+    throw new Error("Token do Worker não configurado.");
+  }
+
+  const url =
+    "https://quintoscoin-assinador-teste.lojatiradentesii71.workers.dev/interno/autoverificar-196";
+
+  const resposta = UrlFetchApp.fetch(url, {
+    method: "post",
+    headers: {
+      Authorization: "Bearer " + token
+    },
+    muteHttpExceptions: true
   });
-  campo.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();enviar.click();}});
-  document.getElementById("qcMeusResgates278").addEventListener("toggle",e=>{
-    if(e.target.open) atualizarMeus().catch(err=>{
-      lista.textContent="⚠️ "+String(err.message||err);
+
+  Logger.log(
+    "HTTP: " + resposta.getResponseCode()
+  );
+
+  Logger.log(
+    "RESULTADO: " + resposta.getContentText()
+  );
+
+}
+
+
+function QC_conferirChaves218() {
+
+  const token = PropertiesService
+    .getScriptProperties()
+    .getProperty("QC_WORKER_TOKEN");
+
+  const aba = SpreadsheetApp
+    .getActiveSpreadsheet()
+    .getSheetByName("QC_ChavesAssinatura");
+
+  if (!aba || !/^[0-9a-f]{64}$/.test(token || "")) {
+    throw new Error("Planilha ou token não configurado.");
+  }
+
+  const dados = aba.getDataRange().getDisplayValues();
+  const cab = dados[0].map(v => String(v).trim());
+  const col = nome => cab.indexOf(nome);
+
+  const campos = [
+    "IdChave", "ModuloPublico", "ExpoentePublico"
+  ];
+
+  if (campos.some(nome => col(nome) < 0)) {
+    throw new Error("Cabeçalhos incompletos.");
+  }
+
+  const url =
+    "https://quintoscoin-assinador-teste.lojatiradentesii71.workers.dev/interno/conferir-chaves-218";
+
+  let conferidas = 0;
+
+  for (const id of ["QC-2-V1", "QC-5-V1"]) {
+
+    const linhas = dados.slice(1).filter(r =>
+      String(r[col("IdChave")]).trim() === id
+    );
+
+    if (linhas.length !== 1) {
+      throw new Error("Cadastro inválido: " + id);
+    }
+
+    const modulo = String(
+      linhas[0][col("ModuloPublico")]
+    ).trim().toLowerCase();
+
+    const expoente = String(
+      linhas[0][col("ExpoentePublico")]
+    ).trim().toLowerCase();
+
+    if (
+      !/^[89a-f][0-9a-f]{1023}$/.test(modulo) ||
+      expoente !== "010001"
+    ) {
+      throw new Error(
+        id + ": chave pública ausente ou inválida."
+      );
+    }
+
+    const resposta = UrlFetchApp.fetch(url, {
+      method: "post",
+      contentType: "application/json",
+      headers: {
+        Authorization: "Bearer " + token
+      },
+      payload: JSON.stringify({
+        idChave: id,
+        moduloHex: modulo,
+        expoenteHex: expoente
+      }),
+      muteHttpExceptions: true
     });
+
+    const resultado = JSON.parse(
+      resposta.getContentText()
+    );
+
+    Logger.log(
+      id + ": " + resultado.status
+    );
+
+    if (
+      resposta.getResponseCode() === 200 &&
+      resultado.idChave === id &&
+      resultado.status === "CHAVE_CONFERE"
+    ) {
+      conferidas++;
+    }
+
+  }
+
+  Logger.log(
+    "CHAVES VALIDADAS: " + conferidas + "/2"
+  );
+
+  if (conferidas !== 2) {
+    throw new Error(
+      "Uma ou mais chaves não conferem."
+    );
+  }
+
+  Logger.log(
+    "ASSINATURAS PERMANECEM DESATIVADAS"
+  );
+
+}
+
+
+function QC_localizarCota220(idEmissao, denominacao) {
+
+  const id = String(idEmissao || "").trim();
+  const valor = Number(denominacao);
+
+  if (!/^QC-EM-[0-9a-f-]{36}$/i.test(id)) {
+    throw new Error("Identificador de emissão inválido.");
+  }
+
+  if (![1, 2, 5, 10, 50].includes(valor)) {
+    throw new Error("Denominação não permitida.");
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  function tabela(nome, campos) {
+    const aba = ss.getSheetByName(nome);
+    if (!aba) throw new Error("Aba ausente: " + nome);
+
+    const dados = aba.getDataRange().getValues();
+    const cab = dados[0].map(v => String(v).trim());
+    const col = nome => cab.indexOf(nome);
+
+    if (campos.some(campo => col(campo) < 0)) {
+      throw new Error("Cabeçalhos inválidos: " + nome);
+    }
+
+    return { dados, col };
+  }
+
+  const cotas = tabela("QC_CotasEmissao", [
+    "IdCota", "IdEmissao", "Denominacao",
+    "IdChave", "QuantidadePermitida",
+    "QuantidadeAssinada", "Status"
+  ]);
+
+  const chaves = tabela("QC_ChavesAssinatura", [
+    "IdChave", "Denominacao", "Versao",
+    "Status", "ModuloPublico", "ExpoentePublico"
+  ]);
+
+  const idCota = id + "-" + valor;
+  const idChave = "QC-" + valor + "-V2";
+
+  const encontradas = cotas.dados.slice(1).filter(r =>
+    String(r[cotas.col("IdCota")]).trim() === idCota
+  );
+
+  if (encontradas.length !== 1) {
+    throw new Error("Cota ausente ou duplicada: " + idCota);
+  }
+
+  const registro = encontradas[0];
+
+  if (
+    String(registro[cotas.col("IdEmissao")]).trim() !== id ||
+    Number(registro[cotas.col("Denominacao")]) !== valor ||
+    String(registro[cotas.col("IdChave")]).trim() !== idChave
+  ) {
+    throw new Error("Denominação e cota não correspondem.");
+  }
+
+  const permitidas = Number(
+    registro[cotas.col("QuantidadePermitida")]
+  );
+
+  const assinadas = Number(
+    registro[cotas.col("QuantidadeAssinada")]
+  );
+
+  if (
+    !Number.isInteger(permitidas) ||
+    !Number.isInteger(assinadas) ||
+    permitidas < 1 ||
+    assinadas < 0 ||
+    assinadas > permitidas
+  ) {
+    throw new Error("Contadores da cota inconsistentes.");
+  }
+
+  const linhasChave = chaves.dados.slice(1).filter(r =>
+    String(r[chaves.col("IdChave")]).trim() === idChave
+  );
+
+  if (linhasChave.length !== 1) {
+    throw new Error("Chave ausente ou duplicada: " + idChave);
+  }
+
+  const registroChave = linhasChave[0];
+
+  if (
+    Number(registroChave[chaves.col("Denominacao")]) !== valor ||
+    Number(registroChave[chaves.col("Versao")]) !== 2
+  ) {
+    throw new Error("Cadastro da chave inconsistente.");
+  }
+
+  const moduloHex = String(
+    registroChave[chaves.col("ModuloPublico")]
+  ).trim().toLowerCase();
+
+  const expoenteHex = String(
+    registroChave[chaves.col("ExpoentePublico")]
+  ).trim().toLowerCase();
+
+  if (
+    !/^[89a-f][0-9a-f]{1023}$/.test(moduloHex) ||
+    expoenteHex !== "010001"
+  ) {
+    throw new Error("Chave pública inválida.");
+  }
+
+  const statusCota = String(
+    registro[cotas.col("Status")]
+  ).trim().toUpperCase();
+
+  const statusChave = String(
+    registroChave[chaves.col("Status")]
+  ).trim().toUpperCase();
+
+  return {
+    idCota,
+    idEmissao: id,
+    denominacao: valor,
+    idChave,
+    moduloHex,
+    expoenteHex,
+    quantidadePermitida: permitidas,
+    quantidadeAssinada: assinadas,
+    quantidadeRestante: permitidas - assinadas,
+    statusCota,
+    statusChave,
+    cotaElegivel:
+      statusChave === "ATIVA" &&
+      statusCota === "PLANEJADA" &&
+      assinadas < permitidas
+  };
+
+}
+
+
+function QC_testarPlano230() {
+
+  const plano = QC_planejarCotasEmissao(
+    17,
+    "TESTE_PLANEJAMENTO_230",
+    false
+  );
+
+  const esperado = {
+    10: 1,
+    5: 1,
+    2: 1
+  };
+
+  if (
+    plano.valorAutorizado !== 17 ||
+    plano.totalCalculado !== 17 ||
+    plano.quantidadeFichas !== 3 ||
+    plano.cotas.length !== 3
+  ) {
+    throw new Error("Planejamento incorreto.");
+  }
+
+  for (const cota of plano.cotas) {
+    if (
+      esperado[cota.denominacao] !==
+        cota.quantidadePermitida ||
+      cota.quantidadeAssinada !== 0 ||
+      cota.status !== "PLANEJADA" ||
+      cota.idChave !==
+        "QC-" + cota.denominacao + "-V1"
+    ) {
+      throw new Error("Cota incorreta.");
+    }
+
+    Logger.log(
+      cota.quantidadePermitida +
+      " ficha de " + cota.denominacao + " QC: OK"
+    );
+  }
+
+  Logger.log("PASSO 230: APROVADO");
+  Logger.log("TOTAL: 17 QC");
+  Logger.log("NENHUMA EMISSAO GRAVADA");
+}
+
+
+function QC_validarPiloto234() {
+
+  // COLE AQUI o IdEmissao da nova emissão de 17 QC.
+  const idEmissao = "QC-EM-2c3ffba3-c84c-4703-8f09-2147907e4ab9";
+
+  if (!/^QC-EM-[0-9a-f-]{36}$/i.test(idEmissao)) {
+    throw new Error("Informe o IdEmissao válido.");
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  function ler(nome, campos) {
+    const aba = ss.getSheetByName(nome);
+
+    if (!aba) {
+      throw new Error("Aba ausente: " + nome);
+    }
+
+    const dados = aba.getDataRange().getValues();
+    const cab = dados[0].map(v => String(v).trim());
+    const col = nomeColuna => cab.indexOf(nomeColuna);
+
+    if (campos.some(c => col(c) < 0)) {
+      throw new Error("Colunas ausentes: " + nome);
+    }
+
+    return {
+      linhas: dados.slice(1),
+      col
+    };
+  }
+
+  function unica(tabela, campo, valor) {
+    const encontradas = tabela.linhas.filter(linha =>
+      String(linha[tabela.col(campo)]).trim() === valor
+    );
+
+    if (encontradas.length !== 1) {
+      throw new Error("Registro ausente ou duplicado: " + campo);
+    }
+
+    return encontradas[0];
+  }
+
+  const emi = ler("QC_Emissoes", [
+    "IdEmissao", "IdAutorizacao", "ValorAutorizado",
+    "QuantidadeFichas", "Status"
+  ]);
+
+  const aut = ler("QC_Autorizacoes", [
+    "IdAutorizacao", "IdEmissao", "Valor",
+    "Status", "AutorizadaPor", "DataAutorizacao"
+  ]);
+
+  const cot = ler("QC_CotasEmissao", [
+    "IdCota", "IdEmissao", "Denominacao",
+    "IdChave", "QuantidadePermitida",
+    "QuantidadeAssinada", "Status"
+  ]);
+
+  const chaves = ler("QC_ChavesAssinatura", [
+    "IdChave", "Status"
+  ]);
+
+  const ops = ler("QC_OperacoesAssinatura", [
+    "IdEmissao"
+  ]);
+
+  const emissao = unica(emi, "IdEmissao", idEmissao);
+  const idAutorizacao = String(
+    emissao[emi.col("IdAutorizacao")]
+  ).trim();
+
+  if (
+    idEmissao !== "QC-EM-" + idAutorizacao ||
+    Number(emissao[emi.col("ValorAutorizado")]) !== 17 ||
+    Number(emissao[emi.col("QuantidadeFichas")]) !== 3 ||
+    String(emissao[emi.col("Status")]).trim() !==
+      "AGUARDANDO_ASSINATURA"
+  ) {
+    throw new Error("Dados da emissão inconsistentes.");
+  }
+
+  Logger.log("EMISSÃO DE 17 QC: OK");
+
+  const autorizacao = unica(
+    aut, "IdAutorizacao", idAutorizacao
+  );
+
+  if (
+    String(autorizacao[aut.col("IdEmissao")]).trim() !==
+      idEmissao ||
+    Number(autorizacao[aut.col("Valor")]) !== 17 ||
+    String(autorizacao[aut.col("Status")]).trim() !==
+      "AUTORIZADA" ||
+    !autorizacao[aut.col("AutorizadaPor")] ||
+    !autorizacao[aut.col("DataAutorizacao")]
+  ) {
+    throw new Error("Autorização inconsistente.");
+  }
+
+  Logger.log("AUTORIZAÇÃO: OK");
+
+  const cotas = cot.linhas.filter(linha =>
+    String(linha[cot.col("IdEmissao")]).trim() ===
+      idEmissao
+  );
+
+  if (cotas.length !== 3) {
+    throw new Error("Quantidade de cotas incorreta.");
+  }
+
+  for (const valor of [10, 5, 2]) {
+
+    const encontradas = cotas.filter(linha =>
+      Number(linha[cot.col("Denominacao")]) === valor
+    );
+
+    if (encontradas.length !== 1) {
+      throw new Error("Cota de " + valor + " QC incorreta.");
+    }
+
+    const cota = encontradas[0];
+    const idChave = "QC-" + valor + "-V1";
+
+    if (
+      String(cota[cot.col("IdCota")]).trim() !==
+        idEmissao + "-" + valor ||
+      String(cota[cot.col("IdChave")]).trim() !== idChave ||
+      Number(cota[cot.col("QuantidadePermitida")]) !== 1 ||
+      Number(cota[cot.col("QuantidadeAssinada")]) !== 0 ||
+      String(cota[cot.col("Status")]).trim() !== "PLANEJADA"
+    ) {
+      throw new Error("Dados da cota incorretos.");
+    }
+
+    const chave = unica(chaves, "IdChave", idChave);
+
+    if (
+      String(chave[chaves.col("Status")]).trim() !== "ATIVA"
+    ) {
+      throw new Error("Chave não está ativa: " + idChave);
+    }
+
+    Logger.log("COTA " + valor + " QC: OK");
+  }
+
+  const operacoes = ops.linhas.filter(linha =>
+    String(linha[ops.col("IdEmissao")]).trim() ===
+      idEmissao
+  );
+
+  if (operacoes.length !== 0) {
+    throw new Error("A emissão já possui operações.");
+  }
+
+  Logger.log("NENHUMA ASSINATURA SOLICITADA: OK");
+
+  const props = PropertiesService.getScriptProperties();
+
+  if (
+    props.getProperty("QC_EMISSAO_REAL_ATIVA") !== "NAO"
+  ) {
+    throw new Error("Bloqueio geral inesperado.");
+  }
+
+  if (
+    !props.getProperty("QC_EMISSAO_PILOTO_ID") ||
+    props.getProperty("QC_EMISSAO_PILOTO_ID") === idEmissao
+  ) {
+    throw new Error("Verificar configuração do piloto.");
+  }
+
+  Logger.log("BLOQUEIOS DE EMISSÃO: OK");
+  Logger.log("PASSO 234: APROVADO");
+  Logger.log("NENHUM DADO ALTERADO");
+}
+
+
+function QC_testarBloqueios238() {
+
+  const props = PropertiesService.getScriptProperties();
+
+  const ativo = String(
+    props.getProperty("QC_EMISSAO_REAL_ATIVA") || ""
+  ).trim();
+
+  const idEmissao = String(
+    props.getProperty("QC_EMISSAO_PILOTO_ID") || ""
+  ).trim();
+
+  if (ativo !== "NAO") {
+    throw new Error(
+      "TESTE CANCELADO: emissão real não está bloqueada."
+    );
+  }
+
+  if (!/^QC-EM-[0-9a-f-]{36}$/i.test(idEmissao)) {
+    throw new Error("Id da emissão piloto inválido.");
+  }
+
+  const aba = SpreadsheetApp
+    .getActiveSpreadsheet()
+    .getSheetByName("QC_Emissoes");
+
+  if (!aba) {
+    throw new Error("Aba QC_Emissoes ausente.");
+  }
+
+  const dados = aba.getDataRange().getValues();
+  const cab = dados[0].map(v => String(v).trim());
+  const col = nome => cab.indexOf(nome);
+
+  if ([
+    "IdEmissao", "ValorAutorizado", "Status"
+  ].some(nome => col(nome) < 0)) {
+    throw new Error("Colunas da emissão ausentes.");
+  }
+
+  const emissoes = dados.slice(1).filter(linha =>
+    String(linha[col("IdEmissao")]).trim() === idEmissao
+  );
+
+  if (
+    emissoes.length !== 1 ||
+    Number(emissoes[0][col("ValorAutorizado")]) !== 17 ||
+    String(emissoes[0][col("Status")]).trim() !==
+      "AGUARDANDO_ASSINATURA"
+  ) {
+    throw new Error(
+      "A emissão piloto não corresponde aos 17 QC."
+    );
+  }
+
+  Logger.log("PILOTO DE 17 QC: OK");
+  Logger.log("EMISSAO REAL DESATIVADA: OK");
+
+  for (const valor of [10, 5, 2]) {
+
+    // Dados fictícios, sem qualquer ficha real.
+    const resposta = QC_assinarFichaCarteira190(
+      "TOKEN_INVALIDO_TESTE",
+      idEmissao,
+      Utilities.getUuid(),
+      "8" + "0".repeat(1023),
+      valor
+    );
+
+    if (
+      !resposta ||
+      resposta.status !== "ASSINATURA_BLOQUEADA"
+    ) {
+      throw new Error(
+        "Bloqueio não confirmado para " + valor + " QC."
+      );
+    }
+
+    Logger.log(
+      "ASSINATURA " + valor + " QC: BLOQUEADA"
+    );
+  }
+
+  Logger.log("PASSO 238: APROVADO");
+  Logger.log("NENHUMA FICHA ASSINADA");
+}
+
+
+function QC_testarRota239() {
+
+  const props = PropertiesService.getScriptProperties();
+
+  if (props.getProperty("QC_EMISSAO_REAL_ATIVA") !== "NAO") {
+    throw new Error("Teste cancelado: emissão não bloqueada.");
+  }
+
+  const idEmissao = String(
+    props.getProperty("QC_EMISSAO_PILOTO_ID") || ""
+  ).trim();
+
+  if (!/^QC-EM-[0-9a-f-]{36}$/i.test(idEmissao)) {
+    throw new Error("Identificador piloto inválido.");
+  }
+
+  const dados = {
+    acao: "qc_assinar_ficha",
+    tokenSessao: "TOKEN_INVALIDO_TESTE",
+    idEmissao: idEmissao,
+    idOperacao: Utilities.getUuid(),
+    blocoHex: "8" + "0".repeat(1023),
+    denominacao: 2
+  };
+
+  Logger.log(
+    "ID EMISSÃO VÁLIDO: " +
+    /^QC-EM-[0-9a-f-]{36}$/i.test(dados.idEmissao)
+  );
+
+  Logger.log(
+    "ID OPERAÇÃO VÁLIDO: " +
+    /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i
+      .test(dados.idOperacao)
+  );
+
+  Logger.log(
+    "BLOCO VÁLIDO: " +
+    /^[0-9a-f]{1024}$/i.test(dados.blocoHex)
+  );
+
+  const resposta = doPost({
+    postData: {
+      contents: JSON.stringify(dados),
+      type: "application/json"
+    }
   });
 
-  // Habilitar apenas o botao na interface. O servidor mantem os bloqueios.
-  const mostrarResgatar=()=>{
-    resgatar.disabled=!sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
+  const resultado = JSON.parse(resposta.getContent());
+
+  Logger.log("STATUS DA ROTA: " + resultado.status);
+
+  if (resultado.mensagem) {
+    Logger.log("MENSAGEM: " + resultado.mensagem);
+  }
+
+  Logger.log(
+    resultado.status === "ASSINATURA_BLOQUEADA"
+      ? "ENCAMINHAMENTO: OK"
+      : "ENCAMINHAMENTO: VERIFICAR"
+  );
+}
+
+
+function QC_diagnosticarWorker245() {
+
+  const props = PropertiesService.getScriptProperties();
+
+  if (
+    props.getProperty("QC_EMISSAO_REAL_ATIVA") !== "NAO"
+  ) {
+    throw new Error(
+      "Teste cancelado: bloqueie o Apps Script primeiro."
+    );
+  }
+
+  const token = props.getProperty("QC_WORKER_TOKEN");
+
+  if (!/^[0-9a-f]{64}$/.test(token || "")) {
+    throw new Error("Token do Worker não configurado.");
+  }
+
+  const resposta = UrlFetchApp.fetch(
+    "https://quintoscoin-assinador-teste.lojatiradentesii71.workers.dev/interno/assinar",
+    {
+      method: "post",
+      contentType: "application/json",
+      headers: {
+        Authorization: "Bearer " + token
+      },
+      payload: JSON.stringify({
+        idOperacao: "TESTE_INVALIDO",
+        idEmissao: "TESTE_INVALIDO",
+        idCota: "TESTE_INVALIDO",
+        idChave: "QC-10-V1",
+        blocoHex: "00"
+      }),
+      muteHttpExceptions: true,
+      followRedirects: false
+    }
+  );
+
+  let dados = {};
+
+  try {
+    dados = JSON.parse(resposta.getContentText());
+  } catch (_) {
+    dados = {};
+  }
+
+  Logger.log("HTTP: " + resposta.getResponseCode());
+  Logger.log("STATUS: " + (dados.status || "SEM_STATUS"));
+
+  Logger.log("PASSO 245: DIAGNOSTICO CONCLUIDO");
+  Logger.log("NENHUMA FICHA REAL ENVIADA");
+}
+
+
+// PASSO 362 — Consulta de chaves PUBLICAS V2 para a futura carteira.
+// Somente leitura, exige sessao valida. Chaves privadas ficam no Worker.
+// O status AGUARDANDO_INTEGRACAO NAO autoriza emitir nem assinar.
+function QC_obterChavePublicaCarteiraV2362(tokenSessao, denominacao) {
+  const valor = Number(denominacao);
+  if (![1, 2, 5, 10, 50].includes(valor)) {
+    return {status: "DENOMINACAO_INVALIDA"};
+  }
+  const sessao = QC_validarTokenSessaoTeste(tokenSessao);
+  if (!sessao || sessao.status !== "OK") {
+    return {status: "SESSAO_INVALIDA"};
+  }
+  const idChave = "QC-" + valor + "-V2";
+  const aba = SpreadsheetApp.getActiveSpreadsheet()
+    .getSheetByName("QC_ChavesAssinatura");
+  if (!aba) throw new Error("QC_ChavesAssinatura ausente.");
+  const dados = aba.getDataRange().getDisplayValues();
+  if (!dados.length) throw new Error("Cadastro de chaves vazio.");
+  const cab = dados[0].map(v => String(v).trim());
+  const col = nome => cab.indexOf(nome);
+  if (["IdChave", "Denominacao", "Versao", "Status",
+       "ModuloPublico", "ExpoentePublico"].some(x => col(x) < 0)) {
+    throw new Error("Cabecalhos de chaves incompletos.");
+  }
+  const linhas = dados.slice(1).filter(r =>
+    String(r[col("IdChave")] || "").trim() === idChave
+  );
+  if (linhas.length !== 1) {
+    return {status: "CHAVE_INDISPONIVEL", idChave, denominacao: valor};
+  }
+  const r = linhas[0];
+  const statusChave = String(r[col("Status")] || "").trim().toUpperCase();
+  if (Number(r[col("Denominacao")]) !== valor ||
+      Number(r[col("Versao")]) !== 2 ||
+      !["AGUARDANDO_INTEGRACAO", "ATIVA"].includes(statusChave)) {
+    return {status: "CHAVE_INDISPONIVEL", idChave, denominacao: valor};
+  }
+  const moduloHex = String(r[col("ModuloPublico")] || "").trim().toLowerCase();
+  const expoenteHex = String(r[col("ExpoentePublico")] || "").trim().toLowerCase();
+  // Os parametros devem continuar RSA-4096 e expoente 65537.
+  if (!/^[89a-f][0-9a-f]{1023}$/.test(moduloHex) ||
+      !/^0*10001$/.test(expoenteHex)) {
+    return {status: "CHAVE_INDISPONIVEL", idChave, denominacao: valor};
+  }
+  return {
+    status: "OK",
+    idChave,
+    denominacao: valor,
+    versao: 2,
+    moduloHex,
+    expoenteHex,
+    statusChave,
+    assinaturaPermitida: false
   };
-  // O fluxo de login/restauracao chama a mesma ativacao dos demais botoes.
-  window.QC_habilitarResgate278=mostrarResgatar;
-})();
+}
 
-// PASSO 278 - Pedidos identificados restritos a area do tesoureiro.
-(function QC_montarTesourariaResgates278(){
-  const area=document.getElementById("qcAreaTesoureiro");
-  if(!area)return;
-  const painel=document.createElement("details");
-  painel.id="qcAreaResgatesTesoureiro278";
-  painel.style.cssText="margin:15px 0 0";
-  const titulo=document.createElement("summary");
-  titulo.className="qc-botao-pedidos qc-resgate-resumo294";
-  titulo.style.cssText="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;list-style:none;width:100%;box-sizing:border-box";
-  const rotulo=document.createElement("span");
-  rotulo.textContent="💵 Resgates pendentes";
-  const indicador=document.createElement("span");
-  indicador.className="qc-indicador-pedidos";
-  const esfera=document.createElement("span");
-  esfera.className="qc-esfera-pedidos";
-  esfera.id="qcEsferaResgates294";
-  const contador=document.createElement("span");
-  contador.id="qcQuantidadeResgates294";
-  contador.textContent="Consultando...";
-  indicador.append(esfera,contador);
-  titulo.append(rotulo,indicador);
-  const lista=document.createElement("div");
-  lista.id="qcListaResgatesTesoureiro278";
-  lista.style.marginTop="12px";
-  painel.append(titulo,lista);
-  (document.getElementById("qcConteudoTesoureiro294")||area).appendChild(painel);
-  const estilo294=document.createElement("style");
-  estilo294.textContent=
-    "#qcAreaResgatesTesoureiro278>summary::-webkit-details-marker{display:none}"+
-    "#qcAreaResgatesTesoureiro278>summary::marker{content:''}"+
-    "#qcAreaResgatesTesoureiro278>summary{min-height:64px}";
-  document.head.appendChild(estilo294);
-  const URL_SCRIPT="https://script.google.com/macros/s/AKfycbxEU0xzZz833Bqv7CxV-PdTVIjxRrl27lNgSG0upZ07rnXaAkULhGGuehxbpU2-K1oyOQ/exec";
-  async function postar(acao,params={}){
-    const token=sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE");
-    if(!token) throw Error("Sessao expirada.");
-    const r=await fetch(URL_SCRIPT,{method:"POST",redirect:"follow",
-      headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body:JSON.stringify({acao,tokenSessao:token,...params})});
-    if(!r.ok)throw Error("Falha de comunicacao: HTTP "+r.status);
-    const dados=await r.json();
-    if(token!==sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE"))throw Error("Sessao alterada.");
-    if(dados.status==="ERRO"||dados.status==="NAO_AUTORIZADO"){
-      throw Error(dados.mensagem||"Operacao nao autorizada.");
-    }
-    return dados;
+
+// ============================================================================
+// CONTROLE V2 / TESTE DESCARTAVEL SEM V3 — integrado ao arquivo operacional.
+// NENHUMA chave privada é salva aqui: apenas parâmetros PÚBLICOS de backup.
+// Primeira instalação: QC_prepararAmbienteTesteV2377()
+// Após habilitar somente assinaturas TESTE no Worker: QC_ativarTestesV2377()
+// Pausar imediatamente: QC_pausarTestesV2377()
+// ENCERRAR somente depois de concluir todos os testes e desligar o Worker:
+// QC_encerrarTestesV2377() — arquiva testbooks, restaura publicas reais.
+// ============================================================================
+function QC_propsTeste377() { return PropertiesService.getScriptProperties(); }
+function QC_cab377(aba,nomes) {
+  if(!aba) throw new Error('Aba ausente.');
+  const h=aba.getRange(1,1,1,aba.getLastColumn()).getDisplayValues()[0]
+    .map(x=>String(x).trim());
+  const c=n=>h.indexOf(n);
+  if(nomes.some(n=>c(n)<0)) throw new Error('Colunas ausentes: '+nomes.join(','));
+  return {h,c};
+}
+function QC_estadoWorkerTeste377() {
+  const p=QC_propsTeste377();
+  const token=p.getProperty('QC_WORKER_TOKEN');
+  if(!/^[a-f0-9]{64}$/.test(token||'')) throw new Error('Token Worker ausente.');
+  const base='https://quintoscoin-assinador-teste.lojatiradentesii71.workers.dev';
+  function post(rota) {
+    const r=UrlFetchApp.fetch(base+rota,{method:'post',
+      contentType:'application/json',headers:{Authorization:'Bearer '+token},
+      payload:'{}',muteHttpExceptions:true});
+    if(r.getResponseCode()!==200) throw new Error('Worker de teste inacessivel: '+rota);
+    return JSON.parse(r.getContentText());
   }
-  let carregando=false;
-  async function carregar(){
-    if(carregando)return;
-    carregando=true;lista.textContent="Consultando resgates...";
-    try{
-      const r=await postar("qc_resgate_v2_pendentes_tesoureiro");
-      if(r.status!=="OK"||!Array.isArray(r.pedidos))
-        throw Error("Lista de resgates indisponivel.");
-      const pendentes=r.pedidos;
-      lista.replaceChildren();
-      const quantidade=pendentes.length;
-      esfera.className="qc-esfera-pedidos "+(quantidade ?
-        "qc-esfera-laranja" : "qc-esfera-verde");
-      contador.textContent=quantidade ?
-        quantidade+(quantidade===1 ? " pendente" : " pendentes") :
-        "Nenhum resgate";
-      if(!quantidade){lista.textContent="Nenhum resgate pendente.";return;}
-      pendentes.forEach(p=>{
-        const item=document.createElement("div");item.className="qc-resgate-linha278";
-        const nome=document.createElement("strong");nome.textContent=p.nome;
-        const info=document.createElement("p");
-        info.textContent="Qc$ "+Number(p.valor).toLocaleString("pt-BR")+
-          " · Pix R$ "+Number(p.valor).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+
-          " · "+p.solicitadoEm+" · "+p.status;
-        const mensagem=document.createElement("p");mensagem.setAttribute("role","status");
-        item.append(nome,info);
-        const pix=document.createElement("p");
-        const chavePix=String(p.chavePix||"").trim();
-        pix.textContent=chavePix ? "Chave Pix para pagamento: "+chavePix :
-          "Chave Pix não informada neste pedido. Consulte o irmão antes de pagar.";
-        pix.style.cssText="overflow-wrap:anywhere;color:#e8ca74;font-size:13px";
-        item.append(pix);
-        if(chavePix){
-          const copiar=document.createElement("button");
-          copiar.type="button";copiar.className="qc-btn-modal-secundario";
-          copiar.textContent="Copiar chave Pix";
-          copiar.addEventListener("click",async()=>{
-            try{
-              await navigator.clipboard.writeText(chavePix);
-              mensagem.textContent="Chave Pix copiada. Confirme o destinatário e o valor no banco antes de pagar.";
-            }catch(_){mensagem.textContent="Não foi possível copiar automaticamente. Selecione a chave exibida acima.";}
-          });
-          item.append(copiar);
-        }
-        function botao(texto,acao,mensagemConfirmacao){
-          const b=document.createElement("button");b.type="button";
-          b.className="qc-btn-modal-secundario";b.textContent=texto;
-          b.addEventListener("click",async()=>{
-            const pagamento=acao.endsWith("confirmar_pagamento");
-            const aceito=await QC_dialogoQuintos338({
-              titulo:pagamento ? "Confirmar pagamento do resgate" :
-                "Autorizar cancelamento do resgate",
-              texto:mensagemConfirmacao,
-              detalhes:[
-                {rotulo:"IRMÃO",valor:String(p.nome||"Não informado")},
-                {rotulo:"VALOR",valor:"Qc$ "+Number(p.valor).toLocaleString("pt-BR")+
-                  " — R$ "+Number(p.valor).toLocaleString("pt-BR",{
-                    minimumFractionDigits:2,maximumFractionDigits:2})},
-                ...(pagamento && chavePix ?
-                  [{rotulo:"CHAVE PIX",valor:chavePix}] : [])
-              ],
-              aviso:pagamento ?
-                "Esta opção NÃO envia Pix. Confirme somente depois que o " +
-                "pagamento tiver sido realizado e conferido no banco. " +
-                "A confirmação extingue os Qc$ definitivamente." :
-                "Autorize apenas se nenhum pagamento foi realizado. " +
-                "As fichas só voltam à carteira após a recuperação segura.",
-              confirmarTexto:pagamento ?
-                "Já paguei — confirmar e encerrar" : "Autorizar cancelamento",
-              cancelarTexto:"Voltar sem alterar"
-            });
-            if(!aceito)return;
-            b.disabled=true;mensagem.textContent="Registrando...";
-            try{
-              const r=await postar(acao,{idResgate:p.idResgate});
-              if(pagamento && r.status!=="RESGATE_CONFIRMADO"){
-                throw Error(r.mensagem||"Confirmacao nao concluida: "+r.status);
-              }
-              if(acao.endsWith("autorizar_cancelamento") &&
-                 !["RESGATE_CANCELADO","CANCELAMENTO_PENDENTE_ASSINATURA",
-                   "CANCELAMENTO_V2_PENDENTE_ASSINATURA"].includes(r.status)){
-                throw Error(r.mensagem||"Cancelamento nao concluido: "+r.status);
-              }
-              mensagem.textContent=pagamento ?
-                "✅ Pagamento registrado e QCs extintos." :
-                r.status==="RESGATE_CANCELADO" ?
-                "✅ Cancelamento autorizado. Irmao deve recuperar as fichas na carteira." :
-                "Cancelamento aprovado. Assinaturas pendentes; retomar autorizacao.";
-              await carregar();
-              QC_carregarPainelTesoureiro276(sessionStorage.getItem("QC_TOKEN_SESSAO_TESTE"));
-            }catch(err){mensagem.textContent="⚠️ "+String(err.message||err);}
-            finally{b.disabled=false;}
-          });return b;
-        }
-        if(p.status==="PENDENTE"||p.status==="CANCELAMENTO_SOLICITADO"){
-          item.append(botao("Confirmar pagamento",
-            "qc_resgate_v2_confirmar_pagamento",
-            "Confirma que JA PAGOU R$ "+Number(p.valor).toFixed(2)+" a "+p.nome+
-            " fora do sistema? Esta operacao extingue os QCs definitivamente e reduz o lastro."));
-        }
-        if(p.status==="CANCELAMENTO_SOLICITADO"||p.status==="CANCELAMENTO_APROVADO"){
-          item.append(botao("Autorizar cancelamento",
-            "qc_resgate_v2_autorizar_cancelamento",
-            "Confirma que NENHUM pagamento foi realizado a "+p.nome+
-            "? Esta operacao devolve fichas para recuperacao na carteira do irmao."));
-        }
-        item.append(mensagem);lista.appendChild(item);
-      });
-    }catch(e){
-      esfera.className="qc-esfera-pedidos";
-      contador.textContent="Indisponível";
-      lista.textContent="⚠️ "+String(e.message||e);
-    }
-    finally{carregando=false;}
+  const estado=post('/interno/estado'),chaves=post('/interno/chaves-v2');
+  if(estado.ambiente!=='TESTE' || chaves.ambiente!=='TESTE' ||
+     !Array.isArray(chaves.chaves) || chaves.chaves.length!==5) {
+    throw new Error('Worker nao esta na versao exclusiva de TESTES.');
   }
-  painel.addEventListener("toggle",()=>{if(painel.open)carregar();});
-  // Consultar a quantidade de resgates mesmo com os detalhes fechados.
-  // A API continua exigindo a sessão autenticada do tesoureiro.
-  window.QC_atualizarResgatesTesoureiro278=()=>{carregar();};
-})();
-
-
-// PASSO 291 — Icones locais, sem dependencias externas ou botoes adicionais.
-(function QC_iconesOperacoes291() {
-  const desenho={
-    btnDoar:'<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>',
-    btnReceber:'<path d="M12 3v14m-5-5 5 5 5-5"/><path d="M4 20h16"/>',
-    btnTransferir:'<path d="M4 7h16m-5-5 5 5-5 5M20 17H4m5-5-5 5 5 5"/>',
-    btnResgatar:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 12h.01M18 12h.01"/>'
+  const valores=[1,2,5,10,50], vistos=new Set(),mods=new Set();
+  const mapa=new Map();
+  for(const item of chaves.chaves) {
+    const den=Number(item.denominacao),id=String(item.idChave||'');
+    const n=String(item.moduloPublico||'').toLowerCase();
+    const e=String(item.expoentePublico||'').toLowerCase();
+    if(!valores.includes(den)||id!=='QC-'+den+'-V2'||
+       item.status!=='CHAVE_CONFIGURADA'||
+       !/^[89a-f][0-9a-f]{1023}$/.test(n)||!/^0*10001$/.test(e)||
+       vistos.has(id)||mods.has(n)) throw new Error('Chaves V2 TESTE divergentes.');
+    vistos.add(id);mods.add(n);mapa.set(id,{n,e});
+  }
+  if(mapa.size!==5)throw new Error('Sao necessarias cinco chaves de TESTE.');
+  return {estado,publicas:mapa};
+}
+function QC_testesBloqueios377(p) {
+  const flags={
+    QC_V2_TESTES_LIBERADOS:'NAO',QC_EMISSAO_REAL_ATIVA:'NAO',
+    QC_V2_RECEBIMENTO_ATIVO:'NAO',QC_V2_FINANCEIRO_ABERTO:'NAO',
+    QC_V2_DOACOES_ATIVAS:'NAO',QC_V2_QR_PREPARO_ATIVO:'NAO',
+    QC_V2_ASSINATURAS_TROCO_ATIVAS:'NAO',
+    QC_V2_TRANSFERENCIAS_ATIVAS:'NAO',
+    QC_V2_ASSINATURAS_TRANSFERENCIA_ATIVAS:'NAO',
+    QC_V2_RESGATES_ATIVOS:'NAO',QC_V2_ASSINATURAS_RESGATE_ATIVAS:'NAO'
   };
-  const rotulos={btnDoar:'Doar Qc$',btnReceber:'Receber Qc$',
-    btnTransferir:'Transferir Qc$',btnResgatar:'Resgatar Qc$'};
-  for(const id of Object.keys(desenho)) {
-    const botao=document.getElementById(id);
-    if(!botao) continue;
-    const svg='<svg aria-hidden="true" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+desenho[id]+'</svg>';
-    botao.innerHTML=svg+'<span>'+rotulos[id]+'</span>';
-    // O icone do botao e gerado no final do script: preservar o indicador.
-    if (id === "btnReceber") botao.appendChild(qcIndicadorReceber300);
-    if (id === "btnResgatar") {
-      const indicador=document.getElementById("qcIndicadorResgate386");
-      if(indicador)botao.appendChild(indicador);
-    }
-    botao.setAttribute('aria-label',rotulos[id]);
+  p.setProperties(flags,false);
+}
+function QC_publicasTeste377(ss) {
+  const aba=ss.getSheetByName('QC_ChavesAssinatura');
+  const t=QC_cab377(aba,['IdChave','Denominacao','Versao','Status',
+    'ModuloPublico','ExpoentePublico']);
+  const dados=aba.getDataRange().getValues();
+  const lista=[];
+  for(const valor of [1,2,5,10,50]) {
+    const id='QC-'+valor+'-V2';
+    const a=dados.slice(1).map((r,i)=>({r,linha:i+2})).filter(x=>
+      String(x.r[t.c('IdChave')]).trim()===id);
+    if(a.length!==1||Number(a[0].r[t.c('Denominacao')])!==valor||
+       Number(a[0].r[t.c('Versao')])!==2) throw new Error('Chave V2 invalida: '+id);
+    lista.push({id,den:valor,r:a[0].r,linha:a[0].linha});
   }
-  const estilo=document.createElement('style');
-  estilo.textContent='#telaCarteira .acoes button{display:flex;align-items:center;justify-content:center;gap:7px}'+
-    '#telaCarteira .acoes button svg{flex:0 0 auto;width:18px;height:18px}'+
-    '#telaCarteira #btnDoar svg{width:23px;height:23px}'+
-    '@media(max-width:380px){#telaCarteira .acoes button{gap:4px;font-size:11px!important}#telaCarteira .acoes button svg{width:15px;height:15px}}';
-  document.head.appendChild(estilo);
-})();
+  return {aba,t,lista};
+}
+function QC_prepararAmbienteTesteV2377() {
+  const p=QC_propsTeste377();
+  const modo=p.getProperty('QC_V2_MODO')||'';
+  if(!['','CONFIGURANDO','TESTE'].includes(modo) ||
+     p.getProperty('QC_V2_TESTES_ENCERRADOS')==='SIM' ||
+     p.getProperty('QC_V1_FINANCEIRO_ENCERRADO')!=='SIM')
+    throw new Error('Transicao V2 nao permite preparar testes.');
+  const w=QC_estadoWorkerTeste377();
+  if(w.estado.assinaturaPermitida!==false)
+    throw new Error('Bloqueie assinaturas no Worker antes de preparar.');
+  const ss=SpreadsheetApp.getActiveSpreadsheet(),c=QC_publicasTeste377(ss);
+  const nomeBackup='QC_OriginaisV2_Guardadas377';
+  let backup=ss.getSheetByName(nomeBackup);
+  const inicio=!backup;
+  if(inicio) {
+    if(modo!=='') throw new Error('Modo parcial sem backup: conferir manualmente.');
+    const cot=ss.getSheetByName('QC_CotasEmissao');
+    if(!cot) throw new Error('Cotas ausentes.');
+    const cc=QC_cab377(cot,['IdChave']);
+    if(cot.getDataRange().getValues().slice(1).some(r=>
+      /^QC-(1|2|5|10|50)-V2$/.test(String(r[cc.c('IdChave')]).trim()))) {
+      throw new Error('Ja existem cotas V2: nao misturar chaves.');
+    }
+    // Nenhum livro V2 pode conter dados antes da primeira troca de chave.
+    for(const n of ['QC_DoacoesV2','QC_TransferenciasV2','QC_ResgatesV2',
+      'QC_FichasGastasV2','QC_SessoesV2']) {
+      const a=ss.getSheetByName(n);
+      if(a&&a.getLastRow()>1) throw new Error('Livro V2 com dados: '+n);
+    }
+    for(const x of c.lista) {
+      const status=String(x.r[c.t.c('Status')]).trim();
+      const n=String(x.r[c.t.c('ModuloPublico')]).trim().toLowerCase();
+      const e=String(x.r[c.t.c('ExpoentePublico')]).trim().toLowerCase();
+      if(status!=='AGUARDANDO_INTEGRACAO' ||
+         !/^[89a-f][0-9a-f]{1023}$/.test(n) || !/^0*10001$/.test(e) ||
+         n===w.publicas.get(x.id).n) throw new Error('Chave real divergente: '+x.id);
+    }
+    QC_testesBloqueios377(p);
+    p.setProperty('QC_V2_MODO','CONFIGURANDO');
+    backup=ss.insertSheet(nomeBackup);
+    backup.getRange(1,1,1,4).setValues([['IdChave','ModuloReal','ExpoenteReal','StatusReal']]);
+    backup.getRange(2,1,5,4).setValues(c.lista.map(x=>[
+      x.id,String(x.r[c.t.c('ModuloPublico')]).trim().toLowerCase(),
+      String(x.r[c.t.c('ExpoentePublico')]).trim().toLowerCase(),
+      String(x.r[c.t.c('Status')]).trim()]));
+    SpreadsheetApp.flush();
+  }
+  const b=backup.getDataRange().getValues();
+  if(b.length!==6||String(b[0][0])!=='IdChave') throw new Error('Backup incompleto.');
+  for(const x of c.lista) {
+    const orig=b.slice(1).filter(r=>String(r[0])===x.id);
+    if(orig.length!==1||!/^[89a-f][0-9a-f]{1023}$/.test(String(orig[0][1])) ||
+       String(orig[0][1])===w.publicas.get(x.id).n)
+      throw new Error('Backup real invalido: '+x.id);
+  }
+  for(const x of c.lista) {
+    const k=w.publicas.get(x.id);
+    c.aba.getRange(x.linha,c.t.c('ModuloPublico')+1).setValue(k.n);
+    c.aba.getRange(x.linha,c.t.c('ExpoentePublico')+1).setValue(k.e);
+    c.aba.getRange(x.linha,c.t.c('Status')+1).setValue('ATIVA');
+  }
+  SpreadsheetApp.flush();
+  p.setProperties({QC_V2_MODO:'TESTE',QC_V2_T_PUBLICAS_INSTALADAS:'SIM',
+    QC_V2_TESTES_LIBERADOS:'NAO'},false);
+  // Sessao ficticia APENAS em QC_SessoesV2, nunca em Sessoes ou QC_Sessoes V1.
+  const sessao=QC_criarSessaoV2Teste377();
+  const resultado={status:'PREPARADO',ambiente:'TESTE',chaves:5,
+    assinaturaWorkerBloqueada:true,sessaoTeste:sessao};
+  Logger.log(JSON.stringify(resultado));return resultado;
+}
+function QC_criarSessaoV2Teste377() {
+  const p=QC_propsTeste377();
+  if(p.getProperty('QC_V2_MODO')!=='TESTE') throw new Error('Nao esta em testes.');
+  const ss=SpreadsheetApp.getActiveSpreadsheet();
+  let aba=ss.getSheetByName('QC_SessoesV2');
+  const cab=['IdSessao','Status','TotalQC','DinheiroFisico','TotalGeral'];
+  if(!aba) {
+    aba=ss.insertSheet('QC_SessoesV2');
+    aba.getRange(1,1,1,cab.length).setValues([cab]);
+  }
+  const h=QC_cab377(aba,cab);
+  const id='QC-V2-T-'+Utilities.formatDate(new Date(),
+    'America/Sao_Paulo','yyyyMMdd');
+  const dados=aba.getDataRange().getValues();
+  const achadas=dados.slice(1).filter(r=>String(r[h.c('IdSessao')]).trim()===id);
+  if(achadas.length>1) throw new Error('Sessao de teste duplicada.');
+  if(achadas.length===0) {
+    const linha=Array(Math.max(aba.getLastColumn(),cab.length)).fill('');
+    linha[h.c('IdSessao')]=id;linha[h.c('Status')]='ABERTA';
+    linha[h.c('TotalQC')]=0;linha[h.c('DinheiroFisico')]=0;linha[h.c('TotalGeral')]=0;
+    aba.getRange(aba.getLastRow()+1,1,1,linha.length).setValues([linha]);
+  } else if(String(achadas[0][h.c('Status')]).trim()!=='ABERTA') {
+    throw new Error('Sessao de hoje nao esta ABERTA.');
+  }
+  return id;
+}
+function QC_ativarTestesV2377() {
+  const p=QC_propsTeste377();
+  if(p.getProperty('QC_V2_MODO')!=='TESTE'||
+     p.getProperty('QC_V2_T_PUBLICAS_INSTALADAS')!=='SIM')
+    throw new Error('Prepare as publicas V2 de teste primeiro.');
+  const w=QC_estadoWorkerTeste377();
+  if(w.estado.assinaturaPermitida!==true)
+    throw new Error('Worker ainda nao permite exclusivamente assinaturas de TESTE.');
+  const t=QC_publicasTeste377(SpreadsheetApp.getActiveSpreadsheet());
+  for(const x of t.lista) {
+    if(String(x.r[t.t.c('ModuloPublico')]).trim().toLowerCase()!==w.publicas.get(x.id).n||
+       String(x.r[t.t.c('Status')]).trim()!=='ATIVA')
+      throw new Error('Chave publica nao confere com Worker de teste: '+x.id);
+  }
+  const sessao=QC_criarSessaoV2Teste377();
+  p.setProperties({QC_V2_TESTES_LIBERADOS:'SIM',
+    QC_EMISSAO_REAL_ATIVA:'SIM',QC_V2_RECEBIMENTO_ATIVO:'SIM',
+    QC_V2_FINANCEIRO_ABERTO:'SIM',QC_V2_DOACOES_ATIVAS:'SIM',
+    QC_V2_QR_PREPARO_ATIVO:'SIM',QC_V2_ASSINATURAS_TROCO_ATIVAS:'SIM',
+    QC_V2_TRANSFERENCIAS_ATIVAS:'SIM',
+    QC_V2_ASSINATURAS_TRANSFERENCIA_ATIVAS:'SIM',
+    QC_V2_RESGATES_ATIVOS:'SIM',QC_V2_ASSINATURAS_RESGATE_ATIVAS:'SIM'},false);
+  const out={status:'TESTES_LIBERADOS',modo:'TESTE',sessaoTeste:sessao,
+    creditoBancarioReal:false,emissaoMaximaPorSolicitacao:200,
+    tetoAgregadoEmissoes:300};
+  Logger.log(JSON.stringify(out));return out;
+}
+function QC_pausarTestesV2377() {
+  const p=QC_propsTeste377();
+  QC_testesBloqueios377(p);
+  const r={status:'TESTES_PAUSADOS',worker:'DESATIVE QC_V2_T_SIGN_ENABLED NA CLOUDFARE'};
+  Logger.log(JSON.stringify(r));return r;
+}
+// Congelamento e arquivamento FINAL: nao execute durante os testes.
+// Os dados arquivados permanecem na mesma planilha (nao sao apagados).
+function QC_encerrarTestesV2377() {
+  const p=QC_propsTeste377();
+  if(!['TESTE','ENCERRANDO'].includes(p.getProperty('QC_V2_MODO')) ||
+      p.getProperty('QC_V2_TESTES_LIBERADOS')==='SIM')
+    throw new Error('Primeiro pause os testes com QC_pausarTestesV2377.');
+  const w=QC_estadoWorkerTeste377();
+  if(w.estado.assinaturaPermitida!==false)
+    throw new Error('Desative QC_V2_T_SIGN_ENABLED no Worker antes do corte.');
+  const ss=SpreadsheetApp.getActiveSpreadsheet();
+  const reais=ss.getSheetByName('QC_OriginaisV2_Guardadas377');
+  if(!reais||reais.getLastRow()!==6)throw new Error('Backup de chaves reais ausente.');
+  const livres=['QC_DoacoesV2','QC_TransferenciasV2','QC_ResgatesV2'];
+  for(const nome of livres) {
+    const aba=ss.getSheetByName(nome);
+    if(!aba)continue;
+    const h=QC_cab377(aba,['Status']);
+    const estados=aba.getDataRange().getValues().slice(1).map(r=>
+      String(r[h.c('Status')]).trim());
+    const finais=nome==='QC_DoacoesV2'?['CONCLUIDA']:
+      nome==='QC_TransferenciasV2'?['CONCLUIDA']:
+      ['CONFIRMADO','CANCELADO'];
+    if(estados.some(x=>x&&!finais.includes(x)))
+      throw new Error('Ha operacoes V2 pendentes em '+nome+'.');
+  }
+  // Exigir livro V2 totalmente conciliado ANTES do primeiro arquivamento.
+  if(p.getProperty('QC_V2_MODO')==='TESTE') QC_painelTotalV2373();
+  const lock=LockService.getScriptLock();lock.waitLock(30000);
+  try {
+    if(p.getProperty('QC_V2_MODO')==='TESTE') {
+      p.setProperty('QC_V2_MODO','ENCERRANDO');
+    }
+    // Primeiro copiar os quatro livros mistos, antes de retirar linhas V2.
+    const livros=[
+      ['QC_Emissoes','QC_ARQ_T377_Emissoes'],
+      ['QC_Autorizacoes','QC_ARQ_T377_Autorizacoes'],
+      ['QC_CotasEmissao','QC_ARQ_T377_Cotas'],
+      ['QC_OperacoesAssinatura','QC_ARQ_T377_Assinaturas']
+    ];
+    for(const [orig,arquivado] of livros) {
+      const aba=ss.getSheetByName(orig);
+      if(!aba)throw new Error('Livro '+orig+' ausente.');
+      if(!ss.getSheetByName(arquivado))aba.copyTo(ss).setName(arquivado);
+    }
+    SpreadsheetApp.flush();
+    const abCotas=ss.getSheetByName('QC_ARQ_T377_Cotas');
+    const hC=QC_cab377(abCotas,['IdEmissao','IdChave']);
+    const ids=new Set(abCotas.getDataRange().getValues().slice(1)
+      .filter(r=>/^QC-(?:1|2|5|10|50)-V2$/.test(String(r[hC.c('IdChave')]).trim()))
+      .map(r=>String(r[hC.c('IdEmissao')]).trim()));
+    // Se nao foi emitida ficha nos testes, nao precisamos remover linhas.
+    const idsAut=new Set([...ids].map(e=>e.replace(/^QC-EM-/,'')).filter(Boolean));
+    for(const [nome] of livros) {
+      const aba=ss.getSheetByName(nome);
+      const coluna=nome==='QC_Autorizacoes'?'IdAutorizacao':'IdEmissao';
+      const h=QC_cab377(aba,[coluna]);
+      const rows=aba.getDataRange().getValues();
+      for(let i=rows.length-1;i>=1;i--) {
+        const val=String(rows[i][h.c(coluna)]||'').trim();
+        if((nome==='QC_Autorizacoes'?idsAut:ids).has(val))aba.deleteRow(i+1);
+      }
+    }
+    // Renomeia as tabelas EXCLUSIVAS V2: todos os dados de teste sao mantidos.
+    const livrosV2=[
+      ['QC_DoacoesV2','QC_ARQ_T377_Doacoes'],
+      ['QC_DoacaoAssinaturasV2','QC_ARQ_T377_DoacaoAss'],
+      ['QC_FichasGastasV2','QC_ARQ_T377_Gastos'],
+      ['QC_TransferenciasV2','QC_ARQ_T377_Transfer'],
+      ['QC_TransferAssinaturasV2','QC_ARQ_T377_TransferAss'],
+      ['QC_ResgatesV2','QC_ARQ_T377_Resgates'],
+      ['QC_ResgateAssinaturasV2','QC_ARQ_T377_ResgateAss'],
+      ['QC_SessoesV2','QC_ARQ_T377_Sessoes']];
+    for(const [nome,arquivo] of livrosV2) {
+      const aba=ss.getSheetByName(nome);
+      if(aba) {
+        if(ss.getSheetByName(arquivo)) throw new Error('Arquivo duplicado: '+arquivo);
+        aba.setName(arquivo);
+      }
+    }
+    // Devolve as publicas V2 DEFINITIVAS para as linhas originais.
+    const chave=QC_publicasTeste377(ss);
+    const bs=reais.getDataRange().getValues().slice(1);
+    for(const c of chave.lista) {
+      const orig=bs.filter(r=>String(r[0])===c.id);
+      if(orig.length!==1||!/^[89a-f][0-9a-f]{1023}$/.test(String(orig[0][1])))
+        throw new Error('Chave publica de producao ausente.');
+      chave.aba.getRange(c.linha,chave.t.c('ModuloPublico')+1).setValue(orig[0][1]);
+      chave.aba.getRange(c.linha,chave.t.c('ExpoentePublico')+1).setValue(orig[0][2]);
+      chave.aba.getRange(c.linha,chave.t.c('Status')+1).setValue('AGUARDANDO_INTEGRACAO');
+    }
+    SpreadsheetApp.flush();
+    p.setProperties({QC_V2_MODO:'REAL_PENDENTE',
+      QC_V2_TESTES_ENCERRADOS:'SIM',QC_V2_T_PUBLICAS_INSTALADAS:'NAO',
+      QC_V2_TESTES_LIBERADOS:'NAO'},false);
+    const result={status:'TESTES_V2_ARQUIVADOS',
+      moedasTesteInvalidasAposRestaurarPublicas:true,
+      circulacaoRealV2:0,acoesPendentes:'Publicar Worker V2 REAL com emissao ainda bloqueada'};
+    Logger.log(JSON.stringify(result));return result;
+  } finally { lock.releaseLock(); }
+}
+
