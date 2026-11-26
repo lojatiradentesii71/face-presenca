@@ -6,6 +6,15 @@
         content="width=device-width, initial-scale=1">
 
   <title>QuintosCoin - Carteira</title>
+  <!-- PWA QuintosCoin: instalado somente sob /quintoscoin/ -->
+  <link rel="manifest" href="manifest.json?v=447">
+  <meta name="theme-color" content="#101b30">
+  <meta name="application-name" content="QuintosCoin">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="QuintosCoin">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon-180.png">
 
  
 <link rel="stylesheet" href="style.css?v=291">
@@ -52,6 +61,12 @@
 <body>
 
   <main class="carteira">
+    <div id="qcPwaAvisoSemRede447" role="status" hidden
+         style="background:#4a271d;color:#ffdf9b;border:1px solid #b67e4f;
+                border-radius:9px;padding:10px 12px;margin-bottom:12px;
+                font-size:13px;font-weight:700;text-align:center">
+      Sem conexão. As movimentações exigem confirmação do servidor.
+    </div>
     <div id="qcAvisoTesteV2377" role="status" hidden
       style="background:#3b2a15;color:#f5d27a;border:1px solid #a97c34;
       border-radius:9px;padding:10px 12px;margin-bottom:12px;
@@ -356,5 +371,27 @@ style="display:none;">
 
   <script src="qc-arrecadacao312.js?v=327"></script>
   <script src="qc-historico433.js?v=446"></script>
+<script>
+/* PWA Passo 447: apenas instalacao e aviso de conectividade.
+ * Nenhuma rotina de fichas, saldo ou autenticacao foi alterada. */
+(function () {
+  const aviso = document.getElementById('qcPwaAvisoSemRede447');
+  function atualizarAviso() {
+    if (aviso) aviso.hidden = navigator.onLine !== false;
+  }
+  window.addEventListener('online', atualizarAviso);
+  window.addEventListener('offline', atualizarAviso);
+  atualizarAviso();
+  if ('serviceWorker' in navigator && window.isSecureContext) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('./sw.js', {
+        scope: './', updateViaCache: 'none'
+      }).catch(function (err) {
+        console.warn('PWA QuintosCoin: instalacao do service worker indisponivel.', err);
+      });
+    });
+  }
+})();
+</script>
 </body>
 </html>
