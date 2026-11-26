@@ -287,7 +287,7 @@
         const rotulo=status==='PENDENTE'?'Aguardando tesoureiro':
           status==='CANCELADA'||status==='CANCELADO'?'Pedido cancelado':
           status==='AUTORIZADA'&&situacao==='ASSINADA'
-            ? 'Fichas assinadas no servidor; confira o saldo':
+            ? 'Fichas assinadas':
           status==='AUTORIZADA'&&situacao==='PRONTA'?'Liberado para receber':
           status==='AUTORIZADA'&&situacao==='EM_ANDAMENTO'?'Recebimento em andamento':
           situacao==='CONFERIR'?'Necessita conferência':
