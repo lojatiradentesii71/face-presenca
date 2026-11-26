@@ -180,12 +180,16 @@
     list.setAttribute('role','status');
     const nota=document.createElement('p');
     nota.className='qc-hist-nota433';
-    nota.textContent=tipo==='DOACAO' || tipo==='TRANSFERENCIA'
-      ? 'Registros anônimos cifrados neste aparelho. Não identificam o irmão na planilha. ' +
-        'O histórico anterior a esta atualização não pode ser reconstruído e ' +
-        'não acompanha o backup das fichas. Datas usam o relógio do aparelho.'
-      : 'Pedidos e emissões são consultados no servidor. Recebimentos por transferência ' +
-        'ficam cifrados neste aparelho; não acompanham o backup das fichas.';
+    nota.textContent=tipo==='DOACAO'
+      ? 'As doações continuam anônimas. Este histórico é cifrado neste aparelho, ' +
+        'não acompanha o backup das fichas e começa a contar a partir do Passo 433.'
+      : tipo==='TRANSFERENCIA'
+        ? 'Transferências a partir do Passo 436 são identificadas pelo servidor e consultadas ' +
+          'por esta carteira. As anteriores podem aparecer somente no histórico local, ' +
+          'sem identificação verificável. O servidor não guarda os códigos QR secretos.'
+        : 'Pedidos à Loja e transferências identificadas são consultados no servidor. ' +
+          'Uma transferência concluída no servidor só estará disponível neste aparelho ' +
+          'se as fichas tiverem sido salvas com segurança.';
     d.append(sum,list,nota);
     pai.appendChild(d);
     paineis.push({d,list,tipo});
@@ -214,7 +218,17 @@
     }
     if(!d.open || !mesmaSessao(entrada)) return;
     let remotos=[];
+    let transferenciasRemotas=[];
     let aviso='';
+    if(tipo==='TRANSFERENCIA' || tipo==='RECEBIMENTO') {
+      try {
+        if(typeof QC_post191!=='function') throw Error('Consulta autenticada indisponível.');
+        const r=await QC_post191('qc_transferir_v2_meus');
+        if(r?.status!=='OK' || !Array.isArray(r.transferencias))
+          throw Error(r?.mensagem||'Histórico de transferências indisponível.');
+        transferenciasRemotas=r.transferencias;
+      } catch(e) { aviso='⚠️ Transferências no servidor: '+String(e.message||e); }
+    }
     if(tipo==='RECEBIMENTO') {
       try {
         if(typeof QC_post191!=='function') throw Error('Consulta de emissões indisponível.');
@@ -223,7 +237,7 @@
           throw Error(r?.mensagem||'Resposta do servidor indisponível.');
         // Mantém a mesma separação V1/V2 da carteira.
         remotos=r.solicitacoes.filter(p=>!p.idEmissao || p.versaoEmissao==='V2');
-      }catch(e){ aviso='⚠️ Não foi possível consultar os pedidos no servidor: '+String(e.message||e); }
+      }catch(e){ aviso+=(aviso?' ':'')+'⚠️ Pedidos à Loja: '+String(e.message||e); }
     }
     if(!d.open || !mesmaSessao(entrada)) return;
     list.replaceChildren();
@@ -233,12 +247,36 @@
         ? r.tipo==='TRANSFERENCIA_ENVIADA' || r.tipo==='TRANSFERENCIA_RECEBIDA'
         : r.tipo==='TRANSFERENCIA_RECEBIDA');
     const itens=[];
+    const remotasValidas=transferenciasRemotas.filter(r=>
+      UUID.test(String(r?.idTransferencia||'')) &&
+      ['ENVIADA','RECEBIDA'].includes(r?.direcao) &&
+      Number.isSafeInteger(Number(r.valor)) && Number(r.valor)>0);
+    // Preferir o livro autenticado, sem duplicar o registro local do Passo 433.
+    const remotasIds=new Set(remotasValidas.map(r=>
+      (r.direcao==='ENVIADA'?'TRANSFERENCIA_ENVIADA':'TRANSFERENCIA_RECEBIDA')+'|'+
+        String(r.idTransferencia).toLowerCase()));
     for(const r of mostrarLocais) {
+      if(remotasIds.has(r.tipo+'|'+r.id)) continue;
       const titulo=r.tipo==='DOACAO'?'Doação':
         r.tipo==='TRANSFERENCIA_ENVIADA'?'Transferência enviada':'Transferência recebida';
       const estado=r.estado==='CONCLUIDA'?'Concluída':'Aguardando recebimento pelo destinatário';
+      const naoIdentificada=r.tipo!=='DOACAO'?' · Participantes não identificados (histórico local)':'';
       itens.push({ordem:new Date(r.registradoEm).getTime()||0,
-        elemento:linha(titulo,r.valor,estado,dataLocal(r.registradoEm),r.id)});
+        elemento:linha(titulo,r.valor,estado+naoIdentificada,dataLocal(r.registradoEm),r.id)});
+    }
+    for(const r of remotasValidas) {
+      if(tipo==='RECEBIMENTO' && r.direcao!=='RECEBIDA') continue;
+      const titulo=r.direcao==='ENVIADA'?'Transferência enviada':'Transferência recebida';
+      const pessoa=r.direcao==='ENVIADA'?
+        'Para: '+(r.destinatario||'aguardando destinatário'):
+        'De: '+(r.remetente||'remetente não identificado — operação anterior');
+      const situacao=r.status==='CONCLUIDA'?'Concluída no servidor':
+        r.status==='RESGATANDO'?'Recebimento em processamento':
+        r.status==='PRONTA'?'Aguardando recebimento pelo destinatário':
+        'Situação: '+String(r.status||'não informada');
+      itens.push({ordem:new Date(r.criadaEm).getTime()||0,
+        elemento:linha(titulo,Number(r.valor),pessoa+' · '+situacao,
+          dataLocal(r.criadaEm),r.idTransferencia)});
     }
     if(tipo==='RECEBIMENTO') {
       for(const p of remotos) {
@@ -322,6 +360,50 @@
     sincronizar();
   }
   ocultarDuranteConclusao(document.getElementById('qcConclusaoTransferencia383'),transfPainel);
+
+  // Consulta separada para o tesoureiro: apenas leitura, sempre autenticada.
+  // O servidor confere a funcao do tesoureiro, mesmo que alguem abra o HTML manualmente.
+  const areaTes=document.getElementById('qcConteudoTesoureiro294');
+  if(areaTes) {
+    const p=document.createElement('details');
+    p.className='qc-hist433';
+    p.id='qcHistoricoTesoureiro436';
+    const titulo=document.createElement('summary');
+    titulo.textContent='📒 Histórico de transferências';
+    const lista=document.createElement('div');
+    lista.className='qc-hist-lista433';
+    lista.setAttribute('role','status');
+    const nota=document.createElement('p');
+    nota.className='qc-hist-nota433';
+    nota.textContent='Transferências V2 identificadas; operações anteriores à atualização podem não ter nomes. ' +
+      'Doações não aparecem nesta consulta.';
+    p.append(titulo,lista,nota);
+    areaTes.appendChild(p);
+    paineis.push({d:p,list:lista,tipo:'TESOUREIRO'});
+    p.addEventListener('toggle',async()=>{
+      if(!p.open)return;
+      const inicio=sessaoAtual();
+      lista.textContent='Consultando transferências...';
+      try {
+        if(!inicio.id || !inicio.token)throw Error('Entre na carteira novamente.');
+        const r=await QC_post191('qc_transferir_v2_tesoureiro');
+        if(r?.status!=='OK'||!Array.isArray(r.transferencias))
+          throw Error(r?.mensagem||'Consulta não autorizada.');
+        if(!p.open||!mesmaSessao(inicio))return;
+        lista.replaceChildren();
+        if(!r.transferencias.length){lista.textContent='Nenhuma transferência registrada.';return;}
+        for(const t of r.transferencias) {
+          if(!UUID.test(String(t.idTransferencia||'')))continue;
+          const origem=String(t.remetente||'Não identificado (registro anterior)');
+          const destino=String(t.destinatario||'Aguardando destinatário');
+          const situacao=t.status==='CONCLUIDA'?'Concluída':String(t.status||'');
+          lista.appendChild(linha('Transferência',t.valor,
+            'De: '+origem+' · Para: '+destino+' · '+situacao,
+            dataLocal(t.criadaEm),t.idTransferencia));
+        }
+      }catch(e){if(p.open&&mesmaSessao(inicio))lista.textContent='⚠️ '+String(e.message||e);}
+    });
+  }
   // Receber pode abrir direto na tela de uma única autorização liberada.
   // Manter o acompanhamento acessível também nessa situação.
 
