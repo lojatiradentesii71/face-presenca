@@ -1246,6 +1246,15 @@
       await QC_finalizarTrocoV2368(op,resposta,segredo,inicio);
     }
     QC_conferirSessaoQR301(inicio);
+    // PASSO 433: diário ANÔNIMO local, somente após confirmação V2.
+    // Falha de histórico não transforma doação confirmada em pendente.
+    if (typeof window.QC_registrarHistorico433 === 'function') {
+      try {
+        await window.QC_registrarHistorico433({
+          tipo:'DOACAO',id:op.idOperacao,valor:op.valorDoacao,estado:'CONCLUIDA'
+        },segredo,inicio);
+      } catch (e) { console.warn('Histórico local de doação indisponível:',String(e?.message||e)); }
+    }
     localStorage.removeItem(QC_chavePendenteV2368());
     memoriaV2365=null;
     QC_conferirV2365(inicio.id,inicio.token,segredo).catch(()=>{});
@@ -2348,6 +2357,13 @@ function QC_confirmarTransferencia332(opcoes) {
         '). Retome a mesma operacao; nao crie outra.');
     await QC_gravarAssinadasV2370('TX-'+op.idTransferencia,
       op.privadasTroco,r.assinaturasTroco,senha,sessao);
+    // PASSO 433: transferência preparada, ainda NÃO recebida.
+    if(typeof window.QC_registrarHistorico433==='function') {
+      try {await window.QC_registrarHistorico433({
+        tipo:'TRANSFERENCIA_ENVIADA',id:op.idTransferencia,
+        valor:op.valorEnviado,estado:'AGUARDANDO'
+      },senha,sessao);} catch(e) {console.warn('Histórico de envio:',String(e?.message||e));}
+    }
     return {status:'PRONTA',idTransferencia:op.idTransferencia,
       valorEnviado:op.valorEnviado,
       codigoQR:'QC2|'+op.idTransferencia+'|'+op.codigo};
@@ -2416,6 +2432,13 @@ function QC_confirmarTransferencia332(opcoes) {
     if (r.status==='CONCLUIDA') {
       // Antes de apagar o codigo, garantir que o troco esteja salvo.
       await QC_enviarV2370(op,senha,sessao);
+      // PASSO 433: confirmação do destinatário verificada no servidor.
+      if(typeof window.QC_registrarHistorico433==='function') {
+        try {await window.QC_registrarHistorico433({
+          tipo:'TRANSFERENCIA_ENVIADA',id:op.idTransferencia,
+          valor:op.valorEnviado,estado:'CONCLUIDA'
+        },senha,sessao);} catch(e) {console.warn('Histórico de envio:',String(e?.message||e));}
+      }
       localStorage.removeItem(chave);
       return {status:'CONCLUIDA',valorEnviado:op.valorEnviado};
     }
@@ -2437,6 +2460,13 @@ function QC_confirmarTransferencia332(opcoes) {
     }
     await QC_gravarAssinadasV2370('RX-'+op.idTransferencia,
       op.privadas,r.assinaturasCegas,senha,sessao);
+    // PASSO 433: somente após fichas assinadas e protegidas localmente.
+    if(typeof window.QC_registrarHistorico433==='function') {
+      try {await window.QC_registrarHistorico433({
+        tipo:'TRANSFERENCIA_RECEBIDA',id:op.idTransferencia,
+        valor:op.valorRecebido,estado:'CONCLUIDA'
+      },senha,sessao);} catch(e) {console.warn('Histórico de recebimento:',String(e?.message||e));}
+    }
     localStorage.removeItem(QC_chaveMovV2370(QC_RX_V2_370));
     return {status:'RECEBIDA',valorRecebido:op.valorRecebido};
   }
@@ -3144,7 +3174,8 @@ function QC_confirmarTransferencia332(opcoes) {
       "QC_FICHAS_CEGAS_PENDENTES_V2_"+id,
       "QC_DOACAO_PENDENTE_V2_"+id,
       "QC_TRANSFERENCIA_ENVIO_V2_"+id,
-      "QC_TRANSFERENCIA_RESGATE_V2_"+id];
+      "QC_TRANSFERENCIA_RESGATE_V2_"+id,
+      "QC_HISTORICO_LOCAL_V1_"+id];
     return [...fixas.filter(k=>localStorage.getItem(k)!==null),
       ...Object.keys(localStorage).filter(k=>prefixosResgate.some(p=>k.startsWith(p)))];
   }
