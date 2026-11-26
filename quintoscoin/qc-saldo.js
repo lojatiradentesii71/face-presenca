@@ -672,7 +672,8 @@
   }
   function QC_pendenteChave271() { return PENDENTE271 + dadosDaSessao().id; }
   async function QC_postAnonimo271(acao,payload) {
-    // NUNCA usar QC_post191: a sessao de login revelaria a carteira.
+    // Reservada a rotas anônimas (principalmente doações).
+    // Transferências V2 usam QC_post191 para registrar os participantes.
     const response = await fetch(QC_URL_191,{
       method:"POST",redirect:"follow",
       headers:{"Content-Type":"text/plain;charset=utf-8"},
@@ -1410,7 +1411,7 @@
   // PASSO 275 - TRANSFERIR / RECEBER POR CODIGO PORTADOR.
   // As fichas sao invalidadas na origem pelo servidor; o destinatario
   // recebe novas fichas com assinatura cega e seus proprios numeros aleatorios.
-  // Nenhum identificador de carteira ou tokenSessao segue nestes POSTs.
+  // O fluxo legado (V1) era anonimo; o fluxo V2 agora autentica remetente e destinatario.
   const CHAVE_TX275 = "QC_TRANSFERENCIA_ENVIO_V1_";
   const CHAVE_RX275 = "QC_TRANSFERENCIA_RESGATE_V1_";
   let transferindo275 = false;
@@ -2346,7 +2347,7 @@ function QC_confirmarTransferencia332(opcoes) {
   const QC_v1RXPendente370=window.QC_resgatePendente275;
 
   async function QC_enviarV2370(op,senha,sessao) {
-    const r=await QC_postAnonimo271('qc_transferir_v2_criar',{
+    const r=await QC_post191('qc_transferir_v2_criar',{
       idTransferencia:op.idTransferencia,codigo:op.codigo,
       valorEnviado:op.valorEnviado,fichasEntrada:op.fichasEntrada,
       trocoCego:op.saidasCegas
@@ -2427,7 +2428,7 @@ function QC_confirmarTransferencia332(opcoes) {
     if (!senha) return {status:'CANCELADO'};
     const chave=QC_chaveMovV2370(QC_TX_V2_370),
       op=await QC_lerMovV2370(chave,senha,'TX');
-    const r=await QC_postAnonimo271('qc_transferir_v2_consultar',{
+    const r=await QC_post191('qc_transferir_v2_consultar',{
       idTransferencia:op.idTransferencia,codigo:op.codigo});
     if (r.status==='CONCLUIDA') {
       // Antes de apagar o codigo, garantir que o troco esteja salvo.
@@ -2449,7 +2450,7 @@ function QC_confirmarTransferencia332(opcoes) {
   };
 
   async function QC_receberV2370(op,senha,sessao) {
-    const r=await QC_postAnonimo271('qc_transferir_v2_resgatar',{
+    const r=await QC_post191('qc_transferir_v2_resgatar',{
       idTransferencia:op.idTransferencia,codigo:op.codigo,
       saidasCegas:op.saidasCegas});
     if (r.status!=='TRANSFERENCIA_V2_RESGATADA'||
@@ -2501,7 +2502,7 @@ function QC_confirmarTransferencia332(opcoes) {
       if (!match) throw Error('Codigo de transferencia V2 invalido.');
       await QC_liberacaoV2370('transferencias');
       const id=match[1].toLowerCase(),codigo=match[2].toLowerCase();
-      const consulta=await QC_postAnonimo271('qc_transferir_v2_consultar',{
+      const consulta=await QC_post191('qc_transferir_v2_consultar',{
         idTransferencia:id,codigo});
       if (consulta.status!=='PRONTA'||consulta.versao!=='V2')
         throw Error('Transferencia V2 nao esta pronta: '+String(consulta.status));
